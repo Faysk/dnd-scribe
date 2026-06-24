@@ -53,7 +53,7 @@ Fonte estruturada de:
 - macros;
 - mensagens;
 - whispers;
-- comandos do Yuhara Logger;
+- comandos do DnD Logger;
 - início/fim de combate;
 - cenas;
 - marcadores de canon.
@@ -86,7 +86,7 @@ GANCHO
 ## Fluxo antes da sessão
 
 ```txt
-1. Criar sessão no Yuhara Scribe.
+1. Criar sessão no DnD Scribe.
 2. Definir título provisório.
 3. Definir arco atual.
 4. Definir participantes e personagens.
@@ -119,7 +119,7 @@ A regra é: **marcar é barato, revisar depois é que decide**.
 2. Baixar arquivos Craig.
 3. Salvar OBS.
 4. Exportar chat/log do Roll20.
-5. Subir tudo no Yuhara Scribe.
+5. Subir tudo no DnD Scribe.
 6. Conferir metadata.
 7. Enfileirar processamento.
 ```

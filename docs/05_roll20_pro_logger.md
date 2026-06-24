@@ -4,7 +4,7 @@
 
 Usar o Roll20 Pro do Arthur/Astel para registrar eventos estruturados da sessão.
 
-O Roll20 continua sendo a mesa virtual. O Logger apenas cria evidências e marcadores para o Yuhara Scribe.
+O Roll20 continua sendo a mesa virtual. O Logger apenas cria evidências e marcadores para o DnD Scribe.
 
 ## Estratégia recomendada
 
@@ -13,14 +13,14 @@ No MVP, evitar integração externa em tempo real.
 O Mod Script grava eventos estruturados no próprio chat do Roll20, assim:
 
 ```txt
-[YUHARA_EVENT] {"type":"scene","label":"Praça do Duelo","session":"2026-06-27_sessao-XX"}
+[DnD_EVENT] {"type":"scene","label":"Praça do Duelo","session":"2026-06-27_sessao-XX"}
 ```
 
 Depois da sessão:
 
 ```txt
 exportar chat do Roll20
-→ subir no Yuhara Scribe
+→ subir no DnD Scribe
 → parser extrai eventos
 → salva em roll20_events
 ```
@@ -34,7 +34,7 @@ Mais tarde, dá para criar bridge:
 ```txt
 Roll20 aberto no navegador
 → extensão/Tampermonkey/local sidecar
-→ API do Yuhara Scribe
+→ API do DnD Scribe
 ```
 
 Mas isso é fase 2 ou 3. MVP não precisa meter um Frankstein logo no berço.
@@ -128,7 +128,7 @@ Usar ordem dos eventos e aproximar manualmente na revisão.
 No início da sessão, fazer um marcador sincronizado:
 
 ```txt
-Mestre fala em voz alta: SINCRONIZAR YUHARA AGORA
+Mestre fala em voz alta: SINCRONIZAR DnD AGORA
 Roll20: !ys sync
 Craig: /note SYNC
 ```
@@ -148,7 +148,7 @@ Guardar horário local exato no sistema quando o comando é usado via Discord/si
 No áudio, alguém fala:
 
 ```txt
-SYNC YUHARA
+SYNC DnD
 ```
 
 Depois o worker localiza a frase no transcript e alinha eventos.
@@ -165,5 +165,5 @@ Depois o worker localiza a frase no transcript e alinha eventos.
 Veja:
 
 ```txt
-examples/roll20/yuhara_logger_script.js
+examples/roll20/DnD_logger_script.js
 ```

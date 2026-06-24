@@ -28,7 +28,7 @@ Craig é a fonte principal de áudio.
 3. Usar /note para marcar momentos.
 4. Usar /stop no fim.
 5. Baixar arquivos por participante.
-6. Subir no Yuhara Scribe.
+6. Subir no DnD Scribe.
 ```
 
 ### Marcadores Craig recomendados

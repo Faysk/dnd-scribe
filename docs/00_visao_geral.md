@@ -1,8 +1,8 @@
 # 00 — Visão Geral
 
-## O que é o Yuhara Scribe?
+## O que é o DnD Scribe?
 
-O **Yuhara Scribe** é um sistema para registrar, transcrever, organizar, auditar e publicar sessões longas de DnD.
+O **DnD Scribe** é um sistema para registrar, transcrever, organizar, auditar e publicar sessões longas de DnD.
 
 Ele nasce de um problema real da mesa:
 
@@ -47,7 +47,7 @@ Roll20 continua sendo usado para:
 - macros;
 - recursos de mesa virtual.
 
-O Yuhara Scribe fica responsável por:
+O DnD Scribe fica responsável por:
 
 - memória da campanha;
 - evidências;
@@ -104,11 +104,11 @@ O objetivo não é automatizar a alma da campanha. É tirar o trabalho chato de 
 - Lista de itens/NPCs/lugares atualizados.
 - Timeline da sessão.
 
-## Por que isso combina com Yuhara?
+## Por que isso combina com DnD?
 
 A campanha tem um tema forte de memória, arte, narrativa e consequência.
 
-O próprio Dandelion representa isso: ele transforma acontecimentos em música para que não sejam esquecidos. O Yuhara Scribe faz o mesmo, só que com banco de dados, áudio bruto e um pouco menos de alaúde pegando fogo.
+O próprio Dandelion representa isso: ele transforma acontecimentos em música para que não sejam esquecidos. O DnD Scribe faz o mesmo, só que com banco de dados, áudio bruto e um pouco menos de alaúde pegando fogo.
 
 ## O MVP ideal
 

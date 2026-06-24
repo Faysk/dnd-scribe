@@ -1,4 +1,4 @@
-# Guia da Demo Visual — Yuhara Scribe
+# Guia da Demo Visual — DnD Scribe
 
 Esta demo foi feita para discussão visual com a mesa. Ela não é o sistema final, mas sim uma maquete navegável para decidir o que vale construir primeiro.
 

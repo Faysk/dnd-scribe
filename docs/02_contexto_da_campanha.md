@@ -2,7 +2,7 @@
 
 ## Campanha longa e memória viva
 
-A campanha de DnD de Yuhara tem cerca de um ano de duração, com sessões longas, múltiplos arcos, personagens que entram e saem, consequências acumuladas e um tom que mistura:
+A campanha de DnD de DnD tem cerca de um ano de duração, com sessões longas, múltiplos arcos, personagens que entram e saem, consequências acumuladas e um tom que mistura:
 
 - fantasia épica;
 - comédia caótica;

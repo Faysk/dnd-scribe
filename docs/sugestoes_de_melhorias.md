@@ -68,7 +68,7 @@ Perguntas tipo:
 
 ### 10. Gerador de opening
 
-Antes da sessão, gerar um “Previously on Yuhara” em tons diferentes:
+Antes da sessão, gerar um “Previously on DnD” em tons diferentes:
 
 - Mestre.
 - Dandelion.

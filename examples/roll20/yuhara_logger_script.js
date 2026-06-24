@@ -1,5 +1,5 @@
 /*
- * Yuhara Logger — Roll20 Mod Script MVP
+ * DnD Logger — Roll20 Mod Script MVP
  *
  * Objetivo:
  * Registrar eventos estruturados no chat do Roll20 para export posterior.
@@ -15,23 +15,23 @@
  * !ys sync Sessão iniciada oficialmente
  */
 
-const YUHARA = {
-  stateKey: 'YuharaLogger',
+const DnD = {
+  stateKey: 'DnDLogger',
   prefix: '!ys',
-  marker: '[YUHARA_EVENT]'
+  marker: '[DnD_EVENT]'
 };
 
 on('ready', () => {
-  state[YUHARA.stateKey] = state[YUHARA.stateKey] || {
+  state[DnD.stateKey] = state[DnD.stateKey] || {
     sessionId: null,
     startedAt: null,
     eventCount: 0
   };
-  log('Yuhara Logger loaded. Use !ys help');
+  log('DnD Logger loaded. Use !ys help');
 });
 
-function emitYuharaEvent(type, msg, payload = {}) {
-  const st = state[YUHARA.stateKey];
+function emitDnDEvent(type, msg, payload = {}) {
+  const st = state[DnD.stateKey];
   st.eventCount += 1;
 
   const event = {
@@ -46,11 +46,11 @@ function emitYuharaEvent(type, msg, payload = {}) {
     created_at_roll20: new Date().toISOString()
   };
 
-  sendChat('Yuhara Logger', `/w gm ${YUHARA.marker} ${JSON.stringify(event)}`);
+  sendChat('DnD Logger', `/w gm ${DnD.marker} ${JSON.stringify(event)}`);
 }
 
 function help() {
-  sendChat('Yuhara Logger', `/w gm <b>Yuhara Logger</b><br>
+  sendChat('DnD Logger', `/w gm <b>DnD Logger</b><br>
   !ys start &lt;session_id&gt;<br>
   !ys end<br>
   !ys sync &lt;text&gt;<br>
@@ -70,12 +70,12 @@ function help() {
 
 on('chat:message', (msg) => {
   if (msg.type !== 'api') return;
-  if (!msg.content.startsWith(YUHARA.prefix)) return;
+  if (!msg.content.startsWith(DnD.prefix)) return;
 
   const args = msg.content.split(' ');
   const command = args[1];
   const rest = args.slice(2).join(' ').trim();
-  const st = state[YUHARA.stateKey];
+  const st = state[DnD.stateKey];
 
   switch (command) {
     case 'help':
@@ -85,65 +85,65 @@ on('chat:message', (msg) => {
     case 'start':
       st.sessionId = rest || null;
       st.startedAt = new Date().toISOString();
-      emitYuharaEvent('session_start', msg, { text: rest });
+      emitDnDEvent('session_start', msg, { text: rest });
       break;
 
     case 'end':
-      emitYuharaEvent('session_end', msg, { text: rest });
+      emitDnDEvent('session_end', msg, { text: rest });
       break;
 
     case 'sync':
-      emitYuharaEvent('sync', msg, { text: rest });
+      emitDnDEvent('sync', msg, { text: rest });
       break;
 
     case 'scene':
-      emitYuharaEvent('scene', msg, { text: rest, label: rest });
+      emitDnDEvent('scene', msg, { text: rest, label: rest });
       break;
 
     case 'canon':
-      emitYuharaEvent('canon_marker', msg, { text: rest });
+      emitDnDEvent('canon_marker', msg, { text: rest });
       break;
 
     case 'quote':
-      emitYuharaEvent('quote_marker', msg, { text: rest });
+      emitDnDEvent('quote_marker', msg, { text: rest });
       break;
 
     case 'ooc':
-      emitYuharaEvent('ooc_marker', msg, { text: rest });
+      emitDnDEvent('ooc_marker', msg, { text: rest });
       break;
 
     case 'cut':
-      emitYuharaEvent('cut_marker', msg, { text: rest });
+      emitDnDEvent('cut_marker', msg, { text: rest });
       break;
 
     case 'doubt':
-      emitYuharaEvent('doubt_marker', msg, { text: rest });
+      emitDnDEvent('doubt_marker', msg, { text: rest });
       break;
 
     case 'npc':
-      emitYuharaEvent('npc_marker', msg, { text: rest });
+      emitDnDEvent('npc_marker', msg, { text: rest });
       break;
 
     case 'item':
-      emitYuharaEvent('item_marker', msg, { text: rest });
+      emitDnDEvent('item_marker', msg, { text: rest });
       break;
 
     case 'hook':
-      emitYuharaEvent('hook_marker', msg, { text: rest });
+      emitDnDEvent('hook_marker', msg, { text: rest });
       break;
 
     case 'combat':
-      if (rest === 'start') emitYuharaEvent('combat_start', msg, { text: rest });
-      else if (rest === 'end') emitYuharaEvent('combat_end', msg, { text: rest });
-      else sendChat('Yuhara Logger', '/w gm Use: !ys combat start ou !ys combat end');
+      if (rest === 'start') emitDnDEvent('combat_start', msg, { text: rest });
+      else if (rest === 'end') emitDnDEvent('combat_end', msg, { text: rest });
+      else sendChat('DnD Logger', '/w gm Use: !ys combat start ou !ys combat end');
       break;
 
     case 'break':
-      emitYuharaEvent('break', msg, { text: rest });
+      emitDnDEvent('break', msg, { text: rest });
       break;
 
     case 'back':
-      emitYuharaEvent('back', msg, { text: rest });
+      emitDnDEvent('back', msg, { text: rest });
       break;
 
     default:
@@ -157,7 +157,7 @@ on('chat:message', (msg) => {
   if (msg.type === 'rollresult' || msg.type === 'gmrollresult') {
     let parsed = null;
     try { parsed = JSON.parse(msg.content); } catch (e) {}
-    emitYuharaEvent('roll_result', msg, {
+    emitDnDEvent('roll_result', msg, {
       text: msg.content,
       roll: parsed
     });

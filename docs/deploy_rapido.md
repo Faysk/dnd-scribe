@@ -14,7 +14,7 @@ Esta demo é estática. Pode subir em qualquer lugar que sirva HTML, CSS e JS pu
 
 ## Netlify
 
-1. Arrastar a pasta `yuhara_scribe_demo` para o Netlify Drop; ou
+1. Arrastar a pasta `dnd_scribe_demo` para o Netlify Drop; ou
 2. Conectar o repositório GitHub.
 3. Build command: vazio.
 4. Publish directory: `.`.
@@ -30,7 +30,7 @@ Esta demo é estática. Pode subir em qualquer lugar que sirva HTML, CSS e JS pu
 
 - `dnd.faysk.dev`
 - `scribe.faysk.dev`
-- `yuhara.faysk.dev`
+- `DnD.faysk.dev`
 - `memorias.faysk.dev`
 
 Para apresentar para a mesa, talvez `dnd.faysk.dev` seja o mais direto. Não tem firula, não assusta os NPCs e ainda parece profissional.

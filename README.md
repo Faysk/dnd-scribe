@@ -1,6 +1,6 @@
-# Yuhara Scribe — Demo Visual
+# DnD Scribe — Demo Visual
 
-Demo navegável em **HTML, CSS e JavaScript puro** para apresentar a proposta visual do projeto **Yuhara Scribe**, um sistema para registrar, transcrever, auditar, canonizar e publicar sessões longas de D&D.
+Demo navegável em **HTML, CSS e JavaScript puro** para apresentar a proposta visual do projeto **DnD Scribe**, um sistema para registrar, transcrever, auditar, canonizar e publicar sessões longas de D&D.
 
 ## Como abrir
 

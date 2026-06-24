@@ -1,7 +1,7 @@
 services:
-  yuhara-worker:
+  DnD-worker:
     image: node:22-bookworm
-    container_name: yuhara-scribe-worker
+    container_name: dnd-scribe-worker
     working_dir: /app
     volumes:
       - ../../:/app

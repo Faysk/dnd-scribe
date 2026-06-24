@@ -2,7 +2,7 @@
 
 ## 1. Companion completo de campanha
 
-Evoluir o Yuhara Scribe para uma plataforma completa:
+Evoluir o DnD Scribe para uma plataforma completa:
 
 - dashboard atual;
 - wiki viva;
@@ -15,7 +15,7 @@ Evoluir o Yuhara Scribe para uma plataforma completa:
 - ganchos;
 - sessão ao vivo.
 
-## 2. Previously on Yuhara
+## 2. Previously on DnD
 
 Gerar abertura automática da próxima sessão em estilos:
 

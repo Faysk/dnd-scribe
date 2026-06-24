@@ -217,7 +217,7 @@ function showToast(message) {
 function switchView(viewId) {
   qsa('.view').forEach(view => view.classList.toggle('active', view.id === viewId));
   qsa('.nav-item').forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewId));
-  qs('#pageTitle').textContent = titles[viewId] || 'Yuhara Scribe';
+  qs('#pageTitle').textContent = titles[viewId] || 'DnD Scribe';
   location.hash = viewId;
   qs('#mainNav')?.classList.remove('open');
 }

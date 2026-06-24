@@ -1,4 +1,4 @@
--- Yuhara Scribe — Supabase/Postgres schema MVP
+-- DnD Scribe — Supabase/Postgres schema MVP
 -- Este schema é uma base inicial. Ajustar nomes, RLS e indexes conforme implementação.
 
 create extension if not exists "pgcrypto";

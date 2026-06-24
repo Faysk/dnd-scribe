@@ -3,7 +3,7 @@
 ## Checklist antes da sessão
 
 ```txt
-[ ] Criar sessão no Yuhara Scribe
+[ ] Criar sessão no DnD Scribe
 [ ] Confirmar participantes/personagens
 [ ] Confirmar consentimento de gravação
 [ ] Abrir Roll20
@@ -12,7 +12,7 @@
 [ ] Iniciar Craig
 [ ] Iniciar OBS
 [ ] Fazer teste de áudio
-[ ] Fazer SYNC YUHARA no áudio/Craig/Roll20
+[ ] Fazer SYNC DnD no áudio/Craig/Roll20
 [ ] Conferir se o Craig está gravando todos
 ```
 
@@ -21,7 +21,7 @@
 Alguém fala no começo:
 
 ```txt
-SYNC YUHARA. Sessão iniciada oficialmente.
+SYNC DnD. Sessão iniciada oficialmente.
 ```
 
 No Roll20:
@@ -62,7 +62,7 @@ GANCHO: gancho futuro
 [ ] Encerrar OBS
 [ ] Salvar OBS backup
 [ ] Exportar Roll20 chat
-[ ] Subir arquivos no Yuhara Scribe
+[ ] Subir arquivos no DnD Scribe
 [ ] Associar faixas aos jogadores/personagens
 [ ] Enfileirar processamento
 [ ] Conferir se worker iniciou

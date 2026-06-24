@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Definir as principais telas do Yuhara Scribe.
+Definir as principais telas do DnD Scribe.
 
 ## 1. Dashboard
 
