@@ -1,0 +1,30 @@
+session_id: sessao-027
+title: Preparação para o Duelo de Euclix
+arc: Euclix / Porta do Kenku
+status: em_revisao
+participants:
+  - user: yuhara
+    role: dm
+    character: Mestre
+  - user: renan
+    role: player
+    character: Dandelion
+  - user: arthur
+    role: player
+    character: Astel
+    notes:
+      - Roll20 Pro owner
+  - user: fernanda
+    role: player
+    character: Screacky
+sources:
+  craig: raw/craig_multitrack.zip
+  obs: raw/obs_backup.mkv
+  roll20_chat: raw/roll20_chat.html
+  craig_notes: raw/info.txt
+rules:
+  - audio_raw_is_evidence
+  - transcript_is_draft
+  - ai_suggests_humans_validate
+  - owner_only_private_journal_is_not_visible_to_dm
+  - secrets_that_affect_canon_must_include_dm

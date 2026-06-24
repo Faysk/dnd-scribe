@@ -3,55 +3,61 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DnD Scribe — Pitch</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Pitch — DnD Scribe v3</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    body { padding: 28px; }
+    .pitch { max-width: 1180px; margin: 0 auto; display: grid; gap: 22px; }
+    .pitch-hero { min-height: 440px; display: grid; grid-template-columns: 1.1fr .9fr; gap: 24px; align-items: center; }
+    .pitch-hero h1 { font-size: clamp(3rem, 7vw, 7rem); }
+    .pitch-card { border: 1px solid var(--line); border-radius: 28px; padding: 22px; background: rgba(255,255,255,.05); box-shadow: var(--shadow); }
+    .big-quote { font-size: clamp(1.7rem, 4vw, 3.6rem); line-height: 1; letter-spacing: -.04em; color: var(--gold); }
+    .flow-big { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .flow-big div { min-height: 150px; border: 1px solid var(--line); border-radius: 22px; padding: 16px; background: rgba(255,255,255,.045); }
+    .flow-big span { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 12px; background: linear-gradient(135deg, var(--gold), var(--orange)); color: #150b04; font-weight: 1000; margin-bottom: 12px; }
+    @media (max-width: 900px) { .pitch-hero, .flow-big { grid-template-columns: 1fr; } }
+  </style>
 </head>
-<body class="pitch-body">
+<body>
   <main class="pitch">
-    <section class="hero-panel">
-      <div class="brand big">
-        <div class="brand-mark">d20</div>
-        <div>
-          <strong>DnD Scribe</strong>
-          <span>O sistema para a campanha lembrar de si mesma sem mentir.</span>
+    <section class="pitch-hero pitch-card">
+      <div>
+        <span class="eyebrow">DnD Scribe v3</span>
+        <h1>Memória auditável da mesa.</h1>
+        <p>Um companion de campanha para capturar sessões longas, transcrever falas, separar bastidores, auditar canon e controlar segredos por jogador/personagem.</p>
+        <div class="row">
+          <a class="primary" href="index.html">Abrir demo clicável</a>
+          <span class="badge gold">Login Google simulado</span>
+          <span class="badge purple">Segredos por audiência</span>
         </div>
       </div>
-      <h1>Áudio bruto vira evidência. IA vira assistente. Canon só nasce depois de revisão.</h1>
-      <p>
-        Uma demo visual para testar o fluxo de captura, transcrição, auditoria, canonização, bastidores e segredos por personagem.
-      </p>
-      <div class="pitch-actions">
-        <a class="primary link-btn" href="index.html">Abrir demo clicável</a>
+      <div class="rule-card">
+        <strong>Nem toda verdade pertence a todos.</strong>
+        <span>O sistema separa o que aconteceu, quem pode ver, quem sabe dentro da ficção e o que pode virar canon.</span>
       </div>
     </section>
 
-    <section class="pitch-grid">
-      <article class="pitch-card">
-        <span>01</span>
-        <h2>Captura confiável</h2>
-        <p>Craig multitrack, OBS backup, Roll20 Pro Logger e marcadores do Discord/Craig.</p>
-      </article>
-      <article class="pitch-card">
-        <span>02</span>
-        <h2>Transcrição auditável</h2>
-        <p>Cada trecho aponta para áudio, jogador, personagem, sessão e timestamp.</p>
-      </article>
-      <article class="pitch-card">
-        <span>03</span>
-        <h2>Canon com revisão</h2>
-        <p>A IA sugere candidatos. A mesa aprova. O DM valida quando algo afeta a realidade.</p>
-      </article>
-      <article class="pitch-card highlight-card">
-        <span>04</span>
-        <h2>Segredos e perspectivas</h2>
-        <p>Nem toda verdade pertence a todos: diário privado, segredo com DM, segredo compartilhado e conhecimento público.</p>
-      </article>
+    <section class="grid cols-4">
+      <div class="pitch-card"><h2>Yuhara</h2><p>DM. Aprova canon, vê segredos compartilhados com o DM e controla conteúdo oculto do mestre.</p></div>
+      <div class="pitch-card"><h2>Renan</h2><p>Dandelion. Pode ter diário privado, músicas rascunhadas, segredos com DM e segredos compartilhados.</p></div>
+      <div class="pitch-card"><h2>Arthur</h2><p>Astel. Player e dono do Roll20 Pro. Pode ter segredos ligados a Hugin, família e decisões privadas.</p></div>
+      <div class="pitch-card"><h2>Fernanda</h2><p>Screacky. Controla segredos da personagem, decisões ocultas e revelações ligadas a Euclix.</p></div>
     </section>
 
-    <section class="wide-card">
-      <h2>A regra de ouro</h2>
-      <blockquote>Todo segredo que quer mudar o mundo precisa passar pelo DM. Todo segredo que só muda o coração do personagem pode ficar privado.</blockquote>
-      <p>Essa versão da demo já mostra como filtrar conteúdo por usuário, separar conhecimento do jogador e do personagem, e acompanhar o histórico de revelações.</p>
+    <section class="pitch-card">
+      <h2>Fluxo principal</h2>
+      <div class="flow-big">
+        <div><span>1</span><h3>Captura</h3><p>Craig multitrack, OBS, Roll20 Pro Logger e marcadores.</p></div>
+        <div><span>2</span><h3>Transcrição</h3><p>OpenAI por faixa, com speaker e personagem mapeados.</p></div>
+        <div><span>3</span><h3>Classificação</h3><p>IA separa canon candidato, fala, regra, bastidor, segredo e lixo.</p></div>
+        <div><span>4</span><h3>Auditoria</h3><p>Humano valida fonte, timestamp, visibilidade e conhecimento narrativo.</p></div>
+        <div><span>5</span><h3>Publicação</h3><p>Recap limpo, canon aprovado, bastidores autorizados e arquivos privados protegidos.</p></div>
+      </div>
+    </section>
+
+    <section class="pitch-card">
+      <p class="big-quote">Segredo sem DM é diário. Segredo com DM é munição narrativa.</p>
+      <p>Diário privado pode ficar escondido até do DM, mas não vira canon nem afeta o mundo. Tudo que pode mudar a história precisa passar pelo DM.</p>
     </section>
   </main>
 </body>

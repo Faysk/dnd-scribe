@@ -3,57 +3,85 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DnD Scribe — Demo Visual</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>DnD Scribe v3 — Demo Visual</title>
+  <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <div class="app-shell">
+  <div id="loginScreen" class="login-screen hidden">
+    <div class="login-glow"></div>
+    <section class="login-panel">
+      <div class="brand brand-large">
+        <div class="brand-mark">d20</div>
+        <div>
+          <span class="eyebrow">Demo visual v3</span>
+          <h1>DnD Scribe</h1>
+          <p>Memória auditável da mesa, com login Google simulado, segredos por jogador e canon revisável.</p>
+        </div>
+      </div>
+
+      <div class="login-card">
+        <div class="google-pill">G</div>
+        <div>
+          <h2>Entrar com Google</h2>
+          <p>Simulação de login: escolha um usuário da mesa para ver como permissões, segredos e conhecimento mudam por perfil.</p>
+        </div>
+      </div>
+
+      <div id="loginUsers" class="login-users"></div>
+
+      <div class="login-note">
+        <strong>Regra da demo:</strong> diário privado é visível só para o dono. Segredo que afeta canon deve envolver o DM. O DM é o Yuhara; Screacky é a Fernanda.
+      </div>
+    </section>
+  </div>
+
+  <div id="appShell" class="app-shell hidden">
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">d20</div>
         <div>
           <strong>DnD Scribe</strong>
-          <span>Memória auditável da mesa</span>
+          <span>Campaign memory OS</span>
         </div>
       </div>
 
-      <div class="perspective-card">
-        <label for="viewerSelect">Perspectiva atual</label>
-        <select id="viewerSelect"></select>
-        <p id="viewerHint">Carregando permissões...</p>
-      </div>
+      <div class="user-card" id="currentUserCard"></div>
 
       <nav class="nav" id="nav">
         <button data-view="dashboard" class="active">Agora</button>
+        <button data-view="login">Login & Players</button>
         <button data-view="capture">Captura</button>
-        <button data-view="review">Revisão</button>
+        <button data-view="review">Revisão IA</button>
         <button data-view="transcript">Transcrição</button>
-        <button data-view="canon">Canon</button>
         <button data-view="secrets">Segredos</button>
         <button data-view="knowledge">Quem sabe o quê</button>
-        <button data-view="entities">Entidades</button>
+        <button data-view="canon">Canon</button>
         <button data-view="outtakes">Bastidores</button>
-        <button data-view="settings">Permissões</button>
+        <button data-view="entities">Entidades</button>
+        <button data-view="stage">Palco</button>
+        <button data-view="admin">Admin & Permissões</button>
+        <button data-view="pipeline">Pipeline Técnico</button>
       </nav>
 
       <div class="sidebar-footer">
+        <a class="footer-link" href="pitch.html">Abrir pitch visual</a>
+        <button class="text-button" id="logoutBtn">Sair / trocar conta</button>
         <div class="mini-stat">
-          <strong>Demo v2</strong>
+          <strong>Demo v3</strong>
           <span>HTML + CSS + JS puro</span>
         </div>
-        <a href="pitch.html">Abrir pitch visual</a>
       </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
         <div>
-          <span class="eyebrow">Projeto inicial</span>
+          <span class="eyebrow" id="viewEyebrow">Projeto inicial</span>
           <h1 id="viewTitle">Agora</h1>
         </div>
         <div class="top-actions">
-          <button class="ghost" id="openQuickMarker">+ Momento</button>
-          <button class="primary" id="openNewSecret">+ Segredo</button>
+          <button class="ghost" id="quickMarkerBtn">+ Momento</button>
+          <button class="primary" id="newSecretBtn">+ Segredo</button>
         </div>
       </header>
 
@@ -61,14 +89,16 @@
     </main>
   </div>
 
+  <div class="toast hidden" id="toast"></div>
+
   <div class="modal-backdrop hidden" id="modalBackdrop">
-    <div class="modal" id="modal">
+    <div class="modal">
       <button class="modal-close" id="modalClose">×</button>
       <div id="modalBody"></div>
     </div>
   </div>
 
-  <script src="data.js"></script>
-  <script src="app.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

@@ -1,61 +1,57 @@
-# DnD Scribe — Demo Visual v2
+# DnD Scribe Demo v3
 
-Demo estática em HTML, CSS e JavaScript puro para validar visualmente o projeto **DnD Scribe**.
+Demo visual e clicável do projeto **DnD Scribe**, feita em HTML, CSS e JS puro.
 
-Esta versão adiciona como feature central:
+## Objetivo
 
-- segredos por player/personagem;
-- diário privado que pode ficar oculto até do DM;
-- segredo com DM, elegível a canon;
-- segredo compartilhado entre players;
-- segredo só do DM;
-- separação entre **quem vê no sistema** e **quem sabe dentro da ficção**;
-- quadro de canonização com candidatos públicos e privados;
-- revisão de transcrição com trechos ocultos conforme permissão;
-- tela “Quem sabe o quê”.
+Validar com a mesa a experiência visual e funcional antes de construir o backend real.
+
+A demo simula:
+
+- Login Google por usuário.
+- DM Yuhara.
+- Renan como Dandelion.
+- Arthur como Astel e dono do Roll20 Pro.
+- Fernanda como Screacky.
+- Segredos por player/personagem.
+- Diário privado que pode ficar invisível até para o DM.
+- Segredos com DM, compartilhados e DM-only.
+- Separação entre “quem vê no sistema” e “quem sabe na ficção”.
+- Revisão de transcrição com canon candidato, bastidor, segredo e fala marcante.
+- Matriz “Quem sabe o quê”.
+- Pipeline de captura/transcrição/auditoria/publicação.
 
 ## Como abrir
 
 Abra `index.html` no navegador.
 
-Também há um pitch visual em `pitch.html`.
+Ou suba a pasta em qualquer hosting estático:
 
-## Como publicar rápido
+- Vercel
+- Netlify
+- Cloudflare Pages
+- GitHub Pages
 
-Pode subir a pasta inteira em Vercel, Netlify, GitHub Pages ou Cloudflare Pages.
-
-## Estrutura
+## Arquivos principais
 
 ```txt
-index.html
-pitch.html
-styles.css
-data.js
-app.js
-docs/
-examples/
+index.html          Demo clicável
+pitch.html          Tela de apresentação para a mesa
+css/styles.css      Visual completo
+js/data.js          Dados mockados da campanha, usuários e permissões
+js/app.js           Renderização e interações
+docs/               Documentação do conceito
+examples/           Exemplos técnicos para implementação real
 ```
 
-## Conceito principal
+## Regra central
 
 > Nem toda verdade pertence a todos.
 
-O sistema precisa registrar três dimensões de cada informação:
+## Regra operacional
 
-1. **Conteúdo** — o que aconteceu ou foi pensado.
-2. **Fonte** — sessão, timestamp, áudio, Roll20, nota ou diário.
-3. **Audiência** — quem pode ver no app e quem sabe dentro da ficção.
+> Segredo sem DM é diário. Segredo com DM é munição narrativa.
 
-## Regra de ouro dos segredos
+## Aviso
 
-> Todo segredo que quer mudar o mundo precisa passar pelo DM.  
-> Todo segredo que só muda o coração do personagem pode ficar privado.
-
-Na demo:
-
-- Diário privado: jogador vê, DM não vê, não é canon.
-- Segredo de personagem: jogador + DM, pode virar canon privado.
-- Segredo compartilhado: players específicos + DM.
-- Segredo do DM: só DM.
-- Canon público: mesa toda.
-- Bastidor: não canon, publicado só se aprovado.
+Esta demo não tem backend nem autenticação real. O “login Google” é simulado via localStorage.
