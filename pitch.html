@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pitch — Yuhara Scribe</title>
+  <link rel="stylesheet" href="assets/css/styles.css" />
+  <style>
+    body { overflow-x: hidden; }
+    .pitch-shell { max-width: 1180px; margin: 0 auto; padding: 34px 20px 70px; }
+    .pitch-hero { min-height: 560px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr); gap: 30px; align-items: center; }
+    .pitch-title { font-size: clamp(3.2rem, 8vw, 7.5rem); line-height: 0.87; margin: 0; letter-spacing: -0.09em; }
+    .pitch-subtitle { color: var(--muted); font-size: 1.2rem; line-height: 1.7; max-width: 760px; }
+    .pitch-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+    .artifact-stack { display: grid; gap: 14px; transform: rotate(-2deg); }
+    .artifact-card { padding: 20px; border-radius: 24px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); }
+    .artifact-card:nth-child(2) { transform: translateX(28px) rotate(2deg); }
+    .artifact-card:nth-child(3) { transform: translateX(-10px) rotate(-1deg); }
+    .pitch-section { margin-top: 38px; }
+    .pitch-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
+    .pitch-card { padding: 22px; border-radius: 24px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); }
+    .pitch-card h3 { margin: 10px 0 8px; }
+    .pitch-card p { color: var(--muted); line-height: 1.6; }
+    .flow-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+    .flow-step { text-align: center; padding: 16px 10px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.045); }
+    .flow-step strong { display:block; font-size: .9rem; }
+    .flow-step span { color: var(--primary); font-size: 1.5rem; }
+    @media (max-width: 1000px) { .pitch-hero, .pitch-grid, .flow-strip { grid-template-columns: 1fr; } .artifact-stack { transform: none; } .artifact-card:nth-child(n) { transform: none; } }
+  </style>
+</head>
+<body>
+  <main class="pitch-shell">
+    <section class="pitch-hero">
+      <div>
+        <p class="eyebrow">Proposta visual para a mesa</p>
+        <h1 class="pitch-title">Yuhara Scribe</h1>
+        <p class="pitch-subtitle">
+          Um sistema para transformar sessões longas de D&D em memória auditável: áudio, Roll20, Discord, notas, transcrição,
+          revisão humana, canon aprovado e publicações limpas. A IA aponta. A mesa decide. O pato canta.
+        </p>
+        <div class="pitch-actions">
+          <a class="primary-button" href="index.html">Abrir demo navegável</a>
+          <a class="secondary-button" href="docs/guia_da_demo.md">Ler guia da demo</a>
+        </div>
+      </div>
+      <div class="artifact-stack" aria-label="Cards do projeto">
+        <article class="artifact-card">
+          <p class="eyebrow">Captura</p>
+          <h2>Craig + Roll20 + OBS</h2>
+          <p class="muted">Tudo gravado, marcado e sincronizado. Nada de memória depender do “eu acho que foi assim”.</p>
+        </article>
+        <article class="artifact-card">
+          <p class="eyebrow">Auditoria</p>
+          <h2>Fonte em cada fato</h2>
+          <p class="muted">Cada canon aprovado aponta para áudio, transcrição e evento Roll20.</p>
+        </article>
+        <article class="artifact-card">
+          <p class="eyebrow">Publicação</p>
+          <h2>Recap limpo</h2>
+          <p class="muted">Bastidor fica no bastidor. Lore vai para o mundo sem a mesa virar feira livre.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="pitch-section">
+      <div class="section-heading"><p class="eyebrow">Por que isso existe?</p><h2>O problema não é falta de história. É história demais.</h2></div>
+      <div class="pitch-grid">
+        <article class="pitch-card"><span class="tag fire">dor</span><h3>Sessões longas</h3><p>Seis horas de sessão viram uma mina de ouro e um aterro sanitário ao mesmo tempo. A demo separa uma coisa da outra.</p></article>
+        <article class="pitch-card"><span class="tag purple">risco</span><h3>Canon acidental</h3><p>Piada, plano não executado e especulação não podem virar verdade histórica só porque a IA acordou emocionada.</p></article>
+        <article class="pitch-card"><span class="tag blue">ganho</span><h3>Memória viva</h3><p>Recaps, falas marcantes, ganchos, músicas e bastidores aprovados ficam disponíveis sem depender do cérebro cansado da party.</p></article>
+      </div>
+    </section>
+
+    <section class="pitch-section">
+      <div class="section-heading"><p class="eyebrow">Fluxo proposto</p><h2>Da call caótica ao canon aprovado</h2></div>
+      <div class="flow-strip">
+        <div class="flow-step"><span>1</span><strong>Gravar</strong></div>
+        <div class="flow-step"><span>2</span><strong>Transcrever</strong></div>
+        <div class="flow-step"><span>3</span><strong>Classificar</strong></div>
+        <div class="flow-step"><span>4</span><strong>Auditar</strong></div>
+        <div class="flow-step"><span>5</span><strong>Aprovar</strong></div>
+        <div class="flow-step"><span>6</span><strong>Publicar</strong></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

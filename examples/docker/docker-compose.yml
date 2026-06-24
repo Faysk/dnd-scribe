@@ -1,0 +1,11 @@
+services:
+  yuhara-worker:
+    image: node:22-bookworm
+    container_name: yuhara-scribe-worker
+    working_dir: /app
+    volumes:
+      - ../../:/app
+    env_file:
+      - ../env.example
+    command: bash -lc "apt-get update && apt-get install -y ffmpeg python3 python3-pip && npm install && npm run worker"
+    restart: unless-stopped

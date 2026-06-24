@@ -1,0 +1,14 @@
+{
+  "session_id": "2026-06-27_sessao-XX_euclix-duelo-ivory",
+  "title": "O Reino Prende a Respiração",
+  "arc": "Euclix",
+  "status": "review_demo",
+  "sources": [
+    { "type": "craig", "name": "craig_multitrack_session.zip", "status": "mock" },
+    { "type": "obs", "name": "obs_backup.mkv", "status": "mock" },
+    { "type": "roll20", "name": "roll20_chat_export.html", "status": "mock" },
+    { "type": "notes", "name": "craig_info.txt", "status": "mock" }
+  ],
+  "review_rule": "audio_bruto_e_evidencia_transcricao_e_rascunho_ia_gera_candidatos_humano_valida",
+  "canon_statuses": ["candidate", "approved_canon", "interpretation", "possible_hook", "private", "published"]
+}

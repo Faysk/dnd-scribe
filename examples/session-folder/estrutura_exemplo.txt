@@ -1,0 +1,27 @@
+sessions/
+  2026-06-27_sessao-XX_duelo-ivory/
+    00_metadata.yaml
+    raw/
+      craig_dandelion.flac
+      craig_astel.flac
+      craig_screaky.flac
+      craig_dm.flac
+      obs_backup.mkv
+      roll20_chat.html
+      craig_info.txt
+    processed/
+      transcript_raw.json
+      transcript_merged.json
+      transcript_clean.md
+      roll20_events.json
+      markers.json
+    review/
+      canon_candidates.json
+      quote_candidates.json
+      outtake_candidates.json
+      review_board.md
+    public/
+      recap_curto.md
+      recap_completo.md
+      canon_changes.md
+      bastidores_aprovados.md

@@ -1,0 +1,46 @@
+session_id: "2026-06-27_sessao-XX"
+title: "O Duelo contra Ivory"
+arc: "Euclix"
+date: "2026-06-27"
+status: "uploaded"
+consent_confirmed: true
+raw_private: true
+publish_outtakes_only_after_approval: true
+
+participants:
+  - player: "Renan"
+    character: "Dandelion"
+    audio_track: "raw/craig_dandelion.flac"
+  - player: "Arthur"
+    character: "Astel"
+    audio_track: "raw/craig_astel.flac"
+  - player: "Jogador Screaky"
+    character: "Screaky"
+    audio_track: "raw/craig_screaky.flac"
+  - player: "Mestre"
+    character: "DM"
+    audio_track: "raw/craig_dm.flac"
+
+sources:
+  roll20_chat: "raw/roll20_chat.html"
+  obs_backup: "raw/obs_backup.mkv"
+  craig_info: "raw/craig_info.txt"
+
+glossary:
+  - Dandelion
+  - Astel
+  - Screaky
+  - Screacky
+  - Euclix
+  - Ivory
+  - Flander
+  - Thalindra
+  - Leonard
+  - Raphael
+  - Fire Star
+  - Hugin
+  - Raven Queen
+  - Zhentarim
+  - Dandelionverso
+  - Porta do Kenku
+  - Rainha de Penas Vermelhas
