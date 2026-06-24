@@ -1,58 +1,61 @@
-# DnD Scribe — Demo Visual
+# DnD Scribe — Demo Visual v2
 
-Demo navegável em **HTML, CSS e JavaScript puro** para apresentar a proposta visual do projeto **DnD Scribe**, um sistema para registrar, transcrever, auditar, canonizar e publicar sessões longas de D&D.
+Demo estática em HTML, CSS e JavaScript puro para validar visualmente o projeto **DnD Scribe**.
+
+Esta versão adiciona como feature central:
+
+- segredos por player/personagem;
+- diário privado que pode ficar oculto até do DM;
+- segredo com DM, elegível a canon;
+- segredo compartilhado entre players;
+- segredo só do DM;
+- separação entre **quem vê no sistema** e **quem sabe dentro da ficção**;
+- quadro de canonização com candidatos públicos e privados;
+- revisão de transcrição com trechos ocultos conforme permissão;
+- tela “Quem sabe o quê”.
 
 ## Como abrir
 
-Abra o arquivo:
+Abra `index.html` no navegador.
 
-```txt
-index.html
-```
+Também há um pitch visual em `pitch.html`.
 
-Também existe uma página de apresentação rápida:
+## Como publicar rápido
 
-```txt
-pitch.html
-```
-
-## O que esta demo mostra
-
-- Dashboard da sessão atual.
-- Captura de fontes: Craig, OBS, Roll20 Pro Logger e Discord.
-- Tela de revisão com timeline, transcrição e candidatos da IA.
-- Transcrição pesquisável.
-- Quadro de canonização.
-- Bastidores aprováveis e privados.
-- Entidades detectadas e grafo narrativo mockado.
-- Palco do Dandelion para músicas e momentos performáticos.
-- Pipeline técnico com Supabase, worker Docker, OpenAI e publicação.
-- Tela de permissões, consentimento e papéis.
-
-## Observações
-
-Esta demo é 100% estática e não usa backend. Todos os dados são mockados em `assets/js/app.js`.
-
-O objetivo é validar visual, fluxo e prioridade de telas com a mesa antes de investir no sistema real. Em bom português: primeiro vê se o dragão é bonito antes de gastar spell slot.
+Pode subir a pasta inteira em Vercel, Netlify, GitHub Pages ou Cloudflare Pages.
 
 ## Estrutura
 
 ```txt
 index.html
 pitch.html
-assets/
-  css/styles.css
-  js/app.js
+styles.css
+data.js
+app.js
 docs/
-  guia_da_demo.md
-  mapa_de_telas.md
-  sugestoes_de_melhorias.md
+examples/
 ```
 
-## Próximos passos sugeridos
+## Conceito principal
 
-1. Mostrar `pitch.html` para a mesa.
-2. Navegar pelo `index.html` em conjunto.
-3. Marcar quais telas realmente importam agora.
-4. Cortar o que estiver bonito, mas inútil.
-5. Transformar o MVP real em: Captura → Upload → Transcrição → Revisão → Canon.
+> Nem toda verdade pertence a todos.
+
+O sistema precisa registrar três dimensões de cada informação:
+
+1. **Conteúdo** — o que aconteceu ou foi pensado.
+2. **Fonte** — sessão, timestamp, áudio, Roll20, nota ou diário.
+3. **Audiência** — quem pode ver no app e quem sabe dentro da ficção.
+
+## Regra de ouro dos segredos
+
+> Todo segredo que quer mudar o mundo precisa passar pelo DM.  
+> Todo segredo que só muda o coração do personagem pode ficar privado.
+
+Na demo:
+
+- Diário privado: jogador vê, DM não vê, não é canon.
+- Segredo de personagem: jogador + DM, pode virar canon privado.
+- Segredo compartilhado: players específicos + DM.
+- Segredo do DM: só DM.
+- Canon público: mesa toda.
+- Bastidor: não canon, publicado só se aprovado.

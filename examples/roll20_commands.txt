@@ -1,0 +1,14 @@
+Comandos pensados para Roll20 Pro Logger:
+
+!dnd start sessao-027
+!dnd scene Praça congelada de Euclix
+!dnd canon O povo começou a murmurar a música proibida
+!dnd secret astel Hugin respondeu fraco
+!dnd quote Dandelion: esquecer não é o mesmo que matar
+!dnd ooc Piada do chamado técnico para Raven Queen
+!dnd cut conversa pessoal, não publicar
+!dnd reveal secret-001 to dandelion
+
+O script do Roll20 pode imprimir eventos estruturados no chat:
+
+[DND_EVENT] {"type":"secret","audience":["arthur","dm"],"text":"Hugin respondeu fraco","t":"01:16:33"}
