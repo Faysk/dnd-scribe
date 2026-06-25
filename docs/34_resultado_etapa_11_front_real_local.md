@@ -50,6 +50,11 @@ http://127.0.0.1:8787
 - Publicacoes:
   - mostra pacote `review_only`;
   - mostra previews de markdown.
+- Musicas:
+  - mini-player flutuante global;
+  - usa embed oficial do YouTube;
+  - permite ouvir pelo site sem extrair audio;
+  - tem play/pause, anterior/proxima, volume e exibicao da playlist.
 - Operacao:
   - resumo Supabase;
   - log local;
@@ -139,3 +144,7 @@ Auth/RLS:
 - policies por campanha/role;
 - endpoints publicos separados de operacao administrativa;
 - manter pipeline pesado em worker local/VPS.
+
+## Extensoes da etapa
+
+- `docs/36_resultado_etapa_11_palco_musicas.md`

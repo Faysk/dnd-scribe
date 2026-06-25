@@ -412,6 +412,7 @@ Escopo:
 - carregar Review Board real por API;
 - aplicar decisoes pelo backend local;
 - baixar template de revisao do DM;
+- adicionar mini-player flutuante com playlist publica do Dandelion;
 - visualizar publicacoes e resumo operacional.
 
 Resultado validado:
@@ -437,6 +438,7 @@ Observacao:
 Referencia:
 
 - `docs/34_resultado_etapa_11_front_real_local.md`
+- `docs/36_resultado_etapa_11_palco_musicas.md`
 
 ## Etapa 12 — Auth e RLS
 

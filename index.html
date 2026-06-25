@@ -3,105 +3,93 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DnD Scribe v3 — Demo Visual</title>
+  <title>DnD Scribe — Abrir app local</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0d12;
+      --panel: #121821;
+      --line: #2a3545;
+      --text: #f3f1ea;
+      --muted: #aab3c1;
+      --gold: #f0c36a;
+      --blue: #80bfff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      width: min(720px, 100%);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: clamp(22px, 4vw, 38px);
+    }
+    .mark {
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--gold), var(--blue));
+      color: #101217;
+      font-weight: 1000;
+      margin-bottom: 18px;
+    }
+    h1 { margin: 0 0 10px; font-size: clamp(1.8rem, 4vw, 3rem); line-height: 1; }
+    p { color: var(--muted); line-height: 1.55; }
+    code {
+      display: block;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #0d1219;
+      color: var(--gold);
+      white-space: nowrap;
+    }
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      margin-top: 14px;
+      border: 1px solid #426f97;
+      border-radius: 8px;
+      background: #244360;
+      color: var(--text);
+      padding: 10px 14px;
+      text-decoration: none;
+      font-weight: 800;
+    }
+    small { display: block; margin-top: 14px; color: var(--muted); }
+  </style>
 </head>
 <body>
-  <div id="loginScreen" class="login-screen hidden">
-    <div class="login-glow"></div>
-    <section class="login-panel">
-      <div class="brand brand-large">
-        <div class="brand-mark">d20</div>
-        <div>
-          <span class="eyebrow">Demo visual v3</span>
-          <h1>DnD Scribe</h1>
-          <p>Memória auditável da mesa, com login Google simulado, segredos por jogador e canon revisável.</p>
-        </div>
-      </div>
-
-      <div class="login-card">
-        <div class="google-pill">G</div>
-        <div>
-          <h2>Entrar com Google</h2>
-          <p>Simulação de login: escolha um usuário da mesa para ver como permissões, segredos e conhecimento mudam por perfil.</p>
-        </div>
-      </div>
-
-      <div id="loginUsers" class="login-users"></div>
-
-      <div class="login-note">
-        <strong>Regra da demo:</strong> diário pessoal é visível para dono e DM/lore admin. Segredo que afeta canon deve envolver o DM. O DM é o Yuhara; Screacky é a Fernanda.
-      </div>
-    </section>
-  </div>
-
-  <div id="appShell" class="app-shell hidden">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">d20</div>
-        <div>
-          <strong>DnD Scribe</strong>
-          <span>Campaign memory OS</span>
-        </div>
-      </div>
-
-      <div class="user-card" id="currentUserCard"></div>
-
-      <nav class="nav" id="nav">
-        <button data-view="dashboard" class="active">Agora</button>
-        <button data-view="login">Login & Players</button>
-        <button data-view="capture">Captura</button>
-        <button data-view="review">Review Board</button>
-        <button data-view="transcript">Transcrição</button>
-        <button data-view="secrets">Segredos</button>
-        <button data-view="knowledge">Quem sabe o quê</button>
-        <button data-view="canon">Canon</button>
-        <button data-view="outtakes">Bastidores</button>
-        <button data-view="publications">Publicações</button>
-        <button data-view="entities">Entidades</button>
-        <button data-view="stage">Palco</button>
-        <button data-view="admin">Admin & Permissões</button>
-        <button data-view="pipeline">Pipeline Técnico</button>
-      </nav>
-
-      <div class="sidebar-footer">
-        <a class="footer-link" href="pitch.html">Abrir pitch visual</a>
-        <button class="text-button" id="logoutBtn">Sair / trocar conta</button>
-        <div class="mini-stat">
-          <strong>Demo v3</strong>
-          <span>HTML + CSS + JS puro</span>
-        </div>
-      </div>
-    </aside>
-
-    <main class="main">
-      <header class="topbar">
-        <div>
-          <span class="eyebrow" id="viewEyebrow">Projeto inicial</span>
-          <h1 id="viewTitle">Agora</h1>
-        </div>
-        <div class="top-actions">
-          <button class="ghost" id="quickMarkerBtn">+ Momento</button>
-          <button class="primary" id="newSecretBtn">+ Segredo</button>
-        </div>
-      </header>
-
-      <section id="view" class="view"></section>
-    </main>
-  </div>
-
-  <div class="toast hidden" id="toast"></div>
-
-  <div class="modal-backdrop hidden" id="modalBackdrop">
-    <div class="modal">
-      <button class="modal-close" id="modalClose">×</button>
-      <div id="modalBody"></div>
-    </div>
-  </div>
-
-  <script src="data/review_session.generated.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/app.js"></script>
+  <main>
+    <div class="mark">d20</div>
+    <h1>DnD Scribe</h1>
+    <p>O app real agora roda pelo backend local seguro. Se voce abriu este arquivo diretamente ou por um servidor estatico antigo, vai ver apenas este aviso.</p>
+    <p>Para iniciar:</p>
+    <code>python3 tools/serve_frontend.py --port 8787</code>
+    <a href="http://127.0.0.1:8787/">Abrir app real local</a>
+    <small>Demo visual antiga ficou substituida pela experiencia operacional em <strong>web/</strong>.</small>
+  </main>
+  <script>
+    if (location.protocol === 'file:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      window.setTimeout(() => {
+        window.location.href = 'http://127.0.0.1:8787/';
+      }, 900);
+    }
+  </script>
 </body>
 </html>

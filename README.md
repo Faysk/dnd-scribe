@@ -25,6 +25,7 @@ Esse app permite:
 - aplicar decisoes pelo backend local;
 - regenerar publicacoes;
 - baixar template de revisao do DM.
+- ouvir a playlist publica do Dandelion em um mini-player flutuante, via embed oficial do YouTube.
 
 ## Demo visual v3
 

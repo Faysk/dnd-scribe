@@ -258,12 +258,14 @@ Entregas:
 - relacao candidato -> entidade;
 - canon entries consolidadas;
 - timeline por personagem/local/item;
+- musicas e performances vinculadas a sessoes/cenas;
 - notas privadas por audiencia.
 
 Validacao:
 
 ```txt
 canon aprovado gera/atualiza entidade.
+performance aprovada pode aparecer na memoria do personagem.
 player ve apenas entidades permitidas.
 DM ve visao completa.
 ```

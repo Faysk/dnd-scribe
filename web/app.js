@@ -1,4 +1,23 @@
 const DEFAULT_RUN = 'classify_candidates_v2_gpt-4o';
+const DandelionPlaylist = {
+  id: 'PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q',
+  firstVideoId: 'lMxL4lXlf7E',
+  title: 'Cancoes do Dandelion',
+  owner: 'Dandelion',
+  youtubeUrl: 'https://www.youtube.com/watch?v=lMxL4lXlf7E&list=PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q',
+  embedUrl: 'https://www.youtube.com/embed/videoseries?enablejsapi=1&list=PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q',
+  thumbnailUrl: 'https://i.ytimg.com/vi/lMxL4lXlf7E/hqdefault.jpg',
+  usage: [
+    { label: 'Antes da sessao', detail: 'Ambientar mesa, lembrar tom emocional e aquecer o grupo.' },
+    { label: 'Durante cena', detail: 'Usar quando Dandelion performar, discursar ou puxar clima de revolucao.' },
+    { label: 'Depois da sessao', detail: 'Registrar quais musicas viraram momento canon ou bastidor.' }
+  ],
+  notes: [
+    'Player usa embed oficial do YouTube; o video fica visivel porque a fonte publica e video.',
+    'Se houver arquivos originais autorizados, o app pode ganhar player de audio nativo depois.',
+    'Letras completas devem continuar no YouTube ou em arquivo autorizado, nao copiadas para o app.'
+  ]
+};
 
 const state = {
   sessions: [],
@@ -13,7 +32,13 @@ const state = {
   segmentDecisions: {},
   candidateDecisions: {},
   busy: false,
-  log: []
+  log: [],
+  music: {
+    expanded: false,
+    ready: false,
+    playing: false,
+    volume: 70
+  }
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -49,6 +74,14 @@ function toast(message) {
   el.classList.remove('hidden');
   clearTimeout(window.__toastTimer);
   window.__toastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
+}
+
+function copyText(text, message = 'Copiado.') {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => toast(message)).catch(() => toast(text));
+    return;
+  }
+  toast(text);
 }
 
 function setBusy(value) {
@@ -91,7 +124,93 @@ async function boot() {
     state.tab = button.dataset.tab;
     render();
   });
+  initMusicDock();
   await loadSessions();
+}
+
+function initMusicDock() {
+  renderMusicDock();
+  state.music.ready = true;
+}
+
+function renderMusicDock() {
+  const dock = $('#musicDock');
+  if (!dock) return;
+  dock.className = `music-dock ${state.music.expanded ? 'expanded' : 'collapsed'}`;
+  if (dock.dataset.rendered === 'true') {
+    const play = document.getElementById('musicPlayBtn');
+    const volume = document.getElementById('musicVolumeLabel');
+    const expand = document.getElementById('musicExpandBtn');
+    if (play) play.textContent = state.music.playing ? '⏸' : '▶';
+    if (volume) volume.textContent = `${state.music.volume}%`;
+    if (expand) expand.textContent = state.music.expanded ? 'Ocultar' : 'Playlist';
+    return;
+  }
+  dock.innerHTML = `
+    <div class="music-dock-main">
+      <div class="music-dock-title">
+        <span class="label">Palco</span>
+        <strong>${escapeHtml(DandelionPlaylist.owner)}</strong>
+      </div>
+      <div class="music-dock-controls">
+        <button title="Voltar" onclick="musicPrevious()">⏮</button>
+        <button id="musicPlayBtn" class="primary" title="Play/Pause" onclick="musicToggle()">${state.music.playing ? '⏸' : '▶'}</button>
+        <button title="Proxima" onclick="musicNext()">⏭</button>
+        <button title="Baixar volume" onclick="musicVolume(-10)">−</button>
+        <span id="musicVolumeLabel">${state.music.volume}%</span>
+        <button title="Subir volume" onclick="musicVolume(10)">+</button>
+        <button id="musicExpandBtn" title="Exibir playlist" onclick="musicToggleExpanded()">${state.music.expanded ? 'Ocultar' : 'Playlist'}</button>
+      </div>
+    </div>
+    <div class="music-dock-panel">
+      <div id="musicPlayerFrame">
+        <iframe
+          src="${escapeHtml(DandelionPlaylist.embedUrl)}&origin=${encodeURIComponent(location.origin)}"
+          title="${escapeHtml(DandelionPlaylist.title)}"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          referrerpolicy="strict-origin-when-cross-origin"
+          allowfullscreen></iframe>
+      </div>
+      <div class="music-dock-links">
+        <a class="button-link" href="${escapeHtml(DandelionPlaylist.youtubeUrl)}" target="_blank" rel="noreferrer">Abrir no YouTube</a>
+        <button onclick="copyText('${escapeHtml(DandelionPlaylist.youtubeUrl)}', 'Link da playlist copiado.')">Copiar link</button>
+      </div>
+    </div>
+  `;
+  dock.dataset.rendered = 'true';
+  musicCommand('setVolume', [state.music.volume]);
+}
+
+function musicToggle() {
+  if (state.music.playing) musicCommand('pauseVideo');
+  else musicCommand('playVideo');
+  state.music.playing = !state.music.playing;
+  renderMusicDock();
+}
+
+function musicNext() {
+  musicCommand('nextVideo');
+}
+
+function musicPrevious() {
+  musicCommand('previousVideo');
+}
+
+function musicVolume(delta) {
+  state.music.volume = Math.max(0, Math.min(100, state.music.volume + delta));
+  musicCommand('setVolume', [state.music.volume]);
+  renderMusicDock();
+}
+
+function musicToggleExpanded() {
+  state.music.expanded = !state.music.expanded;
+  renderMusicDock();
+}
+
+function musicCommand(func, args = []) {
+  const iframe = document.querySelector('#musicPlayerFrame iframe');
+  if (!iframe?.contentWindow) return;
+  iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
 }
 
 async function loadSessions(force = false) {
@@ -162,6 +281,7 @@ function render() {
   const routes = {
     review: renderReview,
     candidates: renderCandidates,
+    music: renderMusic,
     publications: renderPublications,
     ops: renderOps
   };
