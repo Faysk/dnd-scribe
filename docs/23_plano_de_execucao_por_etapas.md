@@ -398,7 +398,47 @@ Referencia:
 
 - `docs/33_resultado_etapa_10_ciclo_revisao_publicacao.md`
 
-## Etapa 11 — Auth e RLS
+## Etapa 11 — Front real local
+
+Status: concluida.
+
+Objetivo: criar uma app funcional de operacao local, com backend local seguro, consumindo Supabase real sem depender de Vercel.
+
+Escopo:
+
+- criar `web/` como front real separado da demo;
+- criar `tools/serve_frontend.py` como backend local;
+- listar sessoes reais do Supabase;
+- carregar Review Board real por API;
+- aplicar decisoes pelo backend local;
+- baixar template de revisao do DM;
+- visualizar publicacoes e resumo operacional.
+
+Resultado validado:
+
+```txt
+local_url=http://127.0.0.1:8787
+sessions=1
+segments=41
+ai_candidates=5
+template_segments=1
+template_candidates=5
+browser_console_errors=0
+approved_publications=0
+review_only_publications=1
+```
+
+Observacao:
+
+- Vercel nao e necessario nesta fase.
+- O navegador nao recebe `service_role` nem `DATABASE_URL`.
+- A app abriu direto na experiencia operacional, nao em landing page.
+
+Referencia:
+
+- `docs/34_resultado_etapa_11_front_real_local.md`
+
+## Etapa 12 — Auth e RLS
 
 Status: proxima.
 
@@ -412,3 +452,187 @@ Escopo inicial sugerido:
 - decidir como fontes brutas/transcricoes completas ficam restritas;
 - manter operacoes administrativas via service role/worker;
 - validar com perfis DM/player/convidado.
+
+Referencia de planejamento:
+
+- `docs/35_roadmap_proximas_10_etapas.md`
+
+## Etapa 13 — Front real: UX de revisao
+
+Status: planejada.
+
+Objetivo: transformar o Review Board local em ferramenta confortavel para uso real do DM.
+
+Escopo inicial sugerido:
+
+- persistencia local de rascunho por sessao;
+- estados visuais de alterado/salvo;
+- filtros por candidato, personagem, tipo IA e pendencia;
+- painel lateral de fontes;
+- protecao contra aplicar decisao vazia por acidente.
+
+Critério de pronto:
+
+```txt
+DM revisa itens reais pelo front sem editar JSON manualmente.
+```
+
+## Etapa 14 — Player de audio por timestamp
+
+Status: planejada.
+
+Objetivo: permitir conferir trecho transcrito ouvindo a fonte.
+
+Escopo inicial sugerido:
+
+- endpoint para URL assinada R2 por arquivo;
+- player no detalhe do segmento;
+- pular para timestamp aproximado;
+- fallback quando audio nao estiver disponivel;
+- indicador de track/fonte.
+
+Critério de pronto:
+
+```txt
+DM consegue auditar uma fala por audio em ate 2 cliques.
+```
+
+## Etapa 15 — Criacao e gerenciamento de sessoes
+
+Status: planejada.
+
+Objetivo: sair da sessao fixa e permitir iniciar novas sessoes pela interface.
+
+Escopo inicial sugerido:
+
+- tela de lista/detalhe de sessoes;
+- criacao de sessao;
+- edicao de titulo/data/arco/status;
+- associacao de participantes esperados;
+- status operacional por etapa.
+
+Critério de pronto:
+
+```txt
+DM cria uma sessao nova sem tocar no banco manualmente.
+```
+
+## Etapa 16 — Upload/Ingestao pelo front
+
+Status: planejada.
+
+Objetivo: importar ZIP Craig ou arquivos de sessao pela interface local.
+
+Escopo inicial sugerido:
+
+- seletor/upload local para ZIP;
+- execucao server-side de ingest;
+- progresso por etapa;
+- logs de erro amigaveis;
+- link para pasta gerada.
+
+Critério de pronto:
+
+```txt
+um novo arquivo Craig entra no pipeline sem comando manual.
+```
+
+## Etapa 17 — Worker/queue local
+
+Status: planejada.
+
+Objetivo: tirar tarefas longas do request da interface.
+
+Escopo inicial sugerido:
+
+- fila padronizada de jobs;
+- worker local com loop;
+- jobs para ingest, transcribe, classify e publish;
+- retry simples;
+- tela de monitoramento.
+
+Critério de pronto:
+
+```txt
+transcricao/classificacao rodam como jobs, nao como acao bloqueante do front.
+```
+
+## Etapa 18 — Roll20 Logger integrado
+
+Status: planejada.
+
+Objetivo: trazer eventos de mesa para a timeline.
+
+Escopo inicial sugerido:
+
+- consolidar script `!dnd`;
+- parser de eventos;
+- import para `roll20_events`;
+- alinhamento aproximado por timestamp;
+- visualizacao junto da transcricao.
+
+Critério de pronto:
+
+```txt
+marcadores Roll20 ajudam a revisar uma sessao real.
+```
+
+## Etapa 19 — Discord/Craig operacional
+
+Status: planejada.
+
+Objetivo: reduzir atrito antes, durante e depois da sessao.
+
+Escopo inicial sugerido:
+
+- checklist pre-sessao;
+- registro de link/arquivo Craig;
+- instrucoes de download do ZIP;
+- mapeamento de nicks atualizado pela UI;
+- deteccao de novos convidados.
+
+Critério de pronto:
+
+```txt
+captura de uma nova sessao tem menos passos manuais e menos risco de nick errado.
+```
+
+## Etapa 20 — Importacao de historico Markdown
+
+Status: planejada.
+
+Objetivo: trazer o historico antigo da campanha sem misturar com a pipeline de audio.
+
+Escopo inicial sugerido:
+
+- inventario de arquivos `.md`;
+- parser/importador conservador;
+- status `historical_import`;
+- vinculo com entidades/canon quando possivel;
+- relatorio de conflitos/duvidas.
+
+Critério de pronto:
+
+```txt
+historico antigo fica pesquisavel sem contaminar canon aprovado.
+```
+
+## Etapa 21 — Entidades e canon consolidado
+
+Status: planejada.
+
+Objetivo: transformar decisoes aprovadas em memoria navegavel da campanha.
+
+Escopo inicial sugerido:
+
+- tela de entidades;
+- relacao candidato -> entidade;
+- canon entries consolidadas;
+- timeline por personagem/local/item;
+- notas privadas por audiencia.
+
+Critério de pronto:
+
+```txt
+uma publicacao aprovada alimenta memoria estruturada da campanha.
+```

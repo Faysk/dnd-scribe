@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DnD Scribe — Local App</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand">
+        <div class="brand-mark">d20</div>
+        <div>
+          <strong>DnD Scribe</strong>
+          <span>Local operator</span>
+        </div>
+      </div>
+
+      <section class="operator">
+        <span class="label">Operador</span>
+        <strong>Yuhara / DM</strong>
+        <small>As escritas usam backend local. Nenhuma chave sensivel vai para o navegador.</small>
+      </section>
+
+      <div class="rail-title">
+        <span>Sessoes</span>
+        <button id="refreshSessionsBtn" title="Recarregar sessoes">↻</button>
+      </div>
+      <div id="sessionList" class="session-list"></div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <span id="eyebrow" class="label">Conectando</span>
+          <h1 id="title">DnD Scribe</h1>
+        </div>
+        <div class="top-actions">
+          <button id="downloadTemplateBtn">Template DM</button>
+          <button id="downloadDecisionsBtn">Baixar decisoes</button>
+          <button id="applyDecisionsBtn" class="primary">Aplicar decisoes</button>
+        </div>
+      </header>
+
+      <section id="statusStrip" class="status-strip"></section>
+
+      <nav class="tabs" id="tabs">
+        <button data-tab="review" class="active">Review</button>
+        <button data-tab="candidates">Candidatos</button>
+        <button data-tab="publications">Publicacoes</button>
+        <button data-tab="ops">Operacao</button>
+      </nav>
+
+      <section id="view" class="view"></section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

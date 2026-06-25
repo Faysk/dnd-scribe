@@ -1,4 +1,32 @@
-# DnD Scribe Demo v3
+# DnD Scribe
+
+Projeto para capturar, transcrever, revisar e publicar memoria de campanha de DnD com auditoria.
+
+## App local real
+
+O front funcional atual roda localmente com backend Python, usando Supabase real sem expor chave sensivel no navegador.
+
+```bash
+python3 tools/serve_frontend.py --port 8787
+```
+
+Abra:
+
+```txt
+http://127.0.0.1:8787
+```
+
+Esse app permite:
+
+- listar sessoes reais;
+- abrir Review Board com dados do Supabase;
+- revisar segmentos;
+- decidir candidatos de canon/fala/bastidor;
+- aplicar decisoes pelo backend local;
+- regenerar publicacoes;
+- baixar template de revisao do DM.
+
+## Demo visual v3
 
 Demo visual e clicável do projeto **DnD Scribe**, feita em HTML, CSS e JS puro.
 
@@ -21,7 +49,7 @@ A demo simula:
 - Matriz “Quem sabe o quê”.
 - Pipeline de captura/transcrição/auditoria/publicação.
 
-## Como abrir
+## Como abrir a demo estática
 
 Abra `index.html` no navegador.
 
@@ -35,6 +63,8 @@ Ou suba a pasta em qualquer hosting estático:
 ## Arquivos principais
 
 ```txt
+web/                App local real
+tools/serve_frontend.py Backend local seguro
 index.html          Demo clicável
 pitch.html          Tela de apresentação para a mesa
 css/styles.css      Visual completo
