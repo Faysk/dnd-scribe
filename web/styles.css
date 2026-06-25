@@ -25,6 +25,7 @@ body {
   color: var(--text);
   background: var(--bg);
   font-family: var(--font);
+  overflow-x: hidden;
 }
 
 button, input, textarea, select { font: inherit; }
@@ -71,6 +72,7 @@ h2 { font-size: 1.05rem; }
 h3 { font-size: .95rem; }
 p { color: var(--muted); line-height: 1.45; }
 small { color: var(--faint); }
+h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 .hidden { display: none !important; }
 .label {
   display: block;
@@ -154,7 +156,7 @@ small { color: var(--faint); }
 
 .workspace {
   min-width: 0;
-  padding: 18px;
+  padding: 18px 18px 96px;
 }
 .topbar {
   display: grid;
@@ -193,6 +195,28 @@ small { color: var(--faint); }
   padding-bottom: 10px;
 }
 .view { min-width: 0; }
+.loading-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 18px;
+  overflow: hidden;
+}
+.loader-line {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--blue), var(--gold), var(--green));
+  transform-origin: left;
+  animation: loadingSweep 1.2s ease-in-out infinite;
+}
+@keyframes loadingSweep {
+  0% { transform: scaleX(.12); opacity: .42; }
+  50% { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(.12); opacity: .42; }
+}
 
 .toolbar {
   display: grid;
@@ -373,22 +397,30 @@ small { color: var(--faint); }
   background: #05070a;
 }
 .music-dock.collapsed .music-dock-panel { display: none; }
-#musicPlayerFrame {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: #05070a;
+.music-engine {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
-#musicPlayerFrame iframe {
-  width: 100%;
-  height: 100%;
+.music-engine iframe {
+  width: 1px;
+  height: 1px;
+  border: 0;
   display: block;
 }
+.music-dock-playlist {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+.music-dock-playlist strong { font-size: .95rem; }
 .music-dock-links {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 10px;
-  background: var(--panel);
 }
 .music-dock-links a, .music-dock-links button {
   min-height: 34px;
@@ -404,12 +436,17 @@ small { color: var(--faint); }
 }
 
 @media (max-width: 760px) {
-  .workspace, .rail { padding: 12px; }
+  .workspace { padding: 12px 12px 118px; }
+  .rail { padding: 12px; }
   .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .session-list {
     grid-template-columns: 1fr;
   }
-  .top-actions { justify-content: stretch; }
-  .top-actions button { flex: 1 1 160px; }
+  .top-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+  }
+  .top-actions button { width: 100%; }
   .music-dock {
     right: 12px;
     bottom: 12px;

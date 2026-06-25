@@ -13,7 +13,7 @@ const DandelionPlaylist = {
     { label: 'Depois da sessao', detail: 'Registrar quais musicas viraram momento canon ou bastidor.' }
   ],
   notes: [
-    'Player usa embed oficial do YouTube; o video fica visivel porque a fonte publica e video.',
+    'Player usa embed oficial do YouTube em modo discreto para a mesa local.',
     'Se houver arquivos originais autorizados, o app pode ganhar player de audio nativo depois.',
     'Letras completas devem continuar no YouTube ou em arquivo autorizado, nao copiadas para o app.'
   ]
@@ -32,6 +32,7 @@ const state = {
   segmentDecisions: {},
   candidateDecisions: {},
   busy: false,
+  loadingSession: false,
   log: [],
   music: {
     expanded: false,
@@ -125,6 +126,7 @@ async function boot() {
     render();
   });
   initMusicDock();
+  render();
   await loadSessions();
 }
 
@@ -144,6 +146,7 @@ function renderMusicDock() {
     if (play) play.textContent = state.music.playing ? '⏸' : '▶';
     if (volume) volume.textContent = `${state.music.volume}%`;
     if (expand) expand.textContent = state.music.expanded ? 'Ocultar' : 'Playlist';
+    updateMusicPanel();
     return;
   }
   dock.innerHTML = `
@@ -162,38 +165,73 @@ function renderMusicDock() {
         <button id="musicExpandBtn" title="Exibir playlist" onclick="musicToggleExpanded()">${state.music.expanded ? 'Ocultar' : 'Playlist'}</button>
       </div>
     </div>
-    <div class="music-dock-panel">
-      <div id="musicPlayerFrame">
-        <iframe
-          src="${escapeHtml(DandelionPlaylist.embedUrl)}&origin=${encodeURIComponent(location.origin)}"
-          title="${escapeHtml(DandelionPlaylist.title)}"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          referrerpolicy="strict-origin-when-cross-origin"
-          allowfullscreen></iframe>
-      </div>
+    <div id="musicPlayerFrame" class="music-engine" aria-hidden="true"></div>
+    <div id="musicDockPanel" class="music-dock-panel"></div>
+  `;
+  dock.dataset.rendered = 'true';
+  updateMusicPanel();
+}
+
+function updateMusicPanel() {
+  const panel = document.getElementById('musicDockPanel');
+  if (!panel) return;
+  if (!state.music.expanded) {
+    panel.innerHTML = '';
+    return;
+  }
+  panel.innerHTML = `
+    <div class="music-dock-playlist">
+      <strong>${escapeHtml(DandelionPlaylist.title)}</strong>
+      <p>Playlist publica criada pelo Dandelion para usar como clima de mesa. O player fica pequeno; a tela do video nao ocupa o app.</p>
       <div class="music-dock-links">
-        <a class="button-link" href="${escapeHtml(DandelionPlaylist.youtubeUrl)}" target="_blank" rel="noreferrer">Abrir no YouTube</a>
+        <a class="button-link" href="${escapeHtml(DandelionPlaylist.youtubeUrl)}" target="_blank" rel="noreferrer">Abrir playlist</a>
         <button onclick="copyText('${escapeHtml(DandelionPlaylist.youtubeUrl)}', 'Link da playlist copiado.')">Copiar link</button>
       </div>
     </div>
   `;
-  dock.dataset.rendered = 'true';
-  musicCommand('setVolume', [state.music.volume]);
+}
+
+function ensureMusicFrame() {
+  const frame = document.getElementById('musicPlayerFrame');
+  if (!frame) return false;
+  if (frame.querySelector('iframe')) return true;
+  frame.innerHTML = `
+    <iframe
+      src="${escapeHtml(DandelionPlaylist.embedUrl)}&autoplay=1&origin=${encodeURIComponent(location.origin)}"
+      title="${escapeHtml(DandelionPlaylist.title)}"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allowfullscreen></iframe>
+  `;
+  window.setTimeout(() => musicCommand('setVolume', [state.music.volume]), 600);
+  return false;
 }
 
 function musicToggle() {
+  const frameExisted = ensureMusicFrame();
   if (state.music.playing) musicCommand('pauseVideo');
-  else musicCommand('playVideo');
+  else if (frameExisted) musicCommand('playVideo');
+  else {
+    toast('Carregando player...');
+    window.setTimeout(() => {
+      musicCommand('setVolume', [state.music.volume]);
+      musicCommand('playVideo');
+    }, 900);
+  }
   state.music.playing = !state.music.playing;
   renderMusicDock();
 }
 
 function musicNext() {
-  musicCommand('nextVideo');
+  const frameExisted = ensureMusicFrame();
+  if (frameExisted) musicCommand('nextVideo');
+  else window.setTimeout(() => musicCommand('nextVideo'), 900);
 }
 
 function musicPrevious() {
-  musicCommand('previousVideo');
+  const frameExisted = ensureMusicFrame();
+  if (frameExisted) musicCommand('previousVideo');
+  else window.setTimeout(() => musicCommand('previousVideo'), 900);
 }
 
 function musicVolume(delta) {
@@ -237,7 +275,9 @@ async function loadSessions(force = false) {
 async function loadSession(sourceSessionId) {
   try {
     setBusy(true);
+    state.loadingSession = true;
     state.selectedSourceSessionId = sourceSessionId;
+    render();
     const payload = await api(`/api/session?sourceSessionId=${encodeURIComponent(sourceSessionId)}&runId=${encodeURIComponent(DEFAULT_RUN)}`);
     state.review = payload.review;
     state.summary = payload.summary || null;
@@ -249,7 +289,9 @@ async function loadSession(sourceSessionId) {
   } catch (error) {
     toast(error.message);
   } finally {
+    state.loadingSession = false;
     setBusy(false);
+    render();
   }
 }
 
@@ -275,17 +317,30 @@ function render() {
     button.classList.toggle('active', button.dataset.tab === state.tab);
   });
   if (!state.review) {
-    $('#view').innerHTML = `<div class="empty">Carregando dados reais do Supabase...</div>`;
+    $('#view').innerHTML = loadingView();
+    return;
+  }
+  if (state.loadingSession) {
+    $('#view').innerHTML = loadingView('Atualizando sessao real do Supabase...');
     return;
   }
   const routes = {
     review: renderReview,
     candidates: renderCandidates,
-    music: renderMusic,
     publications: renderPublications,
     ops: renderOps
   };
   $('#view').innerHTML = (routes[state.tab] || renderReview)();
+}
+
+function loadingView(message = 'Carregando dados reais do Supabase...') {
+  return `
+    <section class="loading-panel">
+      <div class="loader-line"></div>
+      <h2>${escapeHtml(message)}</h2>
+      <p>O backend local esta montando transcricao, candidatos, publicacoes e resumo operacional.</p>
+    </section>
+  `;
 }
 
 function renderHeader() {

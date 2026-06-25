@@ -80,6 +80,12 @@ O backend usa:
 - `tools/apply_review_decisions.py`
 - `tools/build_session_publications.py`
 
+O backend tambem mantem cache local curto para acelerar testes repetidos da mesma sessao:
+
+- `/api/sessions`: 15 segundos;
+- `/api/session`: 60 segundos;
+- cache invalidado apos aplicar decisoes ou reconstruir publicacoes.
+
 ## Validacao
 
 Endpoints:
@@ -148,3 +154,4 @@ Auth/RLS:
 ## Extensoes da etapa
 
 - `docs/36_resultado_etapa_11_palco_musicas.md`
+- `docs/37_resultado_etapa_11_performance_local.md`

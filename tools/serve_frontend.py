@@ -8,9 +8,11 @@ import json
 import mimetypes
 import subprocess
 import sys
+from time import monotonic
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -30,6 +32,8 @@ DEFAULT_CAMPAIGN = "yuhara-main"
 DEFAULT_SOURCE_SESSION = "craig-AdabEqbzngmT-stage1-full"
 DEFAULT_RUN = "classify_candidates_v2_gpt-4o"
 DEFAULT_ACTOR = "renanyuhara"
+SESSION_CACHE_SECONDS = 60
+SESSION_LIST_CACHE_SECONDS = 15
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -144,10 +148,37 @@ class AppServer(ThreadingHTTPServer):
     def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler], env_file: Path):
         super().__init__(server_address, handler_class)
         self.env_file = env_file
+        self.cache: dict[tuple[str, ...], tuple[float, Any]] = {}
+        self.cache_lock = Lock()
         values = load_env(env_file)
         self.database_url = values.get("DATABASE_URL")
         if not self.database_url:
             raise SystemExit(f"DATABASE_URL not found in {env_file}")
+
+    def cache_get(self, key: tuple[str, ...]) -> Any | None:
+        with self.cache_lock:
+            item = self.cache.get(key)
+            if not item:
+                return None
+            expires_at, value = item
+            if expires_at <= monotonic():
+                self.cache.pop(key, None)
+                return None
+            return value
+
+    def cache_set(self, key: tuple[str, ...], value: Any, ttl_seconds: int) -> None:
+        with self.cache_lock:
+            self.cache[key] = (monotonic() + ttl_seconds, value)
+
+    def cache_invalidate_session(self, campaign: str, source_session: str, run_id: str) -> None:
+        prefixes = [
+            ("session", campaign, source_session, run_id),
+            ("sessions", campaign, run_id),
+        ]
+        with self.cache_lock:
+            for key in list(self.cache):
+                if any(key[: len(prefix)] == prefix for prefix in prefixes):
+                    self.cache.pop(key, None)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -202,10 +233,24 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/health":
                 self.send_json({"ok": True, "app": "dnd-scribe-local", "campaignSlug": campaign})
             elif path == "/api/sessions":
-                self.send_json({"ok": True, "sessions": list_sessions(self.server.database_url, campaign, run_id)})
+                cache_key = ("sessions", campaign, run_id)
+                sessions = self.server.cache_get(cache_key)
+                cached = sessions is not None
+                if sessions is None:
+                    sessions = list_sessions(self.server.database_url, campaign, run_id)
+                    self.server.cache_set(cache_key, sessions, SESSION_LIST_CACHE_SECONDS)
+                self.send_json({"ok": True, "cached": cached, "sessions": sessions})
             elif path == "/api/session":
-                payload = build_review_payload(self.server.database_url, campaign, source_session, run_id)
-                self.send_json({"ok": True, "review": payload, "summary": response_summary(self.server.database_url, campaign, source_session, run_id)})
+                cache_key = ("session", campaign, source_session, run_id)
+                session_payload = self.server.cache_get(cache_key)
+                cached = session_payload is not None
+                if session_payload is None:
+                    session_payload = {
+                        "review": build_review_payload(self.server.database_url, campaign, source_session, run_id),
+                        "summary": response_summary(self.server.database_url, campaign, source_session, run_id),
+                    }
+                    self.server.cache_set(cache_key, session_payload, SESSION_CACHE_SECONDS)
+                self.send_json({"ok": True, "cached": cached, **session_payload})
             elif path == "/api/review-template":
                 include_all = params.get("includeAllSegments") == "true"
                 actor = params.get("actorTrackKey") or DEFAULT_ACTOR
@@ -244,17 +289,22 @@ class Handler(BaseHTTPRequestHandler):
         dry_run = bool(body.get("dryRun"))
         if not dry_run:
             apply_decision_sql(self.server.database_url, sql)
+            self.server.cache_invalidate_session(campaign, source_session, run_id)
         publication_result = None
         if body.get("rebuildPublications", True) and not dry_run:
             publication_result = self.rebuild_publications_payload(campaign, source_session, run_id)
+            self.server.cache_invalidate_session(campaign, source_session, run_id)
         review = build_review_payload(self.server.database_url, campaign, source_session, run_id)
+        summary = response_summary(self.server.database_url, campaign, source_session, run_id)
+        if not dry_run:
+            self.server.cache_set(("session", campaign, source_session, run_id), {"review": review, "summary": summary}, SESSION_CACHE_SECONDS)
         self.send_json(
             {
                 "ok": True,
                 "dryRun": dry_run,
                 "decisionSummary": decision_summary,
                 "publicationResult": publication_result,
-                "summary": response_summary(self.server.database_url, campaign, source_session, run_id),
+                "summary": summary,
                 "review": review,
             }
         )
@@ -262,13 +312,18 @@ class Handler(BaseHTTPRequestHandler):
     def rebuild_publications(self, body: dict[str, Any], campaign: str, source_session: str, run_id: str) -> None:
         dry_run = bool(body.get("dryRun"))
         result = self.rebuild_publications_payload(campaign, source_session, run_id, update_db=not dry_run)
+        if not dry_run:
+            self.server.cache_invalidate_session(campaign, source_session, run_id)
         review = build_review_payload(self.server.database_url, campaign, source_session, run_id)
+        summary = response_summary(self.server.database_url, campaign, source_session, run_id)
+        if not dry_run:
+            self.server.cache_set(("session", campaign, source_session, run_id), {"review": review, "summary": summary}, SESSION_CACHE_SECONDS)
         self.send_json(
             {
                 "ok": True,
                 "dryRun": dry_run,
                 "publicationResult": result,
-                "summary": response_summary(self.server.database_url, campaign, source_session, run_id),
+                "summary": summary,
                 "review": review,
             }
         )

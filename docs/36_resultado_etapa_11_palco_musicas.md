@@ -33,8 +33,9 @@ Se futuramente existirem arquivos de audio originais/autorizados, eles podem ent
 
 - Mini-player flutuante global no front real local.
 - Estado inicial recolhido, sem ocupar a tela.
-- Botao para exibir/ocultar a playlist.
-- Player oficial da playlist quando expandido.
+- Botao para exibir/ocultar informacoes da playlist.
+- Iframe oficial carregado sob demanda, apenas quando alguem usa play/anterior/proxima.
+- Tela do video escondida no app; a playlist aparece como painel pequeno com link oficial.
 - Controles:
   - play/pause;
   - faixa anterior;
@@ -53,19 +54,16 @@ Arquivos alterados:
 
 ## Validacao
 
-Playwright:
+Chrome headless + checks locais:
 
 ```json
 {
   "musicTab": 0,
   "dockVisible": true,
-  "collapsedBefore": 1,
-  "expanded": 1,
-  "iframeSrc": "https://www.youtube.com/embed/videoseries?enablejsapi=1&list=PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q&origin=http%3A%2F%2F127.0.0.1%3A8787",
-  "volumeAfterUp": "80%",
-  "playText": "⏸",
-  "controls": 6,
-  "errors": []
+  "initialState": "collapsed",
+  "iframeAtBoot": 0,
+  "panelMode": "playlist metadata and official link",
+  "controls": ["previous", "play", "next", "volumeDown", "volumeUp", "playlist"]
 }
 ```
 
