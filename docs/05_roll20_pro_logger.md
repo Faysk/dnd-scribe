@@ -13,7 +13,7 @@ No MVP, evitar integração externa em tempo real.
 O Mod Script grava eventos estruturados no próprio chat do Roll20, assim:
 
 ```txt
-[DnD_EVENT] {"type":"scene","label":"Praça do Duelo","session":"2026-06-27_sessao-XX"}
+[DND_EVENT] {"type":"scene","label":"Praça do Duelo","session":"2026-06-27_sessao-XX"}
 ```
 
 Depois da sessão:
@@ -42,21 +42,21 @@ Mas isso é fase 2 ou 3. MVP não precisa meter um Frankstein logo no berço.
 ## Comandos sugeridos
 
 ```txt
-!ys start <session_id>
-!ys end
-!ys scene <nome da cena>
-!ys canon <texto>
-!ys quote <personagem>: <fala>
-!ys ooc <texto>
-!ys cut <texto>
-!ys doubt <texto>
-!ys npc <nome> <nota>
-!ys item <nome> <nota>
-!ys hook <texto>
-!ys combat start
-!ys combat end
-!ys break
-!ys back
+!dnd start <session_id>
+!dnd end
+!dnd scene <nome da cena>
+!dnd canon <texto>
+!dnd quote <personagem>: <fala>
+!dnd ooc <texto>
+!dnd cut <texto>
+!dnd doubt <texto>
+!dnd npc <nome> <nota>
+!dnd item <nome> <nota>
+!dnd hook <texto>
+!dnd combat start
+!dnd combat end
+!dnd break
+!dnd back
 ```
 
 ## Eventos automáticos possíveis
@@ -129,7 +129,7 @@ No início da sessão, fazer um marcador sincronizado:
 
 ```txt
 Mestre fala em voz alta: SINCRONIZAR DnD AGORA
-Roll20: !ys sync
+Roll20: !dnd sync
 Craig: /note SYNC
 ```
 
@@ -142,7 +142,7 @@ Guardar horário local exato no sistema quando o comando é usado via Discord/si
 ## Exemplo de comando de sincronização
 
 ```txt
-!ys sync sessão começou oficialmente
+!dnd sync sessão começou oficialmente
 ```
 
 No áudio, alguém fala:
@@ -165,5 +165,5 @@ Depois o worker localiza a frase no transcript e alinha eventos.
 Veja:
 
 ```txt
-examples/roll20/DnD_logger_script.js
+examples/roll20/yuhara_logger_script.js
 ```

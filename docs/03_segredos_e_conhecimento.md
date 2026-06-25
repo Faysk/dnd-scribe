@@ -27,9 +27,9 @@ Controle narrativo:
 
 ## Tipos de segredo
 
-### Diário privado
+### Diário pessoal
 
-Visível só para o jogador. O DM não vê.
+Visível para o jogador dono e para o DM/lore admin.
 
 Uso:
 
@@ -39,7 +39,7 @@ Uso:
 - ideias de músicas;
 - anotações emocionais.
 
-Não vira canon e não afeta o mundo até ser compartilhado.
+Não vira canon e não afeta o mundo automaticamente. O DM pode consultar para organizar a lore, mas qualquer consequência precisa de validação.
 
 ### Segredo de personagem
 
@@ -88,4 +88,4 @@ Uso:
 
 ## Regra operacional
 
-> Segredo sem DM é diário. Segredo com DM é munição narrativa.
+> Diário pessoal é rascunho. Segredo validado pelo DM é munição narrativa.

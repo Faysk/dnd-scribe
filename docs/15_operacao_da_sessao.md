@@ -27,8 +27,8 @@ SYNC DnD. Sessão iniciada oficialmente.
 No Roll20:
 
 ```txt
-!ys sync Sessão iniciada oficialmente
-!ys start 2026-06-27_sessao-XX
+!dnd sync Sessão iniciada oficialmente
+!dnd start 2026-06-27_sessao-XX
 ```
 
 No Craig:

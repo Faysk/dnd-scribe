@@ -3,7 +3,7 @@ window.DND_SCRIBE = {
     version: "v3",
     projectName: "DnD Scribe",
     tagline: "Nem toda verdade pertence a todos.",
-    operationalRule: "Segredo sem DM é diário. Segredo com DM é munição narrativa.",
+    operationalRule: "Diário pessoal é rascunho. Segredo validado pelo DM é munição narrativa.",
     domainSuggestion: "dnd.faysk.dev"
   },
 
@@ -17,8 +17,8 @@ window.DND_SCRIBE = {
       character: "Mestre",
       avatar: "YH",
       color: "gold",
-      permissions: ["approve_canon", "view_dm_secrets", "manage_sessions", "manage_players", "publish_recaps"],
-      loginNote: "O DM vê canon público, segredos de DM e segredos compartilhados com o DM. Não vê diário privado owner-only."
+      permissions: ["approve_canon", "view_all_lore", "manage_sessions", "manage_players", "publish_recaps"],
+      loginNote: "O DM é lore admin: vê canon, segredos, diários pessoais, bastidores e fontes para organizar a campanha."
     },
     {
       id: "renan",
@@ -173,13 +173,13 @@ window.DND_SCRIBE = {
       time: "04:01:01",
       speakerUser: "renan",
       speaker: "Renan",
-      character: "Diário privado de Dandelion",
+      character: "Diário pessoal de Dandelion",
       type: "private_journal",
       access: "owner_only",
-      visibleTo: ["renan"],
+      visibleTo: ["renan", "yuhara"],
       fictionKnows: ["Dandelion"],
       text: "Talvez Dandelion esteja com medo de que, se o povo cantar sem ele, ninguém precise mais dele no palco.",
-      tags: ["diario", "privado", "nao-canon", "sem-dm"]
+      tags: ["diario", "pessoal", "nao-canon", "dm-admin"]
     },
     {
       id: "seg-008",
@@ -217,19 +217,19 @@ window.DND_SCRIBE = {
     {
       id: "sec-002",
       title: "Dandelion teme perder o palco para a própria canção",
-      type: "Diário privado",
-      audience: "Somente Renan",
+      type: "Diário pessoal",
+      audience: "Renan + DM",
       access: "owner_only",
       owner: "renan",
-      visibleTo: ["renan"],
+      visibleTo: ["renan", "yuhara"],
       fictionKnows: ["Dandelion"],
-      status: "Não canon / introspecção",
-      dmCanView: false,
+      status: "Não canon / introspecção pessoal",
+      dmCanView: true,
       canAffectCanon: false,
       source: "Diário do jogador • 04:01:01",
-      description: "Reflexão pessoal do jogador sobre um medo interno de Dandelion. Não vira canon nem consequência até Renan compartilhar com Yuhara ou revelar em sessão.",
-      revealState: "Privado do jogador",
-      notes: ["Não usado pela IA para lore", "Não aparece em recap"]
+      description: "Reflexão pessoal do jogador sobre um medo interno de Dandelion. O DM pode consultar para organizar a lore, mas não vira canon nem consequência até ser validado.",
+      revealState: "Privado para outros jogadores",
+      notes: ["Visível ao DM/lore admin", "Não aparece em recap sem aprovação"]
     },
     {
       id: "sec-003",
@@ -379,7 +379,7 @@ window.DND_SCRIBE = {
       title: "Piada privada do Dandelion sobre o próprio medo",
       text: "Um comentário de diário pessoal que não deve virar corte público sem aprovação de Renan.",
       access: "owner_only",
-      visibleTo: ["renan"],
+      visibleTo: ["renan", "yuhara"],
       status: "Privado / não publicar",
       source: "04:01:01"
     }
@@ -394,7 +394,7 @@ window.DND_SCRIBE = {
       access: "party",
       visibleTo: ["yuhara", "renan", "arthur", "fernanda"],
       summary: "Bardo feérico em forma de pato, teatral e caótico. Transforma memória em música e revolução em espetáculo.",
-      privateNote: "Tem diário privado sobre medo de ser esquecido e de perder o palco para a própria canção.",
+      privateNote: "Tem diário pessoal sobre medo de ser esquecido e de perder o palco para a própria canção.",
       tags: ["bardo", "música", "memória", "Euclix"]
     },
     {
@@ -451,13 +451,13 @@ window.DND_SCRIBE = {
       title: "Reprise privada para o duelo",
       status: "Rascunho privado / surpresa estética",
       owner: "renan",
-      description: "Ideia de música futura. Não canon e invisível para DM até Renan decidir compartilhar.",
+      description: "Ideia de música futura. Não canon, visível ao DM/lore admin e oculta dos outros jogadores até Renan revelar.",
       visibility: "owner_only"
     }
   ],
 
   visibilityRules: [
-    { rule: "Diário privado", system: "Somente dono", fiction: "Só o personagem/dono sabe", canon: "Não canon até compartilhar", dm: "DM não vê" },
+    { rule: "Diário pessoal", system: "Dono + DM/lore admin", fiction: "Só o personagem/dono sabe até revelar", canon: "Não canon até validação do DM", dm: "DM vê" },
     { rule: "Segredo de personagem", system: "Dono + DM", fiction: "Personagem sabe", canon: "Pode virar canon privado", dm: "DM vê" },
     { rule: "Segredo compartilhado", system: "Players escolhidos + DM", fiction: "Personagens escolhidos sabem", canon: "Pode virar cena", dm: "DM vê" },
     { rule: "Segredo do DM", system: "Somente DM", fiction: "NPCs/mundo podem saber", canon: "Canon oculto", dm: "DM controla" },

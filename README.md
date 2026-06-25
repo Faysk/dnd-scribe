@@ -14,7 +14,7 @@ A demo simula:
 - Arthur como Astel e dono do Roll20 Pro.
 - Fernanda como Screacky.
 - Segredos por player/personagem.
-- Diário privado que pode ficar invisível até para o DM.
+- Diário pessoal visível para dono e DM/lore admin, mas não para outros jogadores.
 - Segredos com DM, compartilhados e DM-only.
 - Separação entre “quem vê no sistema” e “quem sabe na ficção”.
 - Revisão de transcrição com canon candidato, bastidor, segredo e fala marcante.
@@ -51,6 +51,8 @@ examples/           Exemplos técnicos para implementação real
 ## Regra operacional
 
 > Segredo sem DM é diário. Segredo com DM é munição narrativa.
+
+No MVP alinhado, o DM tem acesso completo como guardião da lore. Diário pessoal não é canon automático, mas fica disponível para organização narrativa.
 
 ## Aviso
 

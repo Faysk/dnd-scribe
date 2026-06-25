@@ -26,5 +26,5 @@ rules:
   - audio_raw_is_evidence
   - transcript_is_draft
   - ai_suggests_humans_validate
-  - owner_only_private_journal_is_not_visible_to_dm
+  - owner_only_private_journal_is_visible_to_dm_lore_admin
   - secrets_that_affect_canon_must_include_dm

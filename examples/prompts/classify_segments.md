@@ -28,8 +28,8 @@ Regras:
 1. Nunca transforme piada em canon.
 2. Nunca transforme especulação em fato.
 3. Separe quem vê no sistema de quem sabe na ficção.
-4. Diário privado owner_only não deve ser visto pelo DM.
-5. Segredo que pode afetar o mundo deve envolver o DM.
+4. Diário pessoal owner_only é visível para dono e DM/lore admin, mas não para outros jogadores.
+5. Segredo que pode afetar o mundo deve ser validado pelo DM.
 6. Se houver dúvida, marque needs_review.
 7. Preserve timestamps e fonte.
 8. Responda em JSON.

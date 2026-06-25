@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+*.local
+*secrets*
+*keys*
+audio/
+tmp/
+dist/
+build/
+coverage/
+node_modules/

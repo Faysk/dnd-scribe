@@ -64,7 +64,7 @@ Podem vir de:
 
 - Craig `/note`;
 - Discord slash commands;
-- Roll20 `!ys` commands;
+- Roll20 `!dnd` commands;
 - notas manuais no site.
 
 Marcadores recomendados:
@@ -105,9 +105,9 @@ Durante a sessão, a mesa usa marcadores rápidos:
 /note CANON: Ivory aceitou duelo público
 /note FALA: discurso forte do Dandelion
 /note BASTIDOR: piada do Astel prefeito
-!ys scene Praça do Duelo
-!ys combat start
-!ys canon Screaky revelou as penas vermelhas
+!dnd scene Praça do Duelo
+!dnd combat start
+!dnd canon Screaky revelou as penas vermelhas
 ```
 
 A regra é: **marcar é barato, revisar depois é que decide**.

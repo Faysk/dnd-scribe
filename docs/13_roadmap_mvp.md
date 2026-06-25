@@ -89,7 +89,7 @@ Tarefas:
 
 - script Roll20 Logger MVP;
 - export chat;
-- parser de eventos `[DnD_EVENT]`;
+- parser de eventos `[DND_EVENT]`;
 - tabela roll20_events;
 - exibição na timeline.
 

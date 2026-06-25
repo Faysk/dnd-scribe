@@ -31,7 +31,7 @@ function canView(item, current = user()) {
   if (item.visibleTo && item.visibleTo.includes(current.id)) return true;
   if (item.access === 'party' || item.access === 'party_private') return true;
   if (item.access === 'dm_only') return current.role === 'dm';
-  if (item.access === 'owner_only') return item.owner === current.id;
+  if (item.access === 'owner_only') return item.owner === current.id || current.role === 'dm';
   if (item.access === 'owner_dm') return item.owner === current.id || current.role === 'dm';
   if (item.access === 'shared') return item.visibleTo?.includes(current.id) || current.role === 'dm';
   return false;
@@ -235,7 +235,7 @@ function renderDashboard() {
       ${statCard(visibleSecrets.length, 'segredos visíveis para você', 'purple')}
       ${statCard(visibleCanon.length, 'entradas de canon visíveis', 'gold')}
       ${statCard(visibleCandidates.length, 'candidatos para revisar', 'orange')}
-      ${statCard(privateDiary, 'diários privados seus', 'red')}
+      ${statCard(privateDiary, 'diários pessoais seus', 'red')}
     </div>
 
     <div class="grid cols-2">
@@ -492,7 +492,7 @@ function secretCard(secret) {
         <span><strong>Ficção:</strong> ${escapeHtml(secret.fictionKnows.join(', ') || '—')}</span>
         <span><strong>Status:</strong> ${escapeHtml(secret.status)}</span>
       </div>
-      <div class="row">${badge(secret.dmCanView ? 'DM vê' : 'DM não vê', secret.dmCanView ? 'green' : 'red')}${badge(secret.canAffectCanon ? 'pode afetar canon' : 'não canon', secret.canAffectCanon ? 'orange' : 'default')}</div>
+      <div class="row">${badge(secret.dmCanView ? 'DM vê' : 'restrito', secret.dmCanView ? 'green' : 'red')}${badge(secret.canAffectCanon ? 'pode afetar canon' : 'não canon', secret.canAffectCanon ? 'orange' : 'default')}</div>
       <small>${escapeHtml(secret.source)} • ${escapeHtml(secret.revealState)}</small>
       <div class="row">
         <button class="small-btn" onclick="openSecret('${secret.id}')">Detalhes</button>
@@ -508,7 +508,7 @@ function renderSecrets() {
   $('#view').innerHTML = `
     <section class="card">
       <div class="card-header">
-        <div><h2>Segredos visíveis para ${escapeHtml(user().displayName)}</h2><p>Troque de conta para ver a diferença. O DM não vê diário privado owner-only.</p></div>
+        <div><h2>Segredos visíveis para ${escapeHtml(user().displayName)}</h2><p>Troque de conta para ver a diferença. O DM é lore admin e vê diários pessoais; outros jogadores não veem.</p></div>
         <button class="primary" onclick="openNewSecretModal()">+ Novo segredo</button>
       </div>
       <div class="grid cols-2">
@@ -542,8 +542,8 @@ window.openSecret = function openSecret(id) {
     <div class="grid cols-2">
       <div class="info-box"><strong>Quem vê no sistema</strong><p>${escapeHtml(s.visibleTo.map(id => byUser(id)?.displayName || id).join(', '))}</p></div>
       <div class="info-box"><strong>Quem sabe na ficção</strong><p>${escapeHtml(s.fictionKnows.join(', ') || '—')}</p></div>
-      <div class="info-box"><strong>DM</strong><p>${s.dmCanView ? 'Yuhara pode ver e usar como munição narrativa.' : 'Yuhara não vê; isso é diário/rascunho pessoal.'}</p></div>
-      <div class="info-box"><strong>Canon</strong><p>${s.canAffectCanon ? 'Pode afetar a história após validação.' : 'Não vira canon sem compartilhamento/revelação.'}</p></div>
+      <div class="info-box"><strong>DM</strong><p>${s.dmCanView ? 'Yuhara pode ver como lore admin.' : 'Yuhara não vê este conteúdo.'}</p></div>
+      <div class="info-box"><strong>Canon</strong><p>${s.canAffectCanon ? 'Pode afetar a história após validação.' : 'Não vira canon sem validação do DM.'}</p></div>
     </div>
     <h3>Histórico</h3>
     <ul>${s.notes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>
@@ -641,7 +641,7 @@ function renderEntities() {
 }
 
 function renderStage() {
-  const songs = DATA.songs.filter(song => song.visibility !== 'owner_only' || song.owner === user().id);
+  const songs = DATA.songs.filter(song => song.visibility !== 'owner_only' || song.owner === user().id || user().role === 'dm');
   setTitle('Palco', 'Músicas, discursos e performances');
   $('#view').innerHTML = `
     <section class="card">
@@ -680,16 +680,16 @@ function renderAdmin() {
 
     <section class="card">
       <h2>Políticas principais</h2>
-      <pre class="code">owner_only: auth.uid() = owner_user_id
+      <pre class="code">owner_only: auth.uid() = owner_user_id OR user.role = 'dm'
 owner_dm: auth.uid() = owner_user_id OR user.role = 'dm'
 shared: auth.uid() IN audience_users OR user.role = 'dm'
 dm_only: user.role = 'dm'
 party: authenticated campaign member
 
 Importante:
-- DM não acessa owner_only.
-- Owner_only não vira canon.
-- Para afetar o mundo, segredo precisa ser compartilhado com DM.</pre>
+- DM/lore admin acessa owner_only.
+- Owner_only não vira canon automaticamente.
+- Para afetar o mundo, conteúdo precisa de validação do DM.</pre>
     </section>
   `;
 }
@@ -754,7 +754,7 @@ window.openNewSecretModal = function openNewSecretModal() {
     </select>
     <label>Descrição</label>
     <textarea placeholder="Escreva o conteúdo do segredo..."></textarea>
-    <div class="callout warning"><strong>Aviso:</strong> se ficar só no diário privado, não afeta canon e não será usado pela IA para lore.</div>
+    <div class="callout warning"><strong>Aviso:</strong> diário pessoal é visível para o DM/lore admin, mas não afeta canon nem entra em recap sem validação.</div>
     <div class="row modal-actions"><button class="primary" onclick="toast('Segredo criado na demo.'); closeModal();">Criar segredo</button></div>
   `);
 };

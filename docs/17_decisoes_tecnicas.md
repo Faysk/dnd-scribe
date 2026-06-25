@@ -53,7 +53,7 @@ Motivo:
 
 ## Decisão 5 — Roll20 Pro via log estruturado no chat
 
-MVP deve gerar eventos `[DnD_EVENT]` no chat.
+MVP deve gerar eventos `[DND_EVENT]` no chat.
 
 Motivo:
 

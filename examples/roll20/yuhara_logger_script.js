@@ -5,20 +5,20 @@
  * Registrar eventos estruturados no chat do Roll20 para export posterior.
  *
  * Uso:
- * !ys start 2026-06-27_sessao-XX
- * !ys scene Praça do Duelo
- * !ys canon Ivory aceitou duelo público contra Screaky
- * !ys quote Dandelion: esquecer não é o mesmo que matar
- * !ys ooc piada boa da mesa
- * !ys combat start
- * !ys combat end
- * !ys sync Sessão iniciada oficialmente
+ * !dnd start 2026-06-27_sessao-XX
+ * !dnd scene Praça do Duelo
+ * !dnd canon Ivory aceitou duelo público contra Screaky
+ * !dnd quote Dandelion: esquecer não é o mesmo que matar
+ * !dnd ooc piada boa da mesa
+ * !dnd combat start
+ * !dnd combat end
+ * !dnd sync Sessão iniciada oficialmente
  */
 
 const DnD = {
   stateKey: 'DnDLogger',
-  prefix: '!ys',
-  marker: '[DnD_EVENT]'
+  prefix: '!dnd',
+  marker: '[DND_EVENT]'
 };
 
 on('ready', () => {
@@ -27,7 +27,7 @@ on('ready', () => {
     startedAt: null,
     eventCount: 0
   };
-  log('DnD Logger loaded. Use !ys help');
+  log('DnD Logger loaded. Use !dnd help');
 });
 
 function emitDnDEvent(type, msg, payload = {}) {
@@ -51,21 +51,21 @@ function emitDnDEvent(type, msg, payload = {}) {
 
 function help() {
   sendChat('DnD Logger', `/w gm <b>DnD Logger</b><br>
-  !ys start &lt;session_id&gt;<br>
-  !ys end<br>
-  !ys sync &lt;text&gt;<br>
-  !ys scene &lt;name&gt;<br>
-  !ys canon &lt;text&gt;<br>
-  !ys quote &lt;character&gt;: &lt;text&gt;<br>
-  !ys ooc &lt;text&gt;<br>
-  !ys cut &lt;text&gt;<br>
-  !ys doubt &lt;text&gt;<br>
-  !ys npc &lt;name&gt; &lt;note&gt;<br>
-  !ys item &lt;name&gt; &lt;note&gt;<br>
-  !ys hook &lt;text&gt;<br>
-  !ys combat start|end<br>
-  !ys break<br>
-  !ys back`);
+  !dnd start &lt;session_id&gt;<br>
+  !dnd end<br>
+  !dnd sync &lt;text&gt;<br>
+  !dnd scene &lt;name&gt;<br>
+  !dnd canon &lt;text&gt;<br>
+  !dnd quote &lt;character&gt;: &lt;text&gt;<br>
+  !dnd ooc &lt;text&gt;<br>
+  !dnd cut &lt;text&gt;<br>
+  !dnd doubt &lt;text&gt;<br>
+  !dnd npc &lt;name&gt; &lt;note&gt;<br>
+  !dnd item &lt;name&gt; &lt;note&gt;<br>
+  !dnd hook &lt;text&gt;<br>
+  !dnd combat start|end<br>
+  !dnd break<br>
+  !dnd back`);
 }
 
 on('chat:message', (msg) => {
@@ -135,7 +135,7 @@ on('chat:message', (msg) => {
     case 'combat':
       if (rest === 'start') emitDnDEvent('combat_start', msg, { text: rest });
       else if (rest === 'end') emitDnDEvent('combat_end', msg, { text: rest });
-      else sendChat('DnD Logger', '/w gm Use: !ys combat start ou !ys combat end');
+      else sendChat('DnD Logger', '/w gm Use: !dnd combat start ou !dnd combat end');
       break;
 
     case 'break':

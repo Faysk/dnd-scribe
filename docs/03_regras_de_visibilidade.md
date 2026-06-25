@@ -27,10 +27,12 @@ Exemplos:
 
 ## Tipos principais
 
-### Diário privado
-Visível só para o jogador. Não é canon. Não alimenta IA. Não aparece para o DM.
+### Diário pessoal
+Visível para o jogador dono e para o DM/lore admin. Não é canon automático.
 
 Uso: pensamentos, teoria pessoal, frase futura, sentimento interno, rascunho.
+
+O DM pode consultar para organizar a lore, mas isso não transforma a anotação em fato aprovado.
 
 ### Segredo de personagem
 Visível para jogador + DM. Pode afetar canon e gerar consequências.
@@ -55,4 +57,4 @@ Não canon. Pode ser privado ou publicado como corte aprovado.
 
 ## Regra de ouro
 
-Segredo sem DM é diário. Segredo com DM é munição narrativa.
+Diário pessoal é rascunho. Segredo validado pelo DM é munição narrativa.

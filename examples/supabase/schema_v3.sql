@@ -113,7 +113,7 @@ create table review_decisions (
 
 -- RLS real deve usar funções auxiliares para verificar membership/campaign role.
 -- Exemplo conceitual:
--- owner_only: auth.uid() = owner_user_id
+-- owner_only: auth.uid() = owner_user_id OR is_campaign_dm(campaign_id, auth.uid())
 -- owner_dm: auth.uid() = owner_user_id OR is_campaign_dm(campaign_id, auth.uid())
 -- shared: auth.uid() = any(visible_user_ids) OR is_campaign_dm(campaign_id, auth.uid())
 -- dm_only: is_campaign_dm(campaign_id, auth.uid())

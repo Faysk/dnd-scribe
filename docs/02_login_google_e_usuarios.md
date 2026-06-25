@@ -27,6 +27,6 @@ A versão real deve usar Supabase Auth com Google Provider.
 
 ## Regra importante
 
-O DM não deve acessar automaticamente diário privado `owner_only`.
+O DM é lore admin e deve acessar diário pessoal `owner_only`.
 
-Diário privado é rascunho pessoal, não canon.
+Diário pessoal é rascunho/introspecção e não vira canon automaticamente, mas o DM pode consultar para organizar a lore e decidir consequências quando fizer sentido.

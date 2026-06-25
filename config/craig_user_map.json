@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "notes": "Mapeamento de nicks do Craig/Discord para pessoas e personagens padrão. Uma pessoa pode ter múltiplos personagens por sessão.",
+  "tracks": {
+    "sunnrq": {
+      "person_name": "Fernanda",
+      "default_character": "Screacky",
+      "role": "player",
+      "status": "known",
+      "character_aliases": [
+        "Screacky",
+        "Screaky"
+      ]
+    },
+    "renanyuhara": {
+      "person_name": "Yuhara",
+      "default_character": "DM",
+      "role": "dm",
+      "status": "known",
+      "character_aliases": [
+        "DM",
+        "Mestre",
+        "Narrador"
+      ]
+    },
+    "faysk": {
+      "person_name": "Renan",
+      "default_character": "Dandelion",
+      "role": "player",
+      "status": "known",
+      "character_aliases": [
+        "Dandelion"
+      ]
+    },
+    "arutorux": {
+      "person_name": "Arthur",
+      "default_character": "Astel",
+      "role": "player",
+      "status": "known",
+      "character_aliases": [
+        "Astel"
+      ]
+    },
+    "thomaz_17590": {
+      "person_name": "Random",
+      "default_character": "Convidado / indefinido",
+      "role": "guest",
+      "status": "guest_or_unknown",
+      "character_aliases": []
+    }
+  },
+  "rules": {
+    "allow_multiple_characters_per_person": true,
+    "allow_guest_tracks": true,
+    "unknown_track_policy": "import_as_guest_pending_review",
+    "dm_has_full_lore_access": true
+  }
+}
