@@ -1,4 +1,5 @@
 const DEFAULT_RUN = 'classify_candidates_v2_gpt-4o';
+const OPERATOR_TOKEN_KEY = 'dnd_scribe_operator_token';
 const DandelionPlaylist = {
   id: 'PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q',
   firstVideoId: 'lMxL4lXlf7E',
@@ -94,15 +95,66 @@ function setBusy(value) {
 }
 
 async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  const token = operatorToken();
+  if (token) headers['X-DND-Operator-Token'] = token;
   const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
+    ...options,
+    headers
   });
-  const payload = await response.json();
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    const nextToken = requestOperatorToken();
+    if (nextToken) {
+      return api(path, options);
+    }
+  }
   if (!response.ok || payload.ok === false) {
     throw new Error(payload.error || `Falha HTTP ${response.status}`);
   }
   return payload;
+}
+
+function operatorToken() {
+  try {
+    return localStorage.getItem(OPERATOR_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function saveOperatorToken(token) {
+  try {
+    if (token) localStorage.setItem(OPERATOR_TOKEN_KEY, token);
+    else localStorage.removeItem(OPERATOR_TOKEN_KEY);
+  } catch {
+    // Browser storage may be blocked; the prompt fallback still works for the current call.
+  }
+}
+
+function requestOperatorToken() {
+  const token = window.prompt('Token de operador do DnD Scribe');
+  if (token && token.trim()) {
+    saveOperatorToken(token.trim());
+    toast('Token de operador salvo neste navegador.');
+    return token.trim();
+  }
+  return '';
+}
+
+function configureOperatorToken() {
+  const token = window.prompt('Cole o DND_OPERATOR_TOKEN deste ambiente');
+  if (token && token.trim()) {
+    saveOperatorToken(token.trim());
+    toast('Token de operador atualizado.');
+    render();
+  }
+}
+
+function clearOperatorToken() {
+  saveOperatorToken('');
+  toast('Token de operador removido deste navegador.');
+  render();
 }
 
 function remember(message, payload = null) {
@@ -692,6 +744,15 @@ function renderOps() {
         <h2>Log local</h2>
         <pre>${escapeHtml(state.log.map(item => `[${item.at}] ${item.message}`).join('\n') || 'Sem eventos ainda.')}</pre>
       </article>
+      <article class="ops-card">
+        <h2>Acesso Vercel</h2>
+        <p>Token usado apenas no navegador para liberar as rotas privadas da API publicada.</p>
+        <div class="badges">${badge(operatorToken() ? 'token salvo' : 'sem token', operatorToken() ? 'green' : 'orange')}</div>
+        <div class="actions">
+          <button onclick="configureOperatorToken()">Configurar</button>
+          <button onclick="clearOperatorToken()">Limpar</button>
+        </div>
+      </article>
     </section>
   `;
 }
@@ -800,5 +861,7 @@ window.selectSegment = selectSegment;
 window.quickSegmentDecision = quickSegmentDecision;
 window.saveSegmentDecision = saveSegmentDecision;
 window.setCandidateDecision = setCandidateDecision;
+window.configureOperatorToken = configureOperatorToken;
+window.clearOperatorToken = clearOperatorToken;
 
 boot();

@@ -8,8 +8,10 @@ audio/
 tmp/
 dist/
 build/
+public/
 coverage/
 node_modules/
+.vercel/
 __pycache__/
 *.pyc
 data/review_session.generated.js

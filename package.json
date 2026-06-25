@@ -1,0 +1,18 @@
+{
+  "name": "dnd-scribe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DnD Scribe local and Vercel operator app.",
+  "scripts": {
+    "build": "node scripts/sync-public.js",
+    "check:web": "node --check web/app.js",
+    "check:api": "node --check api/[...path].js",
+    "sync:public": "node scripts/sync-public.js"
+  },
+  "dependencies": {
+    "pg": "8.16.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

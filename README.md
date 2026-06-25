@@ -27,6 +27,26 @@ Esse app permite:
 - baixar template de revisao do DM.
 - ouvir a playlist publica do Dandelion em um mini-player flutuante, via embed oficial do YouTube.
 
+## App Vercel operador
+
+URL de producao:
+
+```txt
+https://dnd-scribe-amber.vercel.app
+```
+
+A API publicada exige `DND_OPERATOR_TOKEN`. O navegador pede esse token na primeira chamada protegida e salva apenas em `localStorage`.
+
+Deploy:
+
+```bash
+npm run build
+vercel build --prod --yes
+vercel deploy --prebuilt --prod --yes
+```
+
+No ambiente atual, prefira gerar o prebuilt em `/tmp` para evitar arquivos truncados no drive montado.
+
 ## Demo visual v3
 
 Demo visual e clicável do projeto **DnD Scribe**, feita em HTML, CSS e JS puro.
