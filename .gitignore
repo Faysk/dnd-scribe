@@ -10,3 +10,7 @@ dist/
 build/
 coverage/
 node_modules/
+__pycache__/
+*.pyc
+data/review_session.generated.js
+data/review_decisions.generated.json

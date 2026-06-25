@@ -124,6 +124,52 @@ Mesmo que o banco seja a fonte principal, o sistema pode exportar:
 - ZIP da sessão;
 - pacote para GPT/LLM.
 
+## Implementacao atual
+
+O pipeline atual gera primeiro um pacote `review_only`.
+
+```txt
+publication_type=master_notes
+visibility=review_only
+status=draft
+```
+
+Recap curto, recap completo, mudanças de canon, falas aprovadas e bastidores públicos só devem ser gerados quando existirem itens aprovados.
+
+Comando:
+
+```bash
+python3 tools/build_session_publications.py --update-db
+```
+
+Saida local:
+
+```txt
+tmp/sessions/{session_id}/publications/{source_run_id}/
+```
+
+## Decisoes humanas
+
+O Review Board exporta um JSON local com decisoes de segmentos e candidatos. Esse arquivo e aplicado por script local:
+
+```bash
+python3 tools/apply_review_decisions.py review_decisions.json --update-db
+```
+
+O script:
+
+- registra cada decisao em `review_decisions`;
+- atualiza status de segmentos e candidatos;
+- resolve o ator pelo track/persona da mesa;
+- pode ser executado de novo sem duplicar a decisao logica.
+
+Travas atuais:
+
+- `approved` em fala nao publica automaticamente;
+- bastidor so deve alimentar publicacao final com `approved_by_all`;
+- canon aprovado precisa de decisao final do DM;
+- o navegador nao recebe `service_role`.
+
 ## Política de remoção
 
 Qualquer participante pode pedir:

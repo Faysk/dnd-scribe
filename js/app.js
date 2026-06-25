@@ -3,7 +3,18 @@ const state = {
   currentUserId: localStorage.getItem('dnd_scribe_current_user') || null,
   view: 'dashboard',
   query: '',
-  reviewFilter: 'all'
+  reviewFilter: 'all',
+  reviewQuery: '',
+  reviewSpeaker: 'all',
+  reviewStatus: 'all',
+  selectedReviewSegmentId: null
+};
+
+const USER_TRACK_KEYS = {
+  yuhara: 'renanyuhara',
+  renan: 'faysk',
+  arthur: 'arutorux',
+  fernanda: 'sunnrq'
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -24,6 +35,14 @@ function escapeHtml(value = '') {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function jsArg(value = '') {
+  return JSON.stringify(String(value)).replaceAll('</', '<\\/');
+}
+
+function safeDomId(value = '') {
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
 function canView(item, current = user()) {
@@ -51,6 +70,142 @@ function tags(list = []) {
 
 function progress(value) {
   return `<div class="progress"><span style="width:${Number(value) || 0}%"></span></div>`;
+}
+
+function realReviewData() {
+  return window.DND_SCRIBE_REAL_REVIEW || null;
+}
+
+function fmtDuration(ms = 0) {
+  const total = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
+}
+
+function fmtBytes(bytes = 0) {
+  const value = Number(bytes || 0);
+  if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+}
+
+function reviewStoreKey() {
+  const data = realReviewData();
+  return `dnd_scribe_review_board_${data?.session?.sourceSessionId || 'mock'}`;
+}
+
+function loadReviewStore() {
+  try {
+    return JSON.parse(localStorage.getItem(reviewStoreKey()) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveReviewStore(store) {
+  localStorage.setItem(reviewStoreKey(), JSON.stringify(store));
+}
+
+function candidateReviewStoreKey() {
+  const data = realReviewData();
+  return `dnd_scribe_candidate_review_${data?.session?.sourceSessionId || 'mock'}_${data?.ai?.runId || 'manual'}`;
+}
+
+function loadCandidateReviewStore() {
+  try {
+    return JSON.parse(localStorage.getItem(candidateReviewStoreKey()) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveCandidateReviewStore(store) {
+  localStorage.setItem(candidateReviewStoreKey(), JSON.stringify(store));
+}
+
+function candidateStoreKey(targetType, sourceCandidateId) {
+  return `${targetType}:${sourceCandidateId}`;
+}
+
+function candidateDecision(targetType, item) {
+  const sourceCandidateId = item.source_candidate_id;
+  const saved = loadCandidateReviewStore()[candidateStoreKey(targetType, sourceCandidateId)];
+  if (saved) return saved;
+  return {
+    targetType,
+    sourceCandidateId,
+    decision: item.status || 'candidate',
+    note: '',
+    approvedForPublic: false,
+    updatedAt: null
+  };
+}
+
+function reviewDecision(segment) {
+  const saved = loadReviewStore()[segment.id];
+  if (saved) return saved;
+  const ai = segment.ai || {};
+  const flags = ai.metadata?.candidate_flags || {};
+  let status = segment.needs_review ? 'needs_review' : segment.review_status || 'pending';
+  if (flags.canon) status = 'canon_candidate';
+  else if (flags.quote) status = 'quote_candidate';
+  else if (flags.outtake) status = 'outtake';
+  else if (ai.needs_review) status = 'needs_review';
+  return {
+    status,
+    characterName: segment.character_name || '',
+    textOverride: '',
+    note: '',
+    updatedAt: null
+  };
+}
+
+function reviewStatusMeta(status) {
+  const labels = {
+    pending: ['Pendente', 'blue'],
+    needs_review: ['Revisar speaker', 'orange'],
+    approved: ['Aprovado', 'green'],
+    canon_candidate: ['Canon?', 'gold'],
+    quote_candidate: 'Fala',
+    outtake: ['Bastidor', 'purple'],
+    private_note: ['Privado', 'red'],
+    rejected: ['Rejeitado', 'red']
+  };
+  const value = labels[status] || [status, 'default'];
+  return Array.isArray(value) ? value : [value, 'purple'];
+}
+
+function reviewStatusBadge(status) {
+  const [label, color] = reviewStatusMeta(status);
+  return badge(label, color);
+}
+
+function candidateDecisionMeta(decision) {
+  const labels = {
+    candidate: ['Candidato', 'blue'],
+    approved: ['Aprovado', 'green'],
+    approved_canon: ['Canon aprovado', 'green'],
+    approved_by_speaker: ['Speaker ok', 'green'],
+    approved_by_all: ['Mesa ok', 'green'],
+    rejected: ['Rejeitado', 'red'],
+    private: ['Privado', 'red'],
+    interpretation: ['Interpretação', 'purple'],
+    possible_hook: ['Gancho', 'gold'],
+    retcon_pending: ['Retcon?', 'orange']
+  };
+  return labels[decision] || [decision || 'Candidato', 'default'];
+}
+
+function candidateDecisionBadge(decision) {
+  const [label, color] = candidateDecisionMeta(decision);
+  return badge(label, color);
+}
+
+function reviewSegmentById(id) {
+  return realReviewData()?.segments?.find(segment => segment.id === id) || null;
 }
 
 function avatar(u, size = '') {
@@ -90,6 +245,9 @@ function setView(view) {
   state.view = view;
   $$('#nav button').forEach(btn => btn.classList.toggle('active', btn.dataset.view === view));
   renderView();
+  if (window.innerWidth <= 1180) {
+    window.setTimeout(() => window.scrollTo({ top: $('.main')?.offsetTop || 0, behavior: 'auto' }), 0);
+  }
 }
 
 function boot() {
@@ -193,6 +351,7 @@ function renderView() {
     knowledge: renderKnowledge,
     canon: renderCanon,
     outtakes: renderOuttakes,
+    publications: renderPublications,
     entities: renderEntities,
     stage: renderStage,
     admin: renderAdmin,
@@ -365,6 +524,138 @@ function renderCapture() {
 }
 
 function renderReview() {
+  const data = realReviewData();
+  if (!data) {
+    renderMockReview();
+    return;
+  }
+
+  const store = loadReviewStore();
+  const candidateStore = loadCandidateReviewStore();
+  const speakers = [{ track_key: 'all', speaker_name: 'Todos', character_name: '' }, ...(data.tracks || [])];
+  const statuses = ['all', 'pending', 'needs_review', 'approved', 'canon_candidate', 'quote_candidate', 'outtake', 'private_note', 'rejected'];
+  const query = state.reviewQuery.trim().toLowerCase();
+  const segments = (data.segments || []).filter(segment => {
+    const decision = reviewDecision(segment);
+    const text = [
+      segment.text,
+      segment.speaker_name,
+      segment.character_name,
+      decision.characterName,
+      decision.textOverride,
+      segment.track_key,
+      ...(segment.tags || [])
+    ].join(' ').toLowerCase();
+    const speakerOk = state.reviewSpeaker === 'all' || segment.track_key === state.reviewSpeaker;
+    const statusOk = state.reviewStatus === 'all' || decision.status === state.reviewStatus;
+    const queryOk = !query || text.includes(query);
+    return speakerOk && statusOk && queryOk;
+  });
+
+  if (!state.selectedReviewSegmentId || !segments.some(segment => segment.id === state.selectedReviewSegmentId)) {
+    state.selectedReviewSegmentId = segments[0]?.id || data.segments?.[0]?.id || null;
+  }
+  const selected = reviewSegmentById(state.selectedReviewSegmentId) || segments[0] || data.segments?.[0];
+  const selectedDecision = selected ? reviewDecision(selected) : null;
+  const decisions = Object.values(store);
+  const candidateDecisions = Object.values(candidateStore);
+  const approvedCount = decisions.filter(item => item.status === 'approved').length;
+  const changedCount = decisions.length + candidateDecisions.length;
+  const aiSummary = data.ai?.summary || {};
+
+  setTitle('Review Board', `${data.campaign.name} • ${data.session.sourceSessionId}`);
+
+  $('#view').innerHTML = `
+    <section class="review-hero">
+      <div>
+        <span class="eyebrow">${escapeHtml(data.session.status)} • ${escapeHtml(data.session.date || 'sem data')}</span>
+        <h2>${escapeHtml(data.session.title)}</h2>
+        <p>${escapeHtml(data.session.summary || 'Sessão importada do Craig e pronta para revisão humana.')}</p>
+        <div class="row">
+          ${badge(`${data.summary.segments} segmentos`, 'blue')}
+          ${badge(`${data.summary.participants} participantes`, 'green')}
+          ${badge(fmtDuration(data.summary.durationMs), 'gold')}
+          ${badge(`${data.summary.words} palavras`, 'purple')}
+        </div>
+        <div class="review-actions">
+          <button class="small-btn" onclick="copyReviewDecisionExport()">Copiar decisões</button>
+          <button class="small-btn" onclick="downloadReviewDecisionExport()">Baixar JSON</button>
+        </div>
+      </div>
+      <div class="review-kpis">
+        <div><strong>${changedCount}</strong><span>decisões locais</span></div>
+        <div><strong>${approvedCount}</strong><span>aprovados</span></div>
+        <div><strong>${aiSummary.canonCandidates || 0}</strong><span>canon IA</span></div>
+        <div><strong>${(aiSummary.quoteCandidates || 0) + (aiSummary.outtakeCandidates || 0)}</strong><span>falas/bastidores IA</span></div>
+      </div>
+    </section>
+
+    ${reviewCandidateStrip(data)}
+
+    <section class="review-toolbar">
+      <label>
+        <span>Busca</span>
+        <input placeholder="Buscar texto, personagem, speaker ou tag..." value="${escapeHtml(state.reviewQuery)}" oninput="state.reviewQuery=this.value; renderView();" />
+      </label>
+      <div>
+        <span class="filter-label">Speaker</span>
+        <div class="filter-grid">
+          ${speakers.map(speaker => `
+            <button class="chip ${state.reviewSpeaker === speaker.track_key ? 'active' : ''}" onclick="setReviewSpeaker('${escapeHtml(speaker.track_key)}')">
+              ${escapeHtml(speaker.track_key === 'all' ? 'todos' : speaker.speaker_name || speaker.track_key)}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+      <div>
+        <span class="filter-label">Status</span>
+        <div class="filter-grid">
+          ${statuses.map(status => {
+            const [label] = status === 'all' ? ['Todos'] : reviewStatusMeta(status);
+            return `<button class="chip ${state.reviewStatus === status ? 'active' : ''}" onclick="setReviewStatus('${status}')">${escapeHtml(label)}</button>`;
+          }).join('')}
+        </div>
+      </div>
+    </section>
+
+    <section class="real-review-layout">
+      <aside class="review-panel">
+        <div class="panel-title">
+          <h2>Timeline</h2>
+          <span>${segments.length}/${data.segments.length}</span>
+        </div>
+        <div class="timeline-list real">
+          ${segments.map(segment => {
+            const decision = reviewDecision(segment);
+            return `
+              <button class="timeline-button ${segment.id === state.selectedReviewSegmentId ? 'active' : ''}" onclick="selectReviewSegment('${segment.id}')">
+                <strong>${fmtDuration(segment.start_ms)}</strong>
+                <span>${escapeHtml(decision.characterName || segment.character_name || segment.track_key)}</span>
+                <small>${escapeHtml(segment.speaker_name || segment.track_key)} • ${reviewStatusMeta(decision.status)[0]}</small>
+              </button>
+            `;
+          }).join('') || empty('Nenhum segmento nesse filtro.')}
+        </div>
+      </aside>
+
+      <section class="review-panel transcript-panel">
+        <div class="panel-title">
+          <h2>Transcrição</h2>
+          <span>${escapeHtml(data.exportedAt ? `export ${data.exportedAt.slice(0, 10)}` : 'local')}</span>
+        </div>
+        <div class="review-segment-list">
+          ${segments.map(segment => reviewSegmentRow(segment)).join('') || empty('Nada para revisar com os filtros atuais.')}
+        </div>
+      </section>
+
+      <aside class="review-panel detail-panel">
+        ${selected ? reviewDetailPanel(selected, selectedDecision) : empty('Selecione um segmento.')}
+      </aside>
+    </section>
+  `;
+}
+
+function renderMockReview() {
   const segments = visible(DATA.transcriptSegments).filter(seg => state.reviewFilter === 'all' || seg.type === state.reviewFilter || seg.access === state.reviewFilter);
   const candidates = visible(DATA.candidates);
   setTitle('Revisão IA', 'Canon, segredo, bastidor ou lixo?');
@@ -404,6 +695,308 @@ function renderReview() {
     </section>
   `;
 }
+
+function reviewCandidateStrip(data) {
+  const canon = data.ai?.canonCandidates || [];
+  const quotes = data.ai?.quoteCandidates || [];
+  const outtakes = data.ai?.outtakeCandidates || [];
+  const items = [
+    ...canon.map(item => ({ targetType: 'canon_candidates', sourceCandidateId: item.source_candidate_id, kind: 'Canon', color: 'gold', title: item.title, body: item.claim, source: item.source_segment_ids, raw: item })),
+    ...quotes.map(item => ({ targetType: 'quote_candidates', sourceCandidateId: item.source_candidate_id, kind: 'Fala', color: 'purple', title: item.character_name || 'Fala candidata', body: item.quote_text, source: item.source_segment_ids, raw: item })),
+    ...outtakes.map(item => ({ targetType: 'outtake_candidates', sourceCandidateId: item.source_candidate_id, kind: 'Bastidor', color: 'orange', title: item.title, body: item.description, source: item.source_segment_ids, raw: item })),
+  ];
+  if (!items.length) return '';
+  return `
+    <section class="ai-candidate-strip">
+      <div class="panel-title">
+        <h2>Candidatos da IA</h2>
+        <span>${escapeHtml(data.ai?.runId || 'sem run')}</span>
+      </div>
+      <div class="ai-candidate-grid">
+        ${items.map(item => {
+          const decision = candidateDecision(item.targetType, item.raw);
+          const noteId = `candidate_note_${safeDomId(item.targetType)}_${safeDomId(item.sourceCandidateId)}`;
+          return `
+          <article class="ai-candidate-card">
+            <div class="row between">
+              <strong>${escapeHtml(item.title || item.kind)}</strong>
+              <div class="row">${badge(item.kind, item.color)}${candidateDecisionBadge(decision.decision)}</div>
+            </div>
+            <p>${escapeHtml(item.body || '')}</p>
+            <small>${escapeHtml((item.source || []).join(', '))}</small>
+            <textarea id="${noteId}" class="candidate-note" placeholder="Nota">${escapeHtml(decision.note || '')}</textarea>
+            ${candidateDecisionActions(item)}
+          </article>
+        `;
+        }).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function candidateDecisionActions(item) {
+  const target = jsArg(item.targetType);
+  const id = jsArg(item.sourceCandidateId);
+  if (item.targetType === 'canon_candidates') {
+    return `
+      <div class="candidate-actions">
+        <button class="success small-btn" onclick="setCandidateDecision(${target}, ${id}, 'approved')">Canon</button>
+        <button class="ghost small-btn" onclick="setCandidateDecision(${target}, ${id}, 'interpretation')">Interpretação</button>
+        <button class="ghost small-btn" onclick="setCandidateDecision(${target}, ${id}, 'possible_hook')">Gancho</button>
+        <button class="ghost small-btn" onclick="setCandidateDecision(${target}, ${id}, 'private')">Privado</button>
+        <button class="danger small-btn" onclick="setCandidateDecision(${target}, ${id}, 'rejected')">Rejeitar</button>
+      </div>
+    `;
+  }
+  if (item.targetType === 'quote_candidates') {
+    return `
+      <div class="candidate-actions">
+        <button class="success small-btn" onclick="setCandidateDecision(${target}, ${id}, 'approved')">Aprovar</button>
+        <button class="ghost small-btn" onclick="setCandidateDecision(${target}, ${id}, 'private')">Privado</button>
+        <button class="danger small-btn" onclick="setCandidateDecision(${target}, ${id}, 'rejected')">Rejeitar</button>
+      </div>
+    `;
+  }
+  return `
+    <div class="candidate-actions">
+      <button class="success small-btn" onclick="setCandidateDecision(${target}, ${id}, 'approved_by_speaker')">Speaker</button>
+      <button class="success small-btn" onclick="setCandidateDecision(${target}, ${id}, 'approved_by_all')">Mesa</button>
+      <button class="ghost small-btn" onclick="setCandidateDecision(${target}, ${id}, 'private')">Privado</button>
+      <button class="danger small-btn" onclick="setCandidateDecision(${target}, ${id}, 'rejected')">Rejeitar</button>
+    </div>
+  `;
+}
+
+function reviewSegmentRow(segment) {
+  const decision = reviewDecision(segment);
+  const active = segment.id === state.selectedReviewSegmentId ? 'active' : '';
+  const ai = segment.ai;
+  return `
+    <article class="review-segment-row ${active}" onclick="selectReviewSegment('${segment.id}')">
+      <div class="row between">
+        <div class="row">
+          <span class="time">${fmtDuration(segment.start_ms)}</span>
+          <strong>${escapeHtml(decision.characterName || segment.character_name || segment.track_key)}</strong>
+          <span class="muted-text">${escapeHtml(segment.speaker_name || segment.track_key)}</span>
+        </div>
+        <div class="row">
+          ${reviewStatusBadge(decision.status)}
+          ${segment.needs_review ? badge('speaker?', 'orange') : ''}
+        </div>
+      </div>
+      <p>${escapeHtml(decision.textOverride || segment.text)}</p>
+      <div class="row compact">
+        ${badge(segment.track_key, 'blue')}
+        ${badge(`chunk ${segment.chunk_index}`, 'default')}
+        ${badge(`${segment.text_words || 0} palavras`, 'purple')}
+        ${ai ? badge(ai.segment_type, 'green') : ''}
+        ${ai?.canon_relevance && ai.canon_relevance !== 'none' ? badge(`canon ${ai.canon_relevance}`, 'gold') : ''}
+      </div>
+    </article>
+  `;
+}
+
+function reviewDetailPanel(segment, decision) {
+  const storageFiles = realReviewData()?.recordingFiles || [];
+  const trackFile = storageFiles.find(file => file.source_file_role === `craig_track_${segment.track_key}`);
+  const masterMd = storageFiles.find(file => file.source_file_role === 'transcript_master_md');
+  const ai = segment.ai;
+  return `
+    <div class="panel-title">
+      <h2>Decisão</h2>
+      ${reviewStatusBadge(decision.status)}
+    </div>
+    <div class="detail-head">
+      <span class="time">${fmtDuration(segment.start_ms)} - ${fmtDuration(segment.end_ms)}</span>
+      <h3>${escapeHtml(decision.characterName || segment.character_name || segment.track_key)}</h3>
+      <p>${escapeHtml(decision.textOverride || segment.text)}</p>
+    </div>
+
+    <label>Personagem / speaker corrigido</label>
+    <input id="reviewCharacterInput" value="${escapeHtml(decision.characterName || segment.character_name || '')}" />
+    <label>Texto revisado</label>
+    <textarea id="reviewTextInput">${escapeHtml(decision.textOverride || segment.text || '')}</textarea>
+    <label>Nota de revisão</label>
+    <textarea id="reviewNoteInput" placeholder="Ex: fala boa para recap, conferir nome próprio, separar OOC...">${escapeHtml(decision.note || '')}</textarea>
+    <div class="row">
+      <button class="small-btn" onclick="saveReviewEdit('${segment.id}')">Salvar nota</button>
+      <button class="small-btn" onclick="copyReviewTimestamp('${segment.id}')">Copiar timestamp</button>
+    </div>
+
+    <div class="decision-grid">
+      <button class="success" onclick="setReviewDecision('${segment.id}', 'approved')">Aprovar</button>
+      <button class="ghost" onclick="setReviewDecision('${segment.id}', 'canon_candidate')">Canon?</button>
+      <button class="ghost" onclick="setReviewDecision('${segment.id}', 'quote_candidate')">Fala</button>
+      <button class="ghost" onclick="setReviewDecision('${segment.id}', 'outtake')">Bastidor</button>
+      <button class="ghost" onclick="setReviewDecision('${segment.id}', 'private_note')">Privado</button>
+      <button class="danger" onclick="setReviewDecision('${segment.id}', 'rejected')">Rejeitar</button>
+    </div>
+
+    <div class="source-box">
+      <h3>Fonte</h3>
+      <p><strong>Track:</strong> ${escapeHtml(segment.track_key)} / ${escapeHtml(segment.speaker_name || '-')}</p>
+      <p><strong>Chunk:</strong> ${escapeHtml(String(segment.chunk_index))}</p>
+      <p><strong>Resposta:</strong> ${escapeHtml(segment.response_path || '-')}</p>
+      <p><strong>Arquivo R2:</strong> ${escapeHtml(trackFile?.storage_path || 'track nao encontrado')}</p>
+      <p><strong>Transcript master:</strong> ${escapeHtml(masterMd?.storage_path || 'nao encontrado')}</p>
+    </div>
+    ${ai ? `
+      <div class="source-box">
+        <h3>Sugestão da IA</h3>
+        <p><strong>Tipo:</strong> ${escapeHtml(ai.segment_type || '-')}</p>
+        <p><strong>Canon:</strong> ${escapeHtml(ai.canon_relevance || 'none')}</p>
+        <p><strong>Confiança:</strong> ${Math.round(Number(ai.confidence || 0) * 100)}%</p>
+        <p><strong>Motivo:</strong> ${escapeHtml(ai.reason || '-')}</p>
+      </div>
+    ` : ''}
+  `;
+}
+
+window.setReviewSpeaker = function setReviewSpeaker(value) {
+  state.reviewSpeaker = value;
+  renderView();
+};
+
+window.setReviewStatus = function setReviewStatus(value) {
+  state.reviewStatus = value;
+  renderView();
+};
+
+window.selectReviewSegment = function selectReviewSegment(id) {
+  state.selectedReviewSegmentId = id;
+  renderView();
+};
+
+window.setReviewDecision = function setReviewDecision(id, status) {
+  const segment = reviewSegmentById(id);
+  if (!segment) return;
+  const store = loadReviewStore();
+  const previous = reviewDecision(segment);
+  store[id] = {
+    ...previous,
+    status,
+    updatedAt: new Date().toISOString()
+  };
+  saveReviewStore(store);
+  toast(`Segmento ${id} marcado como ${reviewStatusMeta(status)[0]}.`);
+  renderView();
+};
+
+window.saveReviewEdit = function saveReviewEdit(id) {
+  const segment = reviewSegmentById(id);
+  if (!segment) return;
+  const store = loadReviewStore();
+  const previous = reviewDecision(segment);
+  store[id] = {
+    ...previous,
+    characterName: $('#reviewCharacterInput')?.value || previous.characterName || segment.character_name,
+    textOverride: $('#reviewTextInput')?.value || '',
+    note: $('#reviewNoteInput')?.value || '',
+    updatedAt: new Date().toISOString()
+  };
+  saveReviewStore(store);
+  toast('Nota de revisão salva localmente.');
+  renderView();
+};
+
+window.setCandidateDecision = function setCandidateDecision(targetType, sourceCandidateId, decision) {
+  const store = loadCandidateReviewStore();
+  const key = candidateStoreKey(targetType, sourceCandidateId);
+  const noteId = `candidate_note_${safeDomId(targetType)}_${safeDomId(sourceCandidateId)}`;
+  store[key] = {
+    ...(store[key] || {}),
+    targetType,
+    sourceCandidateId,
+    decision,
+    note: $(`#${noteId}`)?.value || store[key]?.note || '',
+    approvedForPublic: false,
+    updatedAt: new Date().toISOString()
+  };
+  saveCandidateReviewStore(store);
+  toast(`Candidato ${sourceCandidateId} marcado como ${candidateDecisionMeta(decision)[0]}.`);
+  renderView();
+};
+
+function buildReviewDecisionExport() {
+  const data = realReviewData();
+  const current = user();
+  const segmentStore = loadReviewStore();
+  const candidateStore = loadCandidateReviewStore();
+  return {
+    schemaVersion: 1,
+    sourceSessionId: data?.session?.sourceSessionId || null,
+    aiRunId: data?.ai?.runId || null,
+    exportedAt: new Date().toISOString(),
+    actor: current ? {
+      userId: current.id,
+      displayName: current.displayName,
+      role: current.role,
+      trackKey: USER_TRACK_KEYS[current.id] || current.id
+    } : null,
+    segmentDecisions: Object.entries(segmentStore)
+      .map(([sourceSegmentId, item]) => ({
+        sourceSegmentId,
+        decision: item.status,
+        characterName: item.characterName || '',
+        textOverride: item.textOverride || '',
+        note: item.note || '',
+        updatedAt: item.updatedAt || null
+      }))
+      .sort((a, b) => a.sourceSegmentId.localeCompare(b.sourceSegmentId)),
+    candidateDecisions: Object.values(candidateStore)
+      .map(item => ({
+        targetType: item.targetType,
+        sourceCandidateId: item.sourceCandidateId,
+        decision: item.decision,
+        note: item.note || '',
+        approvedForPublic: Boolean(item.approvedForPublic),
+        updatedAt: item.updatedAt || null
+      }))
+      .sort((a, b) => `${a.targetType}:${a.sourceCandidateId}`.localeCompare(`${b.targetType}:${b.sourceCandidateId}`))
+  };
+}
+
+window.copyReviewDecisionExport = function copyReviewDecisionExport() {
+  const serialized = JSON.stringify(buildReviewDecisionExport(), null, 2);
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(serialized)
+      .then(() => toast('Decisões copiadas em JSON.'))
+      .catch(() => openReviewDecisionExportModal(serialized));
+    return;
+  }
+  openReviewDecisionExportModal(serialized);
+};
+
+window.downloadReviewDecisionExport = function downloadReviewDecisionExport() {
+  const payload = buildReviewDecisionExport();
+  const serialized = JSON.stringify(payload, null, 2);
+  const blob = new Blob([serialized + '\n'], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `review_decisions_${payload.sourceSessionId || 'session'}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  toast('JSON de decisões baixado.');
+};
+
+function openReviewDecisionExportModal(serialized) {
+  openModal(`
+    <span class="eyebrow">Review Board</span>
+    <h2>Decisões em JSON</h2>
+    <pre class="code">${escapeHtml(serialized)}</pre>
+  `);
+}
+
+window.copyReviewTimestamp = function copyReviewTimestamp(id) {
+  const segment = reviewSegmentById(id);
+  if (!segment) return;
+  const text = `${fmtDuration(segment.start_ms)} ${segment.speaker_name || segment.track_key}: ${segment.text}`;
+  navigator.clipboard?.writeText(text);
+  toast('Timestamp copiado.');
+};
 
 window.focusSegment = function focusSegment(id) {
   const seg = DATA.transcriptSegments.find(s => s.id === id);
@@ -619,6 +1212,73 @@ function renderOuttakes() {
     </section>
   `;
 }
+
+function renderPublications() {
+  const data = realReviewData();
+  if (!data?.ai?.publications) {
+    setTitle('Publicações', 'Rascunhos e exports');
+    $('#view').innerHTML = `
+      <section class="card">
+        <div class="card-header"><div><h2>Publicações</h2><p>Nenhum pacote real foi exportado ainda. Gere com o pipeline de publicação para ver os rascunhos aqui.</p></div>${badge('sem dados', 'default')}</div>
+      </section>
+    `;
+    return;
+  }
+  const publications = data.ai.publications || [];
+  const finalReady = publications.filter(item => ['public_campaign', 'public_web'].includes(item.visibility) && item.status !== 'draft');
+  const reviewOnly = publications.filter(item => item.visibility === 'review_only');
+  setTitle('Publicações', `${data.session.title} • ${data.ai.runId}`);
+  $('#view').innerHTML = `
+    <section class="review-hero">
+      <div>
+        <span class="eyebrow">Publicação travada por revisão</span>
+        <h2>Pacotes gerados</h2>
+        <p>Publicações finais só aparecem depois de canon, falas e bastidores aprovados. Por enquanto existe apenas material interno de revisão.</p>
+        <div class="row">
+          ${badge(`${publications.length} pacote(s)`, 'blue')}
+          ${badge(`${reviewOnly.length} review_only`, 'gold')}
+          ${badge(`${finalReady.length} públicos`, finalReady.length ? 'green' : 'red')}
+        </div>
+      </div>
+      <div class="review-kpis">
+        <div><strong>${data.ai.summary.canonCandidates || 0}</strong><span>canon candidatos</span></div>
+        <div><strong>${data.ai.summary.quoteCandidates || 0}</strong><span>falas candidatas</span></div>
+        <div><strong>${data.ai.summary.outtakeCandidates || 0}</strong><span>bastidores candidatos</span></div>
+        <div><strong>${finalReady.length}</strong><span>publicações finais</span></div>
+      </div>
+    </section>
+    <section class="publication-grid">
+      ${publications.map(publicationCard).join('') || empty('Nenhuma publicação gerada.')}
+    </section>
+  `;
+}
+
+function publicationCard(item) {
+  const color = item.visibility === 'review_only' ? 'gold' : item.visibility?.startsWith('public') ? 'green' : 'blue';
+  const content = item.content || '';
+  return `
+    <article class="publication-card">
+      <div class="row between">
+        <div>
+          <h2>${escapeHtml(item.title || item.source_publication_id)}</h2>
+          <small>${escapeHtml(item.publication_type)} • ${escapeHtml(item.source_publication_id || '-')}</small>
+        </div>
+        <div class="row">${badge(item.visibility, color)}${badge(item.status, item.status === 'draft' ? 'orange' : 'green')}</div>
+      </div>
+      <pre>${escapeHtml(content.slice(0, 900))}${content.length > 900 ? '\n...' : ''}</pre>
+      <div class="row">
+        <button class="small-btn" onclick="copyPublication('${escapeHtml(item.source_publication_id)}')">Copiar preview</button>
+      </div>
+    </article>
+  `;
+}
+
+window.copyPublication = function copyPublication(sourcePublicationId) {
+  const item = realReviewData()?.ai?.publications?.find(publication => publication.source_publication_id === sourcePublicationId);
+  if (!item) return;
+  navigator.clipboard?.writeText(item.content || '');
+  toast('Publicação copiada.');
+};
 
 function renderEntities() {
   const list = visible(DATA.entities);

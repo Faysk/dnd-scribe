@@ -31,6 +31,20 @@ Veja:
 examples/prompts/classify_segments.md
 ```
 
+Versao aplicada no pipeline local:
+
+```txt
+classify_candidates_v2
+```
+
+Regras adicionais da v2:
+
+- responder em pt-BR;
+- gerar candidatos atomicos;
+- evitar resumos genericos;
+- limitar fontes por candidato;
+- retornar arrays vazios quando nao houver candidato bom.
+
 ## Prompt de extração de canon
 
 Veja:

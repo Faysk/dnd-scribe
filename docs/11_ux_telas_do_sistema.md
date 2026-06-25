@@ -94,11 +94,21 @@ Cada segmento mostra:
 
 A tela mais importante.
 
-Colunas:
+Colunas planejadas:
 
 ```txt
 Timeline | Transcrição | Candidatos | Fonte/Áudio
 ```
+
+MVP implementado:
+
+```txt
+Timeline | Transcrição | Decisão/Fonte
+```
+
+O primeiro board usa a sessão real exportada do Supabase para um arquivo local gerado. Ele permite busca, filtro por speaker, filtro por status, seleção por timestamp, correção local de personagem/speaker, correção local de texto transcrito, notas e marcação como aprovado, canon candidato, fala, bastidor, privado ou rejeitado.
+
+As decisões ainda nascem em `localStorage`, mas agora podem ser exportadas em JSON pelo Review Board e aplicadas no Supabase por script local. Isso mantém o frontend sem credencial sensível e cria trilha auditável em `review_decisions`.
 
 ### Candidatos
 
@@ -111,6 +121,13 @@ Abas:
 - Entidades;
 - Dúvidas;
 - Privados.
+
+MVP implementado:
+
+- canon candidato pode ser marcado como canon, interpretação, gancho, privado ou rejeitado;
+- fala candidata pode ser aprovada, privada ou rejeitada;
+- bastidor candidato pode ser aprovado pelo speaker, aprovado pela mesa, privado ou rejeitado;
+- o JSON exportado junta decisões de segmentos e candidatos.
 
 ### Ações
 

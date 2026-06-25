@@ -154,6 +154,14 @@ Resultado:
 A mesa consegue canonizar com fonte.
 ```
 
+Status atual:
+
+```txt
+Review Board exporta JSON de decisoes.
+Script local aplica decisoes no Supabase.
+Template de revisao do DM e ciclo publicacao/review ja existem.
+```
+
 ## Fase 8 — Publicação
 
 Objetivo: gerar outputs finais.
@@ -173,6 +181,13 @@ Resultado:
 Uma sessão vira publicação limpa e auditável.
 ```
 
+Status atual:
+
+```txt
+Pacote review_only gerado.
+Publicacoes finais continuam travadas ate aprovacao humana/DM.
+```
+
 ## Fase 9 — Polimento
 
 - busca;
@@ -182,6 +197,12 @@ Uma sessão vira publicação limpa e auditável.
 - permissões melhores;
 - export Markdown/JSON;
 - backups.
+
+Próxima frente técnica recomendada:
+
+```txt
+Supabase Auth + RLS por campanha/perfil.
+```
 
 ## Ordem recomendada
 
