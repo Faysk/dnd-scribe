@@ -230,7 +230,21 @@ class Handler(BaseHTTPRequestHandler):
             campaign = params.get("campaignSlug") or DEFAULT_CAMPAIGN
             source_session = params.get("sourceSessionId") or DEFAULT_SOURCE_SESSION
             run_id = params.get("runId") or DEFAULT_RUN
-            if path == "/api/health":
+            if path == "/api/auth-config":
+                env = load_env(self.server.env_file)
+                self.send_json(
+                    {
+                        "ok": True,
+                        "mode": "open_test",
+                        "supabaseUrl": env.get("NEXT_PUBLIC_SUPABASE_URL") or env.get("SUPABASE_URL") or "",
+                        "publishableKey": env.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+                        or env.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+                        or env.get("SUPABASE_PUBLISHABLE_KEY")
+                        or env.get("SUPABASE_ANON_KEY")
+                        or "",
+                    }
+                )
+            elif path == "/api/health":
                 self.send_json({"ok": True, "app": "dnd-scribe-local", "campaignSlug": campaign})
             elif path == "/api/sessions":
                 cache_key = ("sessions", campaign, run_id)

@@ -92,27 +92,6 @@ function readBody(req) {
   });
 }
 
-function bearerToken(req) {
-  const auth = req.headers.authorization || '';
-  if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
-  return req.headers['x-dnd-operator-token'] || '';
-}
-
-function assertAuthorized(req, path) {
-  if (path === '/api/health') return;
-  const expected = process.env.DND_OPERATOR_TOKEN;
-  if (!expected) {
-    const error = new Error('DND_OPERATOR_TOKEN is not configured');
-    error.statusCode = 503;
-    throw error;
-  }
-  if (bearerToken(req) !== expected) {
-    const error = new Error('Token de operador ausente ou invalido.');
-    error.statusCode = 401;
-    throw error;
-  }
-}
-
 async function data(sql, params = [], db = getPool()) {
   const result = await db.query(sql, params);
   if (!result.rows.length) return null;
@@ -1093,6 +1072,18 @@ async function handleGet(req, res, path, query) {
   const campaign = query.get('campaignSlug') || DEFAULT_CAMPAIGN;
   const sourceSessionId = query.get('sourceSessionId') || DEFAULT_SOURCE_SESSION;
   const runId = query.get('runId') || DEFAULT_RUN;
+  if (path === '/api/auth-config') {
+    return sendJson(res, 200, {
+      ok: true,
+      mode: 'open_test',
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
+      publishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        || process.env.SUPABASE_PUBLISHABLE_KEY
+        || process.env.SUPABASE_ANON_KEY
+        || ''
+    });
+  }
   if (path === '/api/health') {
     return sendJson(res, 200, { ok: true, app: 'dnd-scribe-vercel', campaignSlug: campaign });
   }
@@ -1176,7 +1167,6 @@ module.exports = async function handler(req, res) {
   const path = url.pathname;
   try {
     if (req.method === 'OPTIONS') return sendJson(res, 200, { ok: true });
-    assertAuthorized(req, path);
     if (req.method === 'GET') return await handleGet(req, res, path, url.searchParams);
     if (req.method === 'POST') return await handlePost(req, res, path);
     return sendJson(res, 405, { ok: false, error: 'Method not allowed' });

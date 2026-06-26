@@ -124,6 +124,14 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   background: var(--panel);
 }
 .operator strong, .operator small { display: block; margin-top: 5px; }
+.operator .badges { margin-top: 9px; }
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.auth-actions button { flex: 1 1 120px; }
 .rail-title {
   display: flex;
   align-items: center;

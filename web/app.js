@@ -1,5 +1,4 @@
 const DEFAULT_RUN = 'classify_candidates_v2_gpt-4o';
-const OPERATOR_TOKEN_KEY = 'dnd_scribe_operator_token';
 const DandelionPlaylist = {
   id: 'PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q',
   firstVideoId: 'lMxL4lXlf7E',
@@ -35,6 +34,13 @@ const state = {
   busy: false,
   loadingSession: false,
   log: [],
+  auth: {
+    ready: false,
+    client: null,
+    user: null,
+    error: null,
+    mode: 'open_test'
+  },
   music: {
     expanded: false,
     ready: false,
@@ -96,65 +102,15 @@ function setBusy(value) {
 
 async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-  const token = operatorToken();
-  if (token) headers['X-DND-Operator-Token'] = token;
   const response = await fetch(path, {
     ...options,
     headers
   });
   const payload = await response.json().catch(() => ({}));
-  if (response.status === 401) {
-    const nextToken = requestOperatorToken();
-    if (nextToken) {
-      return api(path, options);
-    }
-  }
   if (!response.ok || payload.ok === false) {
     throw new Error(payload.error || `Falha HTTP ${response.status}`);
   }
   return payload;
-}
-
-function operatorToken() {
-  try {
-    return localStorage.getItem(OPERATOR_TOKEN_KEY) || '';
-  } catch {
-    return '';
-  }
-}
-
-function saveOperatorToken(token) {
-  try {
-    if (token) localStorage.setItem(OPERATOR_TOKEN_KEY, token);
-    else localStorage.removeItem(OPERATOR_TOKEN_KEY);
-  } catch {
-    // Browser storage may be blocked; the prompt fallback still works for the current call.
-  }
-}
-
-function requestOperatorToken() {
-  const token = window.prompt('Token de operador do DnD Scribe');
-  if (token && token.trim()) {
-    saveOperatorToken(token.trim());
-    toast('Token de operador salvo neste navegador.');
-    return token.trim();
-  }
-  return '';
-}
-
-function configureOperatorToken() {
-  const token = window.prompt('Cole o DND_OPERATOR_TOKEN deste ambiente');
-  if (token && token.trim()) {
-    saveOperatorToken(token.trim());
-    toast('Token de operador atualizado.');
-    render();
-  }
-}
-
-function clearOperatorToken() {
-  saveOperatorToken('');
-  toast('Token de operador removido deste navegador.');
-  render();
 }
 
 function remember(message, payload = null) {
@@ -179,7 +135,119 @@ async function boot() {
   });
   initMusicDock();
   render();
+  await initAuth();
   await loadSessions();
+}
+
+async function initAuth() {
+  try {
+    const config = await api('/api/auth-config');
+    state.auth.mode = config.mode || 'open_test';
+    if (!config.supabaseUrl || !config.publishableKey) {
+      state.auth.error = 'Config publica do Supabase ausente.';
+      return;
+    }
+    if (!window.supabase?.createClient) {
+      state.auth.error = 'Cliente Supabase nao carregou no navegador.';
+      return;
+    }
+    state.auth.client = window.supabase.createClient(config.supabaseUrl, config.publishableKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    });
+    const { data, error } = await state.auth.client.auth.getSession();
+    if (error) throw error;
+    state.auth.user = data?.session?.user || null;
+    state.auth.client.auth.onAuthStateChange((_event, session) => {
+      state.auth.user = session?.user || null;
+      state.auth.ready = true;
+      renderAuthPanel();
+    });
+    state.auth.ready = true;
+    renderAuthPanel();
+  } catch (error) {
+    state.auth.ready = true;
+    state.auth.error = error.message;
+    renderAuthPanel();
+  }
+}
+
+function authDisplayName(user = state.auth.user) {
+  if (!user) return '';
+  return user.user_metadata?.full_name
+    || user.user_metadata?.name
+    || user.email
+    || 'Usuario Google';
+}
+
+function renderAuthPanel() {
+  const panel = $('#authPanel');
+  if (!panel) return;
+  const user = state.auth.user;
+  if (!state.auth.ready) {
+    panel.innerHTML = `
+      <span class="label">Acesso</span>
+      <strong>Conectando</strong>
+      <small>Preparando login Google.</small>
+    `;
+    return;
+  }
+  if (state.auth.error) {
+    panel.innerHTML = `
+      <span class="label">Acesso</span>
+      <strong>Modo aberto</strong>
+      <small>${escapeHtml(state.auth.error)}</small>
+      <div class="auth-actions">
+        <button onclick="initAuth()">Tentar de novo</button>
+      </div>
+    `;
+    return;
+  }
+  if (!user) {
+    panel.innerHTML = `
+      <span class="label">Acesso</span>
+      <strong>Modo aberto</strong>
+      <small>Login Google opcional durante os testes.</small>
+      <div class="badges">${badge('API aberta', 'orange')}</div>
+      <div class="auth-actions">
+        <button class="primary" onclick="signInGoogle()">Entrar Google</button>
+      </div>
+    `;
+    return;
+  }
+  panel.innerHTML = `
+    <span class="label">Acesso</span>
+    <strong>${escapeHtml(authDisplayName(user))}</strong>
+    <small>${escapeHtml(user.email || 'Google conectado')}</small>
+    <div class="badges">${badge('Google', 'green')}${badge('API aberta', 'orange')}</div>
+    <div class="auth-actions">
+      <button onclick="signOutGoogle()">Sair</button>
+    </div>
+  `;
+}
+
+async function signInGoogle() {
+  if (!state.auth.client) {
+    toast('Login ainda nao esta pronto.');
+    return;
+  }
+  const { error } = await state.auth.client.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin
+    }
+  });
+  if (error) toast(error.message);
+}
+
+async function signOutGoogle() {
+  if (!state.auth.client) return;
+  const { error } = await state.auth.client.auth.signOut();
+  if (error) toast(error.message);
+  else toast('Sessao Google encerrada.');
 }
 
 function initMusicDock() {
@@ -744,15 +812,6 @@ function renderOps() {
         <h2>Log local</h2>
         <pre>${escapeHtml(state.log.map(item => `[${item.at}] ${item.message}`).join('\n') || 'Sem eventos ainda.')}</pre>
       </article>
-      <article class="ops-card">
-        <h2>Acesso Vercel</h2>
-        <p>Token usado apenas no navegador para liberar as rotas privadas da API publicada.</p>
-        <div class="badges">${badge(operatorToken() ? 'token salvo' : 'sem token', operatorToken() ? 'green' : 'orange')}</div>
-        <div class="actions">
-          <button onclick="configureOperatorToken()">Configurar</button>
-          <button onclick="clearOperatorToken()">Limpar</button>
-        </div>
-      </article>
     </section>
   `;
 }
@@ -861,7 +920,8 @@ window.selectSegment = selectSegment;
 window.quickSegmentDecision = quickSegmentDecision;
 window.saveSegmentDecision = saveSegmentDecision;
 window.setCandidateDecision = setCandidateDecision;
-window.configureOperatorToken = configureOperatorToken;
-window.clearOperatorToken = clearOperatorToken;
+window.initAuth = initAuth;
+window.signInGoogle = signInGoogle;
+window.signOutGoogle = signOutGoogle;
 
 boot();

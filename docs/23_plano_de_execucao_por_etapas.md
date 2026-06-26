@@ -442,7 +442,7 @@ Referencia:
 
 ## Etapa 12 — Auth e RLS
 
-Status: proxima.
+Status: em andamento.
 
 Objetivo: proteger dados por usuario/campanha usando Supabase Auth e Row Level Security.
 
@@ -458,6 +458,7 @@ Escopo inicial sugerido:
 Referencia de planejamento:
 
 - `docs/35_roadmap_proximas_10_etapas.md`
+- `docs/39_resultado_etapa_12_login_google_aberto.md`
 
 ## Etapa 13 — Front real: UX de revisao
 

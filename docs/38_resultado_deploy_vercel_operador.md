@@ -2,11 +2,12 @@
 
 ## Objetivo
 
-Publicar o front real na Vercel com API serverless protegida por token de operador, sem expor segredos no navegador.
+Publicar o front real na Vercel com API serverless. Para a fase atual de teste, as rotas da API ficam abertas.
 
 URL de producao:
 
 ```txt
+https://dnd.faysk.dev
 https://dnd-scribe-amber.vercel.app
 ```
 
@@ -16,9 +17,8 @@ https://dnd-scribe-amber.vercel.app
 - O build copia `web/` para `public/` com `npm run build`.
 - `public/` e gerado, ignorado pelo Git.
 - A API da Vercel fica em `api/[...path].js`.
-- Rotas privadas exigem `DND_OPERATOR_TOKEN`.
-- `GET /api/health` fica aberto para smoke check.
-- O front pede o token no navegador quando recebe `401`.
+- Rotas da API ficam abertas temporariamente para teste.
+- Segredos de banco continuam apenas em variaveis de ambiente da Vercel, nunca no navegador.
 
 ## Arquivos criados/alterados
 
@@ -40,7 +40,6 @@ O `.env.local` foi normalizado com:
 VERCEL_TOKEN
 VERCEL_PROJECT_ID
 VERCEL_ORG_ID
-DND_OPERATOR_TOKEN
 ```
 
 O bloco cru colado do painel da Vercel foi removido do `.env.local` depois de extrair os valores necessarios.
@@ -87,21 +86,27 @@ Smoke publico:
 ```txt
 page 200
 health 200
-sessions sem token 401
-sessions com token 200, sessoes=1
-session com token 200, segmentos=41, decisoes_salvas=2
+sessions sem token 200, sessoes=1
+session sem token 200, segmentos=41, decisoes_salvas=2
+```
+
+Dominios validados:
+
+```txt
+https://dnd.faysk.dev
+https://dnd-scribe-amber.vercel.app
 ```
 
 ## Como acessar
 
-1. Abrir `https://dnd-scribe-amber.vercel.app`.
-2. Quando o app pedir, colar o valor de `DND_OPERATOR_TOKEN` do `.env.local`.
-3. O token fica salvo apenas no navegador local em `localStorage`.
+1. Abrir `https://dnd.faysk.dev`.
+2. Usar normalmente durante a fase de teste aberta.
 
 ## Riscos e residuos
 
 - Isto ainda nao substitui Auth/RLS.
-- `DND_OPERATOR_TOKEN` e uma trava operacional temporaria para ambiente de operador.
+- As rotas estao abertas por decisao temporaria de teste.
+- Qualquer pessoa com a URL pode ler dados e acionar operacoes expostas enquanto este modo estiver ativo.
 - A etapa Auth/RLS continua sendo necessaria antes de abrir acesso para jogadores.
 - Deploy normal por source falhou com `public` vazio; por enquanto usar prebuilt gerado em `/tmp`.
 

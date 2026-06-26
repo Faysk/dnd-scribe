@@ -32,10 +32,13 @@ Esse app permite:
 URL de producao:
 
 ```txt
+https://dnd.faysk.dev
 https://dnd-scribe-amber.vercel.app
 ```
 
-A API publicada exige `DND_OPERATOR_TOKEN`. O navegador pede esse token na primeira chamada protegida e salva apenas em `localStorage`.
+A API publicada esta aberta temporariamente para teste. Antes de abrir para jogadores ou dados mais sensiveis, voltar para Auth/RLS ou outra trava de acesso.
+
+Login Google via Supabase Auth ja aparece no painel lateral, mas por enquanto ele e opcional e nao fecha as rotas da API.
 
 Deploy:
 
