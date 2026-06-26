@@ -13,7 +13,6 @@ DEFAULT_SCHEMA_FILES = [
     Path("schemas/20260625_001_local_ingest_extensions.sql"),
     Path("schemas/20260625_002_ai_candidates_extensions.sql"),
     Path("schemas/20260625_003_publication_extensions.sql"),
-    Path("schemas/20260625_003_publication_extensions.sql"),
     Path("schemas/20260625_004_review_decisions_extensions.sql"),
     Path("schemas/20260626_005_auth_profiles_extensions.sql"),
     Path("schemas/20260626_006_roll20_event_extensions.sql"),
