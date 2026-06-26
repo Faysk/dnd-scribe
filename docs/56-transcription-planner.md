@@ -9,7 +9,8 @@ O planejador olha os chunks no banco e separa:
 ```text
 silencio provavel -> skip
 transcript ja existe no cache -> cache hit
-sem cache e nao silencioso -> candidato a transcricao
+sem hash -> blocked
+sem cache, nao silencioso e com hash -> candidato a transcricao
 ```
 
 ## Implementado
@@ -35,6 +36,7 @@ O script informa:
 - total de chunks;
 - chunks pulados por silencio;
 - chunks reaproveitados do cache;
+- chunks bloqueados por falta de `sha256`;
 - chunks que ainda precisariam de transcricao;
 - minutos cobraveis estimados;
 - custo estimado quando a tabela de preco local estiver configurada.
@@ -43,10 +45,12 @@ O script informa:
 
 Mesmo com `--write-ledger`, o script nao chama OpenAI. Ele apenas cria um `processing_jobs` de planejamento e linhas em `ai_usage_ledger` com status:
 
-- `skipped`;
-- `cached`;
-- `estimated`.
+- `skipped` para silencio e chunks bloqueados;
+- `cached` para cache hit;
+- `estimated` para candidatos reais de transcricao.
+
+Chunk sem `sha256` nunca vira candidato pago. Sem hash nao temos deduplicacao nem reaproveitamento seguro de transcript.
 
 ## Proximo passo
 
-Criar o executor real de transcricao economy-first. Esse executor deve consumir apenas chunks planejados como `estimated`, consultar o cache novamente antes de chamar OpenAI e gravar custo real quando a API retornar uso.
+Rodar `tools/validate_ai_cost_pipeline.py` antes do executor real de transcricao economy-first. Esse executor deve consumir apenas chunks planejados como `estimated`, consultar o cache novamente antes de chamar OpenAI e gravar custo real quando a API retornar uso.
