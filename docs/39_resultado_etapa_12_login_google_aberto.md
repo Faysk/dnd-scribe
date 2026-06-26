@@ -67,7 +67,7 @@ profiles.email=true
 app.current_profile_id=true
 app.is_campaign_member=true
 app.is_campaign_dm=true
-auth.users=0
+auth.users=1 apos primeiro login real
 ```
 
 OAuth Google/Supabase:
@@ -88,16 +88,14 @@ redirect_para_google=true
 
 - A API segue aberta nesta fase.
 - Login ainda nao restringe leitura/escrita.
-- Falta alguem fazer o primeiro login para existir registro em `auth.users`.
-- Depois do primeiro login, mapear `auth.users` para `profiles`/`campaign_members`.
+- Primeiro login real ja criou usuario em `auth.users`.
+- Perfil `faysk` foi vinculado depois, documentado em `docs/40_resultado_etapa_12_perfil_auth_vinculado.md`.
 - Falta aplicar RLS e policies por role.
 
 ## Proximo passo recomendado
 
-Fechar a Etapa 12 de verdade:
+Fechar a parte de seguranca da Etapa 12 quando decidirmos sair do modo aberto:
 
-- adicionar `auth_user_id`/email em `profiles`;
-- criar funcoes SQL `current_profile_id`, `is_campaign_member`, `is_campaign_dm`;
 - habilitar RLS com policies iniciais;
 - exigir JWT nas rotas sensiveis;
 - manter DM com acesso completo.

@@ -19,8 +19,17 @@ http://127.0.0.1:8787
 Esse app permite:
 
 - listar sessoes reais;
+- criar e editar sessoes planejadas;
+- enviar ZIP Craig pelo front local para ingestao inicial;
+- acompanhar jobs locais de ingestao na aba Operacao;
+- revisar o mapa Craig/Discord pela UI local;
+- importar eventos `[DND_EVENT]` do Roll20 por parser local;
+- importar historico Markdown antigo de forma conservadora;
+- preparar canon consolidado a partir de candidatos aprovados pelo DM;
 - abrir Review Board com dados do Supabase;
 - revisar segmentos;
+- manter rascunho local por sessao;
+- ouvir a faixa original no timestamp do segmento via URL assinada R2;
 - decidir candidatos de canon/fala/bastidor;
 - aplicar decisoes pelo backend local;
 - regenerar publicacoes;
@@ -38,7 +47,7 @@ https://dnd-scribe-amber.vercel.app
 
 A API publicada esta aberta temporariamente para teste. Antes de abrir para jogadores ou dados mais sensiveis, voltar para Auth/RLS ou outra trava de acesso.
 
-Login Google via Supabase Auth ja aparece no painel lateral, mas por enquanto ele e opcional e nao fecha as rotas da API.
+Login Google via Supabase Auth ja aparece no painel lateral. O app consulta `/api/auth/me` para mostrar o perfil da mesa vinculado; por enquanto esse login e opcional e nao fecha as rotas da API.
 
 Deploy:
 

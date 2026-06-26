@@ -1,4 +1,17 @@
 const DEFAULT_RUN = 'classify_candidates_v2_gpt-4o';
+const SESSION_STATUSES = [
+  'planned',
+  'recording',
+  'uploaded',
+  'processing',
+  'ready_for_review',
+  'reviewing',
+  'approved',
+  'published',
+  'archived',
+  'failed'
+];
+
 const DandelionPlaylist = {
   id: 'PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q',
   firstVideoId: 'lMxL4lXlf7E',
@@ -28,16 +41,33 @@ const state = {
   query: '',
   speaker: 'all',
   status: 'all',
+  candidateKind: 'all',
+  candidateStatus: 'all',
   selectedSegmentId: null,
   segmentDecisions: {},
   candidateDecisions: {},
   busy: false,
   loadingSession: false,
   log: [],
+  ingest: {
+    busy: false,
+    error: null,
+    result: null
+  },
+  jobs: [],
+  jobsPolling: false,
+  craigMap: null,
+  craigMapError: null,
   auth: {
     ready: false,
     client: null,
     user: null,
+    profile: null,
+    memberships: [],
+    campaignRole: null,
+    capabilities: null,
+    profileLoading: false,
+    profileError: null,
     error: null,
     mode: 'open_test'
   },
@@ -46,6 +76,16 @@ const state = {
     ready: false,
     playing: false,
     volume: 70
+  },
+  audio: {
+    segmentId: null,
+    loading: false,
+    error: null,
+    url: null,
+    trackKey: null,
+    startSeconds: 0,
+    expiresAt: null,
+    file: null
   }
 };
 
@@ -94,10 +134,92 @@ function copyText(text, message = 'Copiado.') {
 
 function setBusy(value) {
   state.busy = value;
-  ['applyDecisionsBtn', 'downloadTemplateBtn', 'downloadDecisionsBtn', 'refreshSessionsBtn'].forEach(id => {
+  updateActionButtons();
+}
+
+function decisionCounts() {
+  return {
+    segments: Object.keys(state.segmentDecisions).length,
+    candidates: Object.keys(state.candidateDecisions).length
+  };
+}
+
+function hasDraftChanges() {
+  const counts = decisionCounts();
+  return counts.segments + counts.candidates > 0;
+}
+
+function updateActionButtons() {
+  const hasReview = Boolean(state.review);
+  const hasDraft = hasDraftChanges();
+  const controls = {
+    applyDecisionsBtn: state.busy || !hasReview || !hasDraft,
+    downloadTemplateBtn: state.busy || !hasReview,
+    downloadDecisionsBtn: state.busy || !hasReview,
+    refreshSessionsBtn: state.busy
+  };
+  Object.entries(controls).forEach(([id, disabled]) => {
     const el = document.getElementById(id);
-    if (el) el.disabled = value;
+    if (el) el.disabled = disabled;
   });
+}
+
+function draftStorageKey(sourceSessionId = state.selectedSourceSessionId) {
+  if (!sourceSessionId) return '';
+  return `dnd-scribe:draft:${sourceSessionId}:${DEFAULT_RUN}`;
+}
+
+function persistDraft() {
+  const key = draftStorageKey();
+  if (!key) return;
+  try {
+    const payload = {
+      savedAt: new Date().toISOString(),
+      sourceSessionId: state.selectedSourceSessionId,
+      runId: DEFAULT_RUN,
+      segmentDecisions: state.segmentDecisions,
+      candidateDecisions: state.candidateDecisions
+    };
+    if (hasDraftChanges()) localStorage.setItem(key, JSON.stringify(payload));
+    else localStorage.removeItem(key);
+  } catch (error) {
+    state.log.unshift({ at: new Date().toLocaleTimeString('pt-BR'), message: `Rascunho nao salvo: ${error.message}` });
+    state.log = state.log.slice(0, 12);
+  }
+}
+
+function restoreDraft(sourceSessionId) {
+  const key = draftStorageKey(sourceSessionId);
+  if (!key) return { restored: false, segments: 0, candidates: 0 };
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return { restored: false, segments: 0, candidates: 0 };
+    const payload = JSON.parse(raw);
+    if (payload.runId && payload.runId !== DEFAULT_RUN) return { restored: false, segments: 0, candidates: 0 };
+    state.segmentDecisions = payload.segmentDecisions || {};
+    state.candidateDecisions = payload.candidateDecisions || {};
+    const counts = decisionCounts();
+    return { restored: true, ...counts, savedAt: payload.savedAt || null };
+  } catch (error) {
+    localStorage.removeItem(key);
+    return { restored: false, segments: 0, candidates: 0 };
+  }
+}
+
+function clearDraft(showToast = false) {
+  const key = draftStorageKey();
+  if (key) localStorage.removeItem(key);
+  state.segmentDecisions = {};
+  state.candidateDecisions = {};
+  updateActionButtons();
+  render();
+  if (showToast) toast('Rascunho local limpo.');
+}
+
+function confirmClearDraft() {
+  if (!hasDraftChanges()) return;
+  if (!window.confirm('Limpar o rascunho local desta sessao?')) return;
+  clearDraft(true);
 }
 
 async function api(path, options = {}) {
@@ -137,6 +259,8 @@ async function boot() {
   render();
   await initAuth();
   await loadSessions();
+  await loadJobs();
+  await loadCraigMap();
 }
 
 async function initAuth() {
@@ -165,12 +289,52 @@ async function initAuth() {
       state.auth.user = session?.user || null;
       state.auth.ready = true;
       renderAuthPanel();
+      loadAuthProfile(session);
     });
     state.auth.ready = true;
     renderAuthPanel();
+    await loadAuthProfile(data?.session || null);
   } catch (error) {
     state.auth.ready = true;
     state.auth.error = error.message;
+    renderAuthPanel();
+  }
+}
+
+async function loadAuthProfile(session = null) {
+  state.auth.profile = null;
+  state.auth.memberships = [];
+  state.auth.campaignRole = null;
+  state.auth.capabilities = null;
+  state.auth.profileError = null;
+  if (!state.auth.user || !state.auth.client) {
+    state.auth.profileLoading = false;
+    renderAuthPanel();
+    return;
+  }
+  try {
+    state.auth.profileLoading = true;
+    renderAuthPanel();
+    let activeSession = session;
+    if (!activeSession) {
+      const { data, error } = await state.auth.client.auth.getSession();
+      if (error) throw error;
+      activeSession = data?.session || null;
+    }
+    if (!activeSession?.access_token) return;
+    const expectedUserId = activeSession.user?.id;
+    const payload = await api('/api/auth/me', {
+      headers: { Authorization: `Bearer ${activeSession.access_token}` }
+    });
+    if (expectedUserId && state.auth.user?.id && expectedUserId !== state.auth.user.id) return;
+    state.auth.profile = payload.profile || null;
+    state.auth.memberships = payload.memberships || [];
+    state.auth.campaignRole = payload.campaignRole || null;
+    state.auth.capabilities = payload.capabilities || null;
+  } catch (error) {
+    state.auth.profileError = error.message;
+  } finally {
+    state.auth.profileLoading = false;
     renderAuthPanel();
   }
 }
@@ -183,10 +347,46 @@ function authDisplayName(user = state.auth.user) {
     || 'Usuario Google';
 }
 
+function roleLabel(role) {
+  return {
+    owner: 'Owner',
+    master: 'DM',
+    player: 'Jogador',
+    reviewer: 'Revisor',
+    viewer: 'Leitor'
+  }[role] || 'Sem papel';
+}
+
+function sessionStatusLabel(status) {
+  return {
+    planned: 'Planejada',
+    recording: 'Gravando',
+    uploaded: 'Upload feito',
+    processing: 'Processando',
+    ready_for_review: 'Pronta review',
+    reviewing: 'Em review',
+    approved: 'Aprovada',
+    published: 'Publicada',
+    archived: 'Arquivada',
+    failed: 'Falhou'
+  }[status] || status || 'Sem status';
+}
+
+function selectedSession() {
+  return state.sessions.find(session => session.sourceSessionId === state.selectedSourceSessionId) || null;
+}
+
 function renderAuthPanel() {
   const panel = $('#authPanel');
   if (!panel) return;
   const user = state.auth.user;
+  const profile = state.auth.profile;
+  const profileName = profile?.displayName || authDisplayName(user);
+  const profileDetail = [
+    profile?.roll20Name ? `@${profile.roll20Name}` : '',
+    profile?.defaultCharacterName || ''
+  ].filter(Boolean).join(' • ');
+  const role = roleLabel(state.auth.campaignRole);
   if (!state.auth.ready) {
     panel.innerHTML = `
       <span class="label">Acesso</span>
@@ -220,9 +420,15 @@ function renderAuthPanel() {
   }
   panel.innerHTML = `
     <span class="label">Acesso</span>
-    <strong>${escapeHtml(authDisplayName(user))}</strong>
-    <small>${escapeHtml(user.email || 'Google conectado')}</small>
-    <div class="badges">${badge('Google', 'green')}${badge('API aberta', 'orange')}</div>
+    <strong>${escapeHtml(profileName)}</strong>
+    <small>${escapeHtml(profile ? profileDetail : 'Google conectado; perfil da mesa pendente.')}</small>
+    <div class="badges">
+      ${badge('Google', 'green')}
+      ${profile ? badge(role, state.auth.campaignRole === 'master' ? 'gold' : 'blue') : badge('Nao vinculado', 'orange')}
+      ${badge('API aberta', 'orange')}
+    </div>
+    ${state.auth.profileLoading ? '<small>Atualizando perfil da mesa...</small>' : ''}
+    ${state.auth.profileError ? `<small>${escapeHtml(state.auth.profileError)}</small>` : ''}
     <div class="auth-actions">
       <button onclick="signOutGoogle()">Sair</button>
     </div>
@@ -392,6 +598,37 @@ async function loadSessions(force = false) {
   }
 }
 
+async function loadJobs(scheduleNext = true) {
+  try {
+    const payload = await api('/api/jobs');
+    state.jobs = payload.jobs || [];
+    render();
+    const hasActive = state.jobs.some(job => ['queued', 'running'].includes(job.status));
+    if (scheduleNext && hasActive && !state.jobsPolling) {
+      state.jobsPolling = true;
+      window.setTimeout(async () => {
+        state.jobsPolling = false;
+        await loadJobs(true);
+      }, 2500);
+    }
+  } catch (_error) {
+    state.jobs = state.jobs || [];
+  }
+}
+
+async function loadCraigMap() {
+  try {
+    const payload = await api('/api/craig-map');
+    state.craigMap = payload.map || null;
+    state.craigMapError = null;
+    render();
+  } catch (error) {
+    state.craigMap = null;
+    state.craigMapError = error.message;
+    render();
+  }
+}
+
 async function loadSession(sourceSessionId) {
   try {
     setBusy(true);
@@ -404,6 +641,20 @@ async function loadSession(sourceSessionId) {
     state.selectedSegmentId = state.review?.segments?.[0]?.id || null;
     state.segmentDecisions = {};
     state.candidateDecisions = {};
+    state.audio = {
+      segmentId: null,
+      loading: false,
+      error: null,
+      url: null,
+      trackKey: null,
+      startSeconds: 0,
+      expiresAt: null,
+      file: null
+    };
+    const draft = restoreDraft(sourceSessionId);
+    if (draft.restored && (draft.segments || draft.candidates)) {
+      remember(`Rascunho restaurado: ${draft.segments} segmentos, ${draft.candidates} candidatos.`);
+    }
     remember(`Sessao carregada: ${sourceSessionId}`, payload.summary);
     render();
   } catch (error) {
@@ -433,10 +684,11 @@ function render() {
   renderSessions();
   renderHeader();
   renderStatusStrip();
+  updateActionButtons();
   document.querySelectorAll('#tabs button').forEach(button => {
     button.classList.toggle('active', button.dataset.tab === state.tab);
   });
-  if (!state.review) {
+  if (!state.review && state.tab !== 'sessions') {
     $('#view').innerHTML = loadingView();
     return;
   }
@@ -445,6 +697,7 @@ function render() {
     return;
   }
   const routes = {
+    sessions: renderSessionsManager,
     review: renderReview,
     candidates: renderCandidates,
     publications: renderPublications,
@@ -472,20 +725,375 @@ function renderHeader() {
 function renderStatusStrip() {
   const review = state.review;
   const summary = state.summary || {};
-  const localSegment = Object.keys(state.segmentDecisions).length;
-  const localCandidate = Object.keys(state.candidateDecisions).length;
+  const counts = decisionCounts();
   $('#statusStrip').innerHTML = `
     ${metric(review?.summary?.segments || 0, 'segmentos')}
     ${metric(review?.summary?.participants || 0, 'participantes')}
     ${metric(review?.ai?.summary?.canonCandidates || 0, 'canon IA')}
     ${metric((review?.ai?.summary?.quoteCandidates || 0) + (review?.ai?.summary?.outtakeCandidates || 0), 'falas/bastidores')}
     ${metric(summary.reviewDecisions || 0, 'decisoes salvas')}
-    ${metric(localSegment + localCandidate, 'decisoes locais')}
+    ${metric(counts.segments + counts.candidates, 'rascunho local', hasDraftChanges() ? 'dirty' : '')}
   `;
 }
 
-function metric(value, label) {
-  return `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`;
+function metric(value, label, extraClass = '') {
+  return `<div class="metric ${extraClass}"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`;
+}
+
+function sessionStatusOptions(selected = 'planned') {
+  return SESSION_STATUSES.map(status => `
+    <option value="${status}" ${selected === status ? 'selected' : ''}>${escapeHtml(sessionStatusLabel(status))}</option>
+  `).join('');
+}
+
+function renderSessionsManager() {
+  const session = selectedSession();
+  return `
+    <section class="session-manager">
+      <div class="panel">
+        <div class="panel-head"><h2>Nova sessao</h2>${badge('manual', 'blue')}</div>
+        <div class="panel-body">
+          <div class="field-grid">
+            <label><span class="label">Titulo</span><input id="newSessionTitle" placeholder="Sessao 12 - Nome provisório" /></label>
+            <label><span class="label">Data</span><input id="newSessionDate" type="date" /></label>
+            <label><span class="label">Arco</span><input id="newSessionArc" placeholder="Arco atual" /></label>
+            <label><span class="label">Status</span><select id="newSessionStatus">${sessionStatusOptions('planned')}</select></label>
+          </div>
+          <label><span class="label">Resumo curto</span><textarea id="newSessionSummary" placeholder="Opcional"></textarea></label>
+          <div class="actions">
+            <button class="primary" onclick="createSessionFromForm()">Criar sessao</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Sessao selecionada</h2>
+          ${session ? badge(sessionStatusLabel(session.status), session.status === 'failed' ? 'red' : 'green') : ''}
+        </div>
+        <div class="panel-body">
+          ${session ? editSessionForm(session) : `<div class="empty">Nenhuma sessao selecionada.</div>`}
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Catalogo</h2><small>${state.sessions.length} sessoes</small></div>
+        <div class="panel-body session-table">
+          ${state.sessions.map(sessionCatalogRow).join('') || `<div class="empty">Nenhuma sessao encontrada.</div>`}
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Ingestao Craig</h2>${badge('local', 'gold')}</div>
+        <div class="panel-body">
+          ${renderCraigIngestPanel()}
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Mapa Craig</h2>
+          <button onclick="loadCraigMap()">Atualizar</button>
+        </div>
+        <div class="panel-body">
+          ${renderCraigMapPanel()}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderCraigMapPanel() {
+  if (state.craigMapError) return `<div class="empty">${escapeHtml(state.craigMapError)}</div>`;
+  const tracks = state.craigMap?.tracks || {};
+  const keys = Object.keys(tracks).sort();
+  return `
+    <div class="craig-map-list">
+      ${keys.map(key => craigTrackRow(key, tracks[key])).join('') || `<div class="empty">Nenhum mapeamento local.</div>`}
+      <div class="job-row">
+        <span class="label">Nova faixa</span>
+        ${craigTrackForm('new', {
+          person_name: '',
+          default_character: '',
+          role: 'guest',
+          status: 'guest_or_unknown',
+          character_aliases: []
+        }, true)}
+      </div>
+    </div>
+  `;
+}
+
+function craigTrackRow(trackKey, item) {
+  return `
+    <div class="job-row">
+      <div class="row between">
+        <strong>${escapeHtml(trackKey)}</strong>
+        <div class="badges">${badge(item.status || 'unknown', item.status === 'known' ? 'green' : 'orange')}${badge(item.role || 'guest', 'blue')}</div>
+      </div>
+      ${craigTrackForm(trackKey, item, false)}
+    </div>
+  `;
+}
+
+function craigTrackForm(trackKey, item, editableKey) {
+  const prefix = `craig_${safeId(trackKey)}`;
+  return `
+    <div class="field-grid">
+      <label><span class="label">Track</span><input id="${prefix}_key" value="${editableKey ? '' : escapeHtml(trackKey)}" ${editableKey ? '' : 'disabled'} /></label>
+      <label><span class="label">Pessoa</span><input id="${prefix}_person" value="${escapeHtml(item.person_name || '')}" /></label>
+      <label><span class="label">Personagem padrao</span><input id="${prefix}_character" value="${escapeHtml(item.default_character || '')}" /></label>
+      <label><span class="label">Aliases</span><input id="${prefix}_aliases" value="${escapeHtml((item.character_aliases || []).join(', '))}" /></label>
+      <label><span class="label">Role</span><select id="${prefix}_role">
+        ${['player', 'dm', 'guest'].map(role => `<option value="${role}" ${item.role === role ? 'selected' : ''}>${escapeHtml(role)}</option>`).join('')}
+      </select></label>
+      <label><span class="label">Status</span><select id="${prefix}_status">
+        ${['known', 'guest_or_unknown'].map(status => `<option value="${status}" ${item.status === status ? 'selected' : ''}>${escapeHtml(status)}</option>`).join('')}
+      </select></label>
+    </div>
+    <div class="actions">
+      <button onclick="saveCraigTrack('${escapeHtml(trackKey)}', ${editableKey ? 'true' : 'false'})">Salvar mapa</button>
+    </div>
+  `;
+}
+
+function renderCraigIngestPanel() {
+  return `
+    <div class="detail-grid">
+      <label><span class="label">Sessao alvo</span>
+        <select id="ingestSessionId">
+          <option value="">Auto pelo Craig</option>
+          ${state.sessions.map(session => `<option value="${escapeHtml(session.sourceSessionId)}" ${session.sourceSessionId === state.selectedSourceSessionId ? 'selected' : ''}>${escapeHtml(session.title || session.sourceSessionId)}</option>`).join('')}
+        </select>
+      </label>
+      <label><span class="label">ZIP Craig</span><input id="craigZipFile" type="file" accept=".zip,application/zip" /></label>
+      <div class="field-grid">
+        <label><span class="label">Chunk segundos</span><input id="ingestChunkSeconds" type="number" min="60" step="30" value="600" /></label>
+        <label><span class="label">Amostra segundos</span><input id="ingestSampleSeconds" type="number" min="0" step="30" placeholder="vazio" /></label>
+      </div>
+      <label class="check-row"><input id="ingestSkipChunks" type="checkbox" /> <span>Somente manifest</span></label>
+      <div class="actions">
+        <button class="primary" onclick="uploadCraigFromForm()" ${state.ingest.busy ? 'disabled' : ''}>Processar ZIP</button>
+      </div>
+      ${state.ingest.busy ? `<div class="loading-panel"><div class="loader-line"></div><h2>Processando ZIP Craig...</h2></div>` : ''}
+      ${state.ingest.error ? `<div class="empty">${escapeHtml(state.ingest.error)}</div>` : ''}
+      ${state.ingest.result ? renderIngestResult(state.ingest.result) : ''}
+    </div>
+  `;
+}
+
+function renderIngestResult(result) {
+  if (result.job) {
+    return `
+      <div class="ops-card">
+        <span class="label">Job</span>
+        <strong>${escapeHtml(result.job.type)}</strong>
+        <div class="badges">${badge(result.job.status, result.job.status === 'failed' ? 'red' : 'blue')}${badge(result.job.id.slice(0, 8), 'gold')}</div>
+      </div>
+    `;
+  }
+  const ingest = result.ingest || {};
+  return `
+    <div class="ops-card">
+      <span class="label">Resultado</span>
+      <div class="badges">
+        ${badge(`${ingest.tracks || 0} tracks`, 'blue')}
+        ${badge(`${ingest.participants || 0} participantes`, 'green')}
+        ${badge(`${ingest.chunks || 0} chunks`, 'violet')}
+      </div>
+      <pre>${escapeHtml(JSON.stringify({
+        sessionDir: ingest.sessionDir,
+        manifest: ingest.manifest,
+        upload: result.upload?.savedPath
+      }, null, 2))}</pre>
+    </div>
+  `;
+}
+
+function editSessionForm(session) {
+  return `
+    <div class="detail-grid">
+      <label><span class="label">Source ID</span><input value="${escapeHtml(session.sourceSessionId || '')}" disabled /></label>
+      <div class="field-grid">
+        <label><span class="label">Titulo</span><input id="editSessionTitle" value="${escapeHtml(session.title || '')}" /></label>
+        <label><span class="label">Data</span><input id="editSessionDate" type="date" value="${escapeHtml(session.sessionDate || '')}" /></label>
+        <label><span class="label">Arco</span><input id="editSessionArc" value="${escapeHtml(session.arc || '')}" /></label>
+        <label><span class="label">Status</span><select id="editSessionStatus">${sessionStatusOptions(session.status || 'planned')}</select></label>
+      </div>
+      <label><span class="label">Resumo curto</span><textarea id="editSessionSummary">${escapeHtml(session.summary || '')}</textarea></label>
+      <div class="badges">
+        ${badge(session.sourceSystem || 'manual', 'blue')}
+        ${badge(`${session.segments || 0} segmentos`, 'violet')}
+        ${badge(`${session.recordingFiles || 0} arquivos`, 'gold')}
+      </div>
+      <div class="actions">
+        <button class="success" onclick="updateSessionFromForm()">Salvar sessao</button>
+        <button onclick="loadSession('${escapeHtml(session.sourceSessionId)}')">Abrir review</button>
+      </div>
+    </div>
+  `;
+}
+
+function sessionCatalogRow(session) {
+  return `
+    <button class="session-row ${session.sourceSessionId === state.selectedSourceSessionId ? 'active' : ''}" onclick="loadSession('${escapeHtml(session.sourceSessionId)}')">
+      <div>
+        <strong>${escapeHtml(session.title || session.sourceSessionId)}</strong>
+        <small>${escapeHtml(session.sessionDate || 'sem data')} • ${escapeHtml(session.sourceSessionId || '')}</small>
+      </div>
+      <div class="badges">
+        ${badge(sessionStatusLabel(session.status), session.status === 'failed' ? 'red' : 'blue')}
+        ${badge(`${session.participants || 0} participantes`, 'green')}
+        ${badge(`${session.segments || 0} seg`, 'violet')}
+      </div>
+    </button>
+  `;
+}
+
+async function createSessionFromForm() {
+  const title = $('#newSessionTitle')?.value || '';
+  if (!title.trim()) {
+    toast('Informe um titulo para a sessao.');
+    return;
+  }
+  try {
+    setBusy(true);
+    const payload = await api('/api/sessions/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        title,
+        sessionDate: $('#newSessionDate')?.value || null,
+        arc: $('#newSessionArc')?.value || '',
+        status: $('#newSessionStatus')?.value || 'planned',
+        summary: $('#newSessionSummary')?.value || '',
+        runId: DEFAULT_RUN
+      })
+    });
+    state.sessions = payload.sessions || state.sessions;
+    state.selectedSourceSessionId = payload.session?.sourceSessionId || state.selectedSourceSessionId;
+    remember(`Sessao criada: ${payload.session?.sourceSessionId || title}`);
+    toast('Sessao criada.');
+    if (state.selectedSourceSessionId) await loadSession(state.selectedSourceSessionId);
+    state.tab = 'sessions';
+    render();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function updateSessionFromForm() {
+  const session = selectedSession();
+  if (!session) return;
+  const title = $('#editSessionTitle')?.value || '';
+  if (!title.trim()) {
+    toast('Informe um titulo para a sessao.');
+    return;
+  }
+  try {
+    setBusy(true);
+    const payload = await api('/api/sessions/update', {
+      method: 'POST',
+      body: JSON.stringify({
+        sourceSessionId: session.sourceSessionId,
+        title,
+        sessionDate: $('#editSessionDate')?.value || null,
+        arc: $('#editSessionArc')?.value || '',
+        status: $('#editSessionStatus')?.value || 'planned',
+        summary: $('#editSessionSummary')?.value || '',
+        runId: DEFAULT_RUN
+      })
+    });
+    state.sessions = payload.sessions || state.sessions;
+    state.review = null;
+    state.summary = null;
+    remember(`Sessao atualizada: ${session.sourceSessionId}`);
+    toast('Sessao salva.');
+    await loadSession(session.sourceSessionId);
+    state.tab = 'sessions';
+    render();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function uploadCraigFromForm() {
+  const file = $('#craigZipFile')?.files?.[0];
+  if (!file) {
+    toast('Selecione o ZIP Craig.');
+    return;
+  }
+  const form = new FormData();
+  form.append('zip', file);
+  form.append('sourceSessionId', $('#ingestSessionId')?.value || '');
+  form.append('chunkSeconds', $('#ingestChunkSeconds')?.value || '600');
+  form.append('sampleSeconds', $('#ingestSampleSeconds')?.value || '');
+  form.append('skipChunks', $('#ingestSkipChunks')?.checked ? 'true' : 'false');
+  form.append('async', 'true');
+  state.ingest = { busy: true, error: null, result: null };
+  setBusy(true);
+  render();
+  try {
+    const response = await fetch('/api/ingest/craig', {
+      method: 'POST',
+      body: form
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) {
+      throw new Error(payload.error || `Falha HTTP ${response.status}`);
+    }
+    state.ingest = { busy: false, error: null, result: payload };
+    if (payload.job) {
+      state.jobs = [payload.job, ...state.jobs.filter(job => job.id !== payload.job.id)];
+      remember(`Job Craig criado: ${payload.job.id}`);
+      toast('Ingestao enviada para fila local.');
+      await loadJobs(true);
+    } else {
+      remember(`Ingestao Craig: ${payload.ingest?.sessionDir || file.name}`);
+      toast('ZIP Craig processado.');
+    }
+  } catch (error) {
+    state.ingest = { busy: false, error: error.message, result: null };
+    toast(error.message);
+  } finally {
+    setBusy(false);
+    state.tab = 'sessions';
+    render();
+  }
+}
+
+async function saveCraigTrack(trackKey, editableKey = false) {
+  const prefix = `craig_${safeId(trackKey)}`;
+  const actualKey = editableKey ? $(`#${prefix}_key`)?.value : trackKey;
+  if (!actualKey?.trim()) {
+    toast('Informe a track.');
+    return;
+  }
+  try {
+    setBusy(true);
+    const payload = await api('/api/craig-map/update', {
+      method: 'POST',
+      body: JSON.stringify({
+        trackKey: actualKey,
+        personName: $(`#${prefix}_person`)?.value || '',
+        defaultCharacter: $(`#${prefix}_character`)?.value || '',
+        characterAliases: $(`#${prefix}_aliases`)?.value || '',
+        role: $(`#${prefix}_role`)?.value || 'guest',
+        status: $(`#${prefix}_status`)?.value || 'guest_or_unknown'
+      })
+    });
+    state.craigMap = payload.map || state.craigMap;
+    state.craigMapError = null;
+    toast('Mapa Craig salvo.');
+    render();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(false);
+  }
 }
 
 function reviewDecision(segment) {
@@ -583,11 +1191,12 @@ function renderReview() {
 function segmentRow(segment) {
   const decision = reviewDecision(segment);
   const active = segment.id === state.selectedSegmentId ? 'active' : '';
+  const dirty = state.segmentDecisions[segment.id] ? 'dirty' : '';
   return `
-    <button class="segment-row ${active}" onclick="selectSegment('${segment.id}')">
+    <button class="segment-row ${active} ${dirty}" onclick="selectSegment('${segment.id}')">
       <div class="row between">
         <strong>${fmtDuration(segment.start_ms)} • ${escapeHtml(decision.characterName || segment.character_name || segment.track_key)}</strong>
-        ${statusBadge(decision.status)}
+        <span class="badges">${state.segmentDecisions[segment.id] ? badge('rascunho', 'gold') : ''}${statusBadge(decision.status)}</span>
       </div>
       <p>${escapeHtml((decision.textOverride || segment.text || '').slice(0, 260))}</p>
       <div class="badges">
@@ -617,7 +1226,9 @@ function segmentDetail(segment) {
       </div>
       <label><span class="label">Texto revisado</span><textarea id="segmentText">${escapeHtml(decision.textOverride || segment.text || '')}</textarea></label>
       <label><span class="label">Nota</span><textarea id="segmentNote" placeholder="Anote contexto, duvida, corte ou motivo da decisao">${escapeHtml(decision.note || '')}</textarea></label>
+      ${segmentAudioPanel(segment)}
       <div class="actions">
+        <button onclick="loadSegmentAudio('${segment.id}')">Ouvir trecho</button>
         <button class="success" onclick="saveSegmentDecision('${segment.id}')">Salvar local</button>
         <button onclick="quickSegmentDecision('${segment.id}', 'approved')">Aprovar</button>
         <button onclick="quickSegmentDecision('${segment.id}', 'canon_candidate')">Canon?</button>
@@ -635,6 +1246,98 @@ function segmentDetail(segment) {
   `;
 }
 
+function segmentAudioPanel(segment) {
+  const active = state.audio.segmentId === segment.id;
+  if (!active) {
+    return `
+      <div class="audio-card">
+        <span class="label">Audio</span>
+        <p>Carregue a faixa original para conferir este trecho a partir de ${fmtDuration(segment.start_ms)}.</p>
+      </div>
+    `;
+  }
+  if (state.audio.loading) {
+    return `
+      <div class="audio-card">
+        <span class="label">Audio</span>
+        <p>Gerando URL assinada da faixa ${escapeHtml(segment.track_key)}...</p>
+      </div>
+    `;
+  }
+  if (state.audio.error) {
+    return `
+      <div class="audio-card error">
+        <span class="label">Audio</span>
+        <p>${escapeHtml(state.audio.error)}</p>
+      </div>
+    `;
+  }
+  if (!state.audio.url) return '';
+  const fragment = `${state.audio.url}#t=${Math.floor(state.audio.startSeconds)}`;
+  return `
+    <div class="audio-card">
+      <div class="row between">
+        <div>
+          <span class="label">Audio</span>
+          <strong>${escapeHtml(state.audio.trackKey || segment.track_key)}</strong>
+          <small>Inicio sugerido: ${fmtDuration(segment.start_ms)}</small>
+        </div>
+        <div class="badges">${badge('R2 assinado', 'green')}${badge(`${Math.round((state.audio.file?.sizeBytes || 0) / 1024 / 1024)} MB`, 'blue')}</div>
+      </div>
+      <audio id="segmentAudio" controls preload="metadata" src="${escapeHtml(fragment)}"></audio>
+    </div>
+  `;
+}
+
+async function loadSegmentAudio(id) {
+  const segment = state.review?.segments?.find(item => item.id === id);
+  if (!segment) return;
+  state.audio = {
+    segmentId: id,
+    loading: true,
+    error: null,
+    url: null,
+    trackKey: segment.track_key,
+    startSeconds: Number(segment.start_ms || 0) / 1000,
+    expiresAt: null,
+    file: null
+  };
+  render();
+  try {
+    const payload = await api(`/api/audio-url?sourceSessionId=${encodeURIComponent(state.selectedSourceSessionId)}&trackKey=${encodeURIComponent(segment.track_key)}&expires=900`);
+    state.audio = {
+      segmentId: id,
+      loading: false,
+      error: null,
+      url: payload.url,
+      trackKey: payload.trackKey || segment.track_key,
+      startSeconds: Number(segment.start_ms || 0) / 1000,
+      expiresAt: new Date(Date.now() + Number(payload.expiresSeconds || 900) * 1000).toISOString(),
+      file: payload.file || null
+    };
+    render();
+    window.setTimeout(() => {
+      const player = document.getElementById('segmentAudio');
+      if (!player) return;
+      const seekAndPlay = () => {
+        try {
+          player.currentTime = state.audio.startSeconds;
+        } catch (_error) {}
+        player.play().catch(() => {});
+      };
+      if (player.readyState >= 1) seekAndPlay();
+      else player.addEventListener('loadedmetadata', seekAndPlay, { once: true });
+    }, 120);
+  } catch (error) {
+    state.audio = {
+      ...state.audio,
+      loading: false,
+      error: error.message
+    };
+    render();
+  }
+}
+
 function segmentStatusSelect(status) {
   const statuses = ['pending', 'needs_review', 'approved', 'canon_candidate', 'quote_candidate', 'outtake', 'private_note', 'rejected'];
   return `<select id="segmentStatus">${statuses.map(value => `<option value="${value}" ${status === value ? 'selected' : ''}>${escapeHtml(statusLabel(value)[0])}</option>`).join('')}</select>`;
@@ -649,6 +1352,7 @@ function quickSegmentDecision(id, status) {
   const segment = state.review.segments.find(item => item.id === id);
   const previous = reviewDecision(segment);
   state.segmentDecisions[id] = { ...previous, status, updatedAt: new Date().toISOString() };
+  persistDraft();
   render();
 }
 
@@ -661,6 +1365,7 @@ function saveSegmentDecision(id) {
     note: $('#segmentNote').value,
     updatedAt: new Date().toISOString()
   };
+  persistDraft();
   toast('Decisao local salva.');
   render();
 }
@@ -688,11 +1393,47 @@ function candidateDecision(item) {
   };
 }
 
+function filteredCandidates() {
+  const query = state.query.trim().toLowerCase();
+  return allCandidates().filter(item => {
+    const decision = candidateDecision(item);
+    const text = [
+      item.kind,
+      item.title,
+      item.source_candidate_id,
+      item.body,
+      decision.decision,
+      decision.note,
+      ...(item.source_segment_ids || [])
+    ].join(' ').toLowerCase();
+    return (state.candidateKind === 'all' || item.targetType === state.candidateKind)
+      && (state.candidateStatus === 'all' || decision.decision === state.candidateStatus)
+      && (!query || text.includes(query));
+  });
+}
+
 function renderCandidates() {
-  const candidates = allCandidates();
+  const all = allCandidates();
+  const candidates = filteredCandidates();
+  const kinds = [
+    ['all', 'Todos tipos'],
+    ['canon_candidates', 'Canon'],
+    ['quote_candidates', 'Falas'],
+    ['outtake_candidates', 'Bastidores']
+  ];
+  const statuses = ['all', ...Array.from(new Set(all.map(item => candidateDecision(item).decision))).sort()];
   return `
+    <section class="toolbar">
+      <input value="${escapeHtml(state.query)}" placeholder="Buscar candidato, trecho, nota..." oninput="state.query=this.value; render();" />
+      <select onchange="state.candidateKind=this.value; render();">
+        ${kinds.map(([value, label]) => `<option value="${value}" ${state.candidateKind === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+      </select>
+      <select onchange="state.candidateStatus=this.value; render();">
+        ${statuses.map(status => `<option value="${status}" ${state.candidateStatus === status ? 'selected' : ''}>${escapeHtml(status === 'all' ? 'Todos status' : status)}</option>`).join('')}
+      </select>
+    </section>
     <section class="candidate-grid">
-      ${candidates.map(candidateCard).join('') || `<div class="empty">Nenhum candidato encontrado.</div>`}
+      ${candidates.map(candidateCard).join('') || `<div class="empty">Nenhum candidato nesse filtro.</div>`}
     </section>
   `;
 }
@@ -700,11 +1441,12 @@ function renderCandidates() {
 function candidateCard(item) {
   const decision = candidateDecision(item);
   const noteId = `note_${safeId(candidateKey(item))}`;
+  const dirty = state.candidateDecisions[candidateKey(item)] ? 'dirty' : '';
   return `
-    <article class="candidate-card">
+    <article class="candidate-card ${dirty}">
       <div class="row between">
         <h2>${escapeHtml(item.title || item.source_candidate_id)}</h2>
-        ${candidateStatusBadge(decision.decision)}
+        <div class="badges">${dirty ? badge('rascunho', 'gold') : ''}${candidateStatusBadge(decision.decision)}</div>
       </div>
       <small>${escapeHtml(item.kind)} • ${escapeHtml(item.source_candidate_id)} • ${escapeHtml((item.source_segment_ids || []).join(', '))}</small>
       <p>${escapeHtml(item.body || '')}</p>
@@ -766,6 +1508,7 @@ function setCandidateDecision(targetType, sourceCandidateId, noteId, decision) {
     approvedForPublic: false,
     updatedAt: new Date().toISOString()
   };
+  persistDraft();
   toast(`Candidato ${sourceCandidateId} marcado como ${decision}.`);
   render();
 }
@@ -803,16 +1546,71 @@ function renderOps() {
           ${badge(`${payload.segmentDecisions.length} segmentos`, 'blue')}
           ${badge(`${payload.candidateDecisions.length} candidatos`, 'violet')}
         </div>
+        <div class="actions">
+          <button class="danger" ${hasDraftChanges() ? '' : 'disabled'} onclick="confirmClearDraft()">Limpar rascunho</button>
+        </div>
       </article>
       <article class="ops-card">
         <h2>Resumo Supabase</h2>
         <pre>${escapeHtml(JSON.stringify(state.summary || {}, null, 2))}</pre>
       </article>
       <article class="ops-card">
+        <h2>Eventos Roll20</h2>
+        ${renderRoll20Events()}
+      </article>
+      <article class="ops-card">
+        <div class="row between">
+          <h2>Jobs locais</h2>
+          <button onclick="loadJobs(false)">Atualizar</button>
+        </div>
+        ${renderJobsList()}
+      </article>
+      <article class="ops-card">
         <h2>Log local</h2>
         <pre>${escapeHtml(state.log.map(item => `[${item.at}] ${item.message}`).join('\n') || 'Sem eventos ainda.')}</pre>
       </article>
     </section>
+  `;
+}
+
+function renderRoll20Events() {
+  const events = state.review?.roll20Events || [];
+  if (!events.length) return `<div class="empty">Nenhum evento Roll20 importado.</div>`;
+  return `
+    <div class="job-list">
+      ${events.slice(0, 10).map(event => `
+        <div class="job-row">
+          <div class="row between">
+            <strong>${escapeHtml(event.event_type || 'evento')}</strong>
+            ${event.approx_start_ms !== null && event.approx_start_ms !== undefined ? badge(fmtDuration(event.approx_start_ms), 'blue') : ''}
+          </div>
+          <small>${escapeHtml(event.roll20_who || 'Roll20')}</small>
+          <p>${escapeHtml(event.text || '')}</p>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderJobsList() {
+  if (!state.jobs.length) return `<div class="empty">Nenhum job local registrado.</div>`;
+  return `
+    <div class="job-list">
+      ${state.jobs.slice(0, 8).map(job => `
+        <div class="job-row">
+          <div>
+            <strong>${escapeHtml(job.type || 'job')}</strong>
+            <small>${escapeHtml(job.createdAt || '')}</small>
+          </div>
+          <div class="badges">
+            ${badge(job.status || 'unknown', job.status === 'failed' ? 'red' : job.status === 'succeeded' ? 'green' : 'gold')}
+            ${badge(String(job.id || '').slice(0, 8), 'blue')}
+          </div>
+          ${job.error ? `<p>${escapeHtml(job.error.slice(0, 240))}</p>` : ''}
+          ${job.output ? `<pre>${escapeHtml(JSON.stringify(job.output, null, 2).slice(0, 900))}</pre>` : ''}
+        </div>
+      `).join('')}
+    </div>
   `;
 }
 
@@ -903,6 +1701,7 @@ async function applyDecisions() {
     state.summary = response.summary;
     state.segmentDecisions = {};
     state.candidateDecisions = {};
+    persistDraft();
     remember('Decisoes aplicadas e publicacoes regeneradas.', response.summary);
     toast('Decisoes aplicadas no Supabase.');
     render();
@@ -916,12 +1715,21 @@ async function applyDecisions() {
 window.state = state;
 window.render = render;
 window.loadSession = loadSession;
+window.loadJobs = loadJobs;
+window.loadCraigMap = loadCraigMap;
 window.selectSegment = selectSegment;
 window.quickSegmentDecision = quickSegmentDecision;
 window.saveSegmentDecision = saveSegmentDecision;
 window.setCandidateDecision = setCandidateDecision;
+window.loadSegmentAudio = loadSegmentAudio;
+window.createSessionFromForm = createSessionFromForm;
+window.updateSessionFromForm = updateSessionFromForm;
+window.uploadCraigFromForm = uploadCraigFromForm;
+window.saveCraigTrack = saveCraigTrack;
 window.initAuth = initAuth;
+window.loadAuthProfile = loadAuthProfile;
 window.signInGoogle = signInGoogle;
 window.signOutGoogle = signOutGoogle;
+window.confirmClearDraft = confirmClearDraft;
 
 boot();

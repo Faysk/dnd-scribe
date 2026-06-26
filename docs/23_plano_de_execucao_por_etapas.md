@@ -446,10 +446,19 @@ Status: em andamento.
 
 Objetivo: proteger dados por usuario/campanha usando Supabase Auth e Row Level Security.
 
+Resultado parcial validado:
+
+```txt
+login_google=ok
+auth.users=1
+perfil_vinculado=faysk
+endpoint=/api/auth/me
+api_mode=open_test
+```
+
 Escopo inicial sugerido:
 
-- mapear `profiles.id` com `auth.users.id`;
-- criar funcoes auxiliares de membership/DM;
+- mapear os demais `profiles.id` com `auth.users.id` conforme jogadores testarem;
 - definir policies de leitura para sessoes, publicacoes e revisao;
 - decidir como fontes brutas/transcricoes completas ficam restritas;
 - manter operacoes administrativas via service role/worker;
@@ -459,20 +468,29 @@ Referencia de planejamento:
 
 - `docs/35_roadmap_proximas_10_etapas.md`
 - `docs/39_resultado_etapa_12_login_google_aberto.md`
+- `docs/40_resultado_etapa_12_perfil_auth_vinculado.md`
 
 ## Etapa 13 — Front real: UX de revisao
 
-Status: planejada.
+Status: em andamento.
 
 Objetivo: transformar o Review Board local em ferramenta confortavel para uso real do DM.
 
+Resultado parcial validado:
+
+```txt
+rascunho_local_por_sessao=ok
+restaurar_rascunho=ok
+aplicar_sem_rascunho=bloqueado
+marcador_visual_rascunho=ok
+filtros_candidatos=ok
+```
+
 Escopo inicial sugerido:
 
-- persistencia local de rascunho por sessao;
-- estados visuais de alterado/salvo;
-- filtros por candidato, personagem, tipo IA e pendencia;
+- indicador de item salvo no banco;
 - painel lateral de fontes;
-- protecao contra aplicar decisao vazia por acidente.
+- melhorias adicionais de ergonomia para revisoes longas.
 
 Critério de pronto:
 
@@ -480,19 +498,30 @@ Critério de pronto:
 DM revisa itens reais pelo front sem editar JSON manualmente.
 ```
 
+Referencia:
+
+- `docs/41_resultado_etapa_13_rascunho_review.md`
+
 ## Etapa 14 — Player de audio por timestamp
 
-Status: planejada.
+Status: em andamento.
 
 Objetivo: permitir conferir trecho transcrito ouvindo a fonte.
 
+Resultado parcial validado:
+
+```txt
+endpoint_audio_url=ok
+r2_signed_url=ok
+range_check=206
+player_segmento=implementado
+```
+
 Escopo inicial sugerido:
 
-- endpoint para URL assinada R2 por arquivo;
-- player no detalhe do segmento;
-- pular para timestamp aproximado;
+- escolher fonte alternativa quando existir mais de uma gravacao;
 - fallback quando audio nao estiver disponivel;
-- indicador de track/fonte.
+- indicador mais detalhado de expiracao da URL assinada.
 
 Critério de pronto:
 
@@ -500,17 +529,29 @@ Critério de pronto:
 DM consegue auditar uma fala por audio em ate 2 cliques.
 ```
 
+Referencia:
+
+- `docs/42_resultado_etapa_14_player_audio_timestamp.md`
+
 ## Etapa 15 — Criacao e gerenciamento de sessoes
 
-Status: planejada.
+Status: em andamento.
 
 Objetivo: sair da sessao fixa e permitir iniciar novas sessoes pela interface.
 
+Resultado parcial validado:
+
+```txt
+aba_sessoes=implementada
+api_create_session=implementada
+api_update_session=implementada
+source_system_manual=implementado
+build=ok
+```
+
 Escopo inicial sugerido:
 
-- tela de lista/detalhe de sessoes;
-- criacao de sessao;
-- edicao de titulo/data/arco/status;
+- validar criacao real com a proxima sessao da mesa;
 - associacao de participantes esperados;
 - status operacional por etapa.
 
@@ -520,19 +561,30 @@ Critério de pronto:
 DM cria uma sessao nova sem tocar no banco manualmente.
 ```
 
+Referencia:
+
+- `docs/43_resultado_etapa_15_gerenciamento_sessoes.md`
+
 ## Etapa 16 — Upload/Ingestao pelo front
 
-Status: planejada.
+Status: em andamento.
 
 Objetivo: importar ZIP Craig ou arquivos de sessao pela interface local.
 
+Resultado parcial validado:
+
+```txt
+upload_multipart_local=ok
+ingest_script_local=ok
+zip_teste_minimo=ok
+vercel_resposta_controlada=implementada
+```
+
 Escopo inicial sugerido:
 
-- seletor/upload local para ZIP;
-- execucao server-side de ingest;
-- progresso por etapa;
+- teste com ZIP Craig real da proxima sessao;
 - logs de erro amigaveis;
-- link para pasta gerada.
+- converter execucao sincrona em job local.
 
 Critério de pronto:
 
@@ -540,17 +592,28 @@ Critério de pronto:
 um novo arquivo Craig entra no pipeline sem comando manual.
 ```
 
+Referencia:
+
+- `docs/44_resultado_etapa_16_upload_ingestao_front.md`
+
 ## Etapa 17 — Worker/queue local
 
-Status: planejada.
+Status: em andamento.
 
 Objetivo: tirar tarefas longas do request da interface.
 
+Resultado parcial validado:
+
+```txt
+job_store_tmp_jobs=ok
+job_ingest_craig_async=ok
+api_jobs=ok
+monitor_jobs_front=implementado
+```
+
 Escopo inicial sugerido:
 
-- fila padronizada de jobs;
-- worker local com loop;
-- jobs para ingest, transcribe, classify e publish;
+- jobs para transcribe, import, sync R2, classify e publish;
 - retry simples;
 - tela de monitoramento.
 
@@ -560,19 +623,32 @@ Critério de pronto:
 transcricao/classificacao rodam como jobs, nao como acao bloqueante do front.
 ```
 
+Referencia:
+
+- `docs/45_resultado_etapa_17_worker_queue_local.md`
+
 ## Etapa 18 — Roll20 Logger integrado
 
-Status: planejada.
+Status: em andamento.
 
 Objetivo: trazer eventos de mesa para a timeline.
 
+Resultado parcial validado:
+
+```txt
+script_dnd_roll20=atualizado
+parser_roll20_events=implementado
+migration_roll20=aplicada
+payload_session_roll20Events=implementado
+front_operacao_roll20=implementado
+```
+
 Escopo inicial sugerido:
 
-- consolidar script `!dnd`;
-- parser de eventos;
-- import para `roll20_events`;
+- upload do export Roll20 pelo front;
+- job `parse_roll20`;
 - alinhamento aproximado por timestamp;
-- visualizacao junto da transcricao.
+- visualizacao junto da timeline.
 
 Critério de pronto:
 
@@ -580,18 +656,30 @@ Critério de pronto:
 marcadores Roll20 ajudam a revisar uma sessao real.
 ```
 
+Referencia:
+
+- `docs/46_resultado_etapa_18_roll20_logger_parser.md`
+
 ## Etapa 19 — Discord/Craig operacional
 
-Status: planejada.
+Status: em andamento.
 
 Objetivo: reduzir atrito antes, durante e depois da sessao.
+
+Resultado parcial validado:
+
+```txt
+api_craig_map_local=ok
+editor_mapa_craig_ui=implementado
+backup_antes_de_salvar=implementado
+vercel_resposta_controlada=implementada
+```
 
 Escopo inicial sugerido:
 
 - checklist pre-sessao;
 - registro de link/arquivo Craig;
 - instrucoes de download do ZIP;
-- mapeamento de nicks atualizado pela UI;
 - deteccao de novos convidados.
 
 Critério de pronto:
@@ -600,17 +688,27 @@ Critério de pronto:
 captura de uma nova sessao tem menos passos manuais e menos risco de nick errado.
 ```
 
+Referencia:
+
+- `docs/47_resultado_etapa_19_discord_craig_operacional.md`
+
 ## Etapa 20 — Importacao de historico Markdown
 
-Status: planejada.
+Status: em andamento.
 
 Objetivo: trazer o historico antigo da campanha sem misturar com a pipeline de audio.
 
+Resultado parcial validado:
+
+```txt
+tabela_historical_documents=aplicada
+importador_markdown=implementado
+dry_run_markdown=ok
+status_inicial=historical_import
+```
+
 Escopo inicial sugerido:
 
-- inventario de arquivos `.md`;
-- parser/importador conservador;
-- status `historical_import`;
 - vinculo com entidades/canon quando possivel;
 - relatorio de conflitos/duvidas.
 
@@ -620,17 +718,29 @@ Critério de pronto:
 historico antigo fica pesquisavel sem contaminar canon aprovado.
 ```
 
+Referencia:
+
+- `docs/48_resultado_etapa_20_importacao_historico_markdown.md`
+
 ## Etapa 21 — Entidades e canon consolidado
 
-Status: planejada.
+Status: em andamento.
 
 Objetivo: transformar decisoes aprovadas em memoria navegavel da campanha.
+
+Resultado parcial:
+
+```txt
+schema_canon_entries=criado
+consolidator_canon_entries=implementado
+validacao_local=ok
+aplicacao_supabase=pendente_por_limite_comandos_externos
+```
 
 Escopo inicial sugerido:
 
 - tela de entidades;
 - relacao candidato -> entidade;
-- canon entries consolidadas;
 - timeline por personagem/local/item;
 - notas privadas por audiencia.
 
@@ -639,3 +749,7 @@ Critério de pronto:
 ```txt
 uma publicacao aprovada alimenta memoria estruturada da campanha.
 ```
+
+Referencia:
+
+- `docs/49_resultado_etapa_21_entidades_canon_consolidado.md`

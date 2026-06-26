@@ -37,6 +37,8 @@ function emitDnDEvent(type, msg, payload = {}) {
   const event = {
     v: 1,
     n: st.eventCount,
+    source_system: 'roll20',
+    source_event_id: `${st.sessionId || 'no-session'}:${st.eventCount}`,
     session_id: st.sessionId,
     type,
     who: msg.who,

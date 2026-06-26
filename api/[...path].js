@@ -1,9 +1,23 @@
+const crypto = require('crypto');
 const { Pool } = require('pg');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
 const DEFAULT_RUN = 'classify_candidates_v2_gpt-4o';
 const DEFAULT_ACTOR = 'renanyuhara';
+
+const SESSION_STATUSES = new Set([
+  'planned',
+  'recording',
+  'uploaded',
+  'processing',
+  'ready_for_review',
+  'reviewing',
+  'approved',
+  'published',
+  'archived',
+  'failed'
+]);
 
 const SEGMENT_STATUSES = new Set([
   'pending',
@@ -99,12 +113,415 @@ async function data(sql, params = [], db = getPool()) {
   return row.data ?? row.row_to_json ?? row.coalesce ?? Object.values(row)[0] ?? null;
 }
 
+function cleanText(value, max = 500) {
+  const text = String(value || '').trim();
+  return text ? text.slice(0, max) : '';
+}
+
+function slugify(value) {
+  return cleanText(value, 120)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'sessao';
+}
+
+function normalizeDate(value) {
+  const text = cleanText(value, 20);
+  if (!text) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw httpError(400, 'sessionDate precisa estar em YYYY-MM-DD.');
+  return text;
+}
+
+function normalizeStatus(value, fallback = 'planned') {
+  const status = cleanText(value || fallback, 40);
+  if (!SESSION_STATUSES.has(status)) throw httpError(400, `status invalido: ${status}`);
+  return status;
+}
+
+function generatedSourceSessionId(title, sessionDate) {
+  const date = sessionDate || new Date().toISOString().slice(0, 10);
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z').toLowerCase();
+  return `manual-${date}-${slugify(title)}-${stamp.slice(9, 15)}`;
+}
+
+function authPublicConfig() {
+  return {
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
+    publishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+      || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      || process.env.SUPABASE_PUBLISHABLE_KEY
+      || process.env.SUPABASE_ANON_KEY
+      || ''
+  };
+}
+
+function bearerToken(req) {
+  const value = req.headers.authorization || req.headers.Authorization || '';
+  if (!String(value).toLowerCase().startsWith('bearer ')) return '';
+  return String(value).slice(7).trim();
+}
+
+function authName(user) {
+  return user?.user_metadata?.full_name
+    || user?.user_metadata?.name
+    || user?.email
+    || 'Usuario Google';
+}
+
+function authAvatar(user) {
+  return user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
+}
+
+function capabilitiesForRole(role) {
+  const isDm = role === 'owner' || role === 'master';
+  return {
+    openTestMode: true,
+    canReadCampaign: Boolean(role),
+    canReviewOwnMaterial: Boolean(role),
+    canReviewTableMaterial: ['owner', 'master', 'reviewer'].includes(role),
+    canApproveCanon: isDm,
+    canManageCampaign: isDm
+  };
+}
+
+async function supabaseUserFromRequest(req) {
+  const token = bearerToken(req);
+  if (!token) return null;
+  const config = authPublicConfig();
+  if (!config.supabaseUrl || !config.publishableKey) {
+    const error = new Error('Supabase auth config publica ausente.');
+    error.statusCode = 500;
+    throw error;
+  }
+  const baseUrl = config.supabaseUrl.replace(/\/$/, '');
+  const response = await fetch(`${baseUrl}/auth/v1/user`, {
+    headers: {
+      apikey: config.publishableKey,
+      Authorization: `Bearer ${token}`
+    }
+  });
+  if (response.status === 401 || response.status === 403) {
+    const error = new Error('Sessao Google invalida ou expirada.');
+    error.statusCode = 401;
+    throw error;
+  }
+  if (!response.ok) {
+    const error = new Error(`Falha ao validar sessao Google (${response.status}).`);
+    error.statusCode = 502;
+    throw error;
+  }
+  return response.json();
+}
+
+async function syncAuthProfile(db, user) {
+  if (!user?.id) return;
+  await db.query(
+    `
+update profiles
+set email = coalesce($2, email),
+    avatar_url = coalesce($3, avatar_url),
+    last_sign_in_at = now()
+where auth_user_id = $1::uuid;`,
+    [user.id, user.email || null, authAvatar(user)]
+  );
+}
+
+async function linkedProfileForUser(db, userId, campaignSlug) {
+  return await data(
+    `
+with selected_profile as (
+  select p.id, p.display_name, p.roll20_name, p.default_character_name, p.avatar_url, p.last_sign_in_at
+  from profiles p
+  where p.auth_user_id = $1::uuid
+  limit 1
+),
+memberships as (
+  select c.slug campaign_slug, c.name campaign_name, cm.role
+  from selected_profile p
+  join campaign_members cm on cm.profile_id = p.id
+  join campaigns c on c.id = cm.campaign_id
+)
+select json_build_object(
+  'profile', (
+    select json_build_object(
+      'id', id,
+      'displayName', display_name,
+      'roll20Name', roll20_name,
+      'defaultCharacterName', default_character_name,
+      'avatarUrl', avatar_url,
+      'lastSignInAt', last_sign_in_at
+    )
+    from selected_profile
+  ),
+  'memberships', coalesce((
+    select json_agg(json_build_object(
+      'campaignSlug', campaign_slug,
+      'campaignName', campaign_name,
+      'role', role
+    ) order by campaign_slug)
+    from memberships
+  ), '[]'::json),
+  'campaignRole', (
+    select role from memberships where campaign_slug = $2 limit 1
+  )
+) data;`,
+    [userId, campaignSlug],
+    db
+  ) || { profile: null, memberships: [], campaignRole: null };
+}
+
+async function authMePayload(req, campaignSlug) {
+  const user = await supabaseUserFromRequest(req);
+  if (!user) {
+    return {
+      ok: true,
+      mode: 'open_test',
+      authenticated: false,
+      user: null,
+      profile: null,
+      memberships: [],
+      campaignRole: null,
+      capabilities: capabilitiesForRole(null),
+      note: 'API aberta para testes; login Google e opcional nesta fase.'
+    };
+  }
+  const db = getPool();
+  await syncAuthProfile(db, user);
+  const linked = await linkedProfileForUser(db, user.id, campaignSlug);
+  return {
+    ok: true,
+    mode: 'open_test',
+    authenticated: true,
+    user: {
+      id: user.id,
+      displayName: authName(user),
+      avatarUrl: authAvatar(user)
+    },
+    profile: linked.profile,
+    memberships: linked.memberships || [],
+    campaignRole: linked.campaignRole || null,
+    capabilities: capabilitiesForRole(linked.campaignRole || null),
+    note: 'Perfil autenticado; as rotas continuam abertas temporariamente para teste.'
+  };
+}
+
+function httpError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function r2Config() {
+  const endpoint = process.env.R2_S3_ENDPOINT || process.env.R2_ENDPOINT || '';
+  return {
+    endpoint,
+    bucket: process.env.R2_BUCKET || '',
+    accessKey: process.env.R2_ACCESS_KEY_ID || '',
+    secretKey: process.env.R2_SECRET_ACCESS_KEY || ''
+  };
+}
+
+function hmac(key, value, encoding) {
+  return crypto.createHmac('sha256', key).update(value, 'utf8').digest(encoding);
+}
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function r2SigningKey(secretKey, dateStamp) {
+  const kDate = hmac(Buffer.from(`AWS4${secretKey}`, 'utf8'), dateStamp);
+  const kRegion = hmac(kDate, 'auto');
+  const kService = hmac(kRegion, 's3');
+  return hmac(kService, 'aws4_request');
+}
+
+function encodeRfc3986(value) {
+  return encodeURIComponent(value).replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function canonicalQuery(params) {
+  return Object.keys(params).sort().map(key => `${encodeRfc3986(key)}=${encodeRfc3986(params[key])}`).join('&');
+}
+
+function createR2SignedUrl(key, expiresSeconds, bucketOverride = '') {
+  const config = r2Config();
+  if (!config.endpoint || !config.bucket || !config.accessKey || !config.secretKey) {
+    throw httpError(500, 'R2 config ausente no ambiente.');
+  }
+  const endpoint = new URL(config.endpoint);
+  const bucket = bucketOverride || config.bucket;
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const credentialScope = `${dateStamp}/auto/s3/aws4_request`;
+  const canonicalUri = `/${encodeRfc3986(bucket)}/${String(key).split('/').map(encodeRfc3986).join('/')}`;
+  const params = {
+    'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+    'X-Amz-Credential': `${config.accessKey}/${credentialScope}`,
+    'X-Amz-Date': amzDate,
+    'X-Amz-Expires': String(expiresSeconds),
+    'X-Amz-SignedHeaders': 'host'
+  };
+  const query = canonicalQuery(params);
+  const canonicalRequest = [
+    'GET',
+    canonicalUri,
+    query,
+    `host:${endpoint.host}\n`,
+    'host',
+    'UNSIGNED-PAYLOAD'
+  ].join('\n');
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    sha256(canonicalRequest)
+  ].join('\n');
+  const signature = hmac(r2SigningKey(config.secretKey, dateStamp), stringToSign, 'hex');
+  return `${endpoint.protocol}//${endpoint.host}${canonicalUri}?${query}&X-Amz-Signature=${signature}`;
+}
+
+async function audioUrlPayload(campaign, sourceSessionId, trackKey, expiresRaw) {
+  const normalizedTrackKey = String(trackKey || '').trim();
+  if (!normalizedTrackKey) throw httpError(400, 'trackKey obrigatorio.');
+  const expiresSeconds = Math.max(60, Math.min(3600, Number(expiresRaw || 900)));
+  const sourceFileRole = normalizedTrackKey.startsWith('craig_track_')
+    ? normalizedTrackKey
+    : `craig_track_${normalizedTrackKey}`;
+  const file = await data(
+    `
+with target as (
+  select s.id session_id
+  from sessions s
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1 and s.source_session_id = $2
+)
+select row_to_json(file_row) data from (
+  select rf.id, rf.source_file_role, rf.storage_bucket, rf.storage_path, rf.original_filename,
+         rf.mime_type, rf.size_bytes, rf.duration_ms
+  from recording_files rf
+  join target t on t.session_id = rf.session_id
+  where rf.source_file_role = $3
+    and rf.file_type = 'craig_track'
+    and rf.storage_path is not null
+  limit 1
+) file_row;`,
+    [campaign, sourceSessionId, sourceFileRole]
+  );
+  if (!file) throw httpError(404, `Audio nao encontrado para trackKey ${normalizedTrackKey}.`);
+  return {
+    ok: true,
+    trackKey: normalizedTrackKey.replace(/^craig_track_/, ''),
+    sourceFileRole: file.source_file_role,
+    expiresSeconds,
+    file: {
+      originalFilename: file.original_filename,
+      mimeType: file.mime_type || 'audio/flac',
+      sizeBytes: file.size_bytes,
+      durationMs: file.duration_ms
+    },
+    url: createR2SignedUrl(file.storage_path, expiresSeconds, file.storage_bucket)
+  };
+}
+
+function sessionResponse(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    sourceSessionId: row.source_session_id,
+    sourceSystem: row.source_system,
+    sessionDate: row.session_date,
+    startedAt: row.started_at,
+    arc: row.arc,
+    status: row.status,
+    durationMs: row.duration_ms,
+    summary: row.summary_short,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+async function createSession(db, campaign, raw) {
+  const title = cleanText(raw.title, 180);
+  if (!title) throw httpError(400, 'title obrigatorio.');
+  const sessionDate = normalizeDate(raw.sessionDate || raw.session_date);
+  const status = normalizeStatus(raw.status, 'planned');
+  const arc = cleanText(raw.arc, 120) || null;
+  const summary = cleanText(raw.summary || raw.summaryShort || raw.summary_short, 2000) || null;
+  const requestedSourceId = cleanText(raw.sourceSessionId || raw.source_session_id, 180);
+  const sourceSessionId = requestedSourceId ? slugify(requestedSourceId) : generatedSourceSessionId(title, sessionDate);
+  const slug = slugify(`${sessionDate || 'sem-data'}-${title}`);
+  const metadata = {
+    created_by: 'api/vercel',
+    created_from: 'session_manager',
+    open_test_mode: true
+  };
+  const result = await db.query(
+    `
+with campaign_row as (
+  select id from campaigns where slug = $1
+), inserted as (
+  insert into sessions (
+    id, campaign_id, title, slug, session_date, arc, status, summary_short,
+    source_system, source_session_id, metadata, created_at, updated_at
+  )
+  select gen_random_uuid(), campaign_row.id, $2, $3, $4::date, $5, $6, $7,
+         'manual', $8, $9::jsonb, now(), now()
+  from campaign_row
+  returning *
+)
+select * from inserted;`,
+    [campaign, title, slug, sessionDate, arc, status, summary, sourceSessionId, JSON.stringify(metadata)]
+  );
+  if (!result.rows.length) throw httpError(404, `Campanha nao encontrada: ${campaign}`);
+  return sessionResponse(result.rows[0]);
+}
+
+async function updateSession(db, campaign, sourceSessionId, raw) {
+  const sourceId = cleanText(sourceSessionId || raw.sourceSessionId || raw.source_session_id, 180);
+  if (!sourceId) throw httpError(400, 'sourceSessionId obrigatorio.');
+  const title = cleanText(raw.title, 180);
+  if (!title) throw httpError(400, 'title obrigatorio.');
+  const sessionDate = normalizeDate(raw.sessionDate || raw.session_date);
+  const status = normalizeStatus(raw.status, 'planned');
+  const arc = cleanText(raw.arc, 120) || null;
+  const summary = cleanText(raw.summary || raw.summaryShort || raw.summary_short, 2000) || null;
+  const metadataPatch = {
+    updated_by: 'api/vercel',
+    updated_from: 'session_manager',
+    open_test_mode: true
+  };
+  const result = await db.query(
+    `
+update sessions s
+set title = $3,
+    session_date = $4::date,
+    arc = $5,
+    status = $6,
+    summary_short = $7,
+    metadata = coalesce(s.metadata, '{}'::jsonb) || $8::jsonb,
+    updated_at = now()
+from campaigns c
+where c.id = s.campaign_id
+  and c.slug = $1
+  and s.source_session_id = $2
+returning s.*;`,
+    [campaign, sourceId, title, sessionDate, arc, status, summary, JSON.stringify(metadataPatch)]
+  );
+  if (!result.rows.length) throw httpError(404, `Sessao nao encontrada: ${sourceId}`);
+  return sessionResponse(result.rows[0]);
+}
+
 function targetCte() {
   return `
 with target as (
   select c.id campaign_id, c.slug campaign_slug, c.name campaign_name,
          s.id session_id, s.title session_title, s.source_session_id,
-         s.session_date, s.status, s.duration_ms, s.summary_short, s.started_at
+         s.session_date, s.arc, s.status, s.duration_ms, s.summary_short, s.started_at
   from sessions s join campaigns c on c.id = s.campaign_id
   where c.slug = $1 and s.source_session_id = $2
 )`;
@@ -118,10 +535,15 @@ select coalesce(json_agg(item order by item->>'sessionDate' desc nulls last, ite
     'id', s.id,
     'title', s.title,
     'sourceSessionId', s.source_session_id,
+    'sourceSystem', s.source_system,
     'sessionDate', s.session_date,
+    'startedAt', s.started_at,
+    'arc', s.arc,
     'status', s.status,
     'durationMs', s.duration_ms,
     'summary', s.summary_short,
+    'createdAt', s.created_at,
+    'updatedAt', s.updated_at,
     'segments', (select count(*) from transcript_segments ts where ts.session_id = s.id and ts.is_empty = false),
     'participants', (select count(*) from participants p where p.session_id = s.id),
     'recordingFiles', (select count(*) from recording_files rf where rf.session_id = s.id),
@@ -203,6 +625,7 @@ async function buildReviewPayload(campaign, sourceSessionId, runId, db = getPool
     segments,
     recordingFiles,
     jobs,
+    roll20Events,
     classifications,
     canonCandidates,
     quoteCandidates,
@@ -288,6 +711,27 @@ select coalesce(json_agg(item order by item->>'job_type'), '[]'::json) data from
     'output', pj.output
   ) item
   from processing_jobs pj join target t on t.session_id = pj.session_id
+) rows;`,
+      baseParams,
+      db
+    ),
+    data(
+      `${common}
+select coalesce(json_agg(item order by coalesce((item->>'approx_start_ms')::int, 2147483647), item->>'created_at'), '[]'::json) data from (
+  select json_build_object(
+    'id', re.id,
+    'event_type', re.event_type,
+    'roll20_who', re.roll20_who,
+    'character_name', re.character_name,
+    'approx_start_ms', re.approx_start_ms,
+    'text', re.text,
+    'source_system', re.source_system,
+    'source_event_id', re.source_event_id,
+    'created_at_roll20', re.created_at_roll20,
+    'created_at', re.created_at,
+    'payload', re.payload
+  ) item
+  from roll20_events re join target t on t.session_id = re.session_id
 ) rows;`,
       baseParams,
       db
@@ -448,6 +892,7 @@ select coalesce(json_agg(item order by item->>'source_publication_id'), '[]'::js
       sourceSessionId: session.source_session_id,
       title: session.session_title,
       date: session.session_date,
+      arc: session.arc,
       status: session.status,
       durationMs: session.duration_ms,
       startedAt: session.started_at,
@@ -458,6 +903,7 @@ select coalesce(json_agg(item order by item->>'source_publication_id'), '[]'::js
     segments: segments || [],
     recordingFiles: recordingFiles || [],
     jobs: jobs || [],
+    roll20Events: roll20Events || [],
     ai: {
       runId,
       classifications: classifications || [],
@@ -477,6 +923,7 @@ select coalesce(json_agg(item order by item->>'source_publication_id'), '[]'::js
       segments: (segments || []).length,
       participants: (participants || []).length,
       recordingFiles: (recordingFiles || []).length,
+      roll20Events: (roll20Events || []).length,
       words: (segments || []).reduce((sum, segment) => sum + Number(segment.text_words || 0), 0),
       durationMs: session.duration_ms,
       needsReview: (segments || []).filter(segment => segment.needs_review).length,
@@ -1073,19 +1520,38 @@ async function handleGet(req, res, path, query) {
   const sourceSessionId = query.get('sourceSessionId') || DEFAULT_SOURCE_SESSION;
   const runId = query.get('runId') || DEFAULT_RUN;
   if (path === '/api/auth-config') {
+    const config = authPublicConfig();
     return sendJson(res, 200, {
       ok: true,
       mode: 'open_test',
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
-      publishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-        || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        || process.env.SUPABASE_PUBLISHABLE_KEY
-        || process.env.SUPABASE_ANON_KEY
-        || ''
+      supabaseUrl: config.supabaseUrl,
+      publishableKey: config.publishableKey
     });
+  }
+  if (path === '/api/auth/me') {
+    return sendJson(res, 200, await authMePayload(req, campaign));
+  }
+  if (path === '/api/audio-url') {
+    const trackKey = query.get('trackKey') || query.get('sourceFileRole') || '';
+    const expires = query.get('expires') || '900';
+    return sendJson(res, 200, await audioUrlPayload(campaign, sourceSessionId, trackKey, expires));
   }
   if (path === '/api/health') {
     return sendJson(res, 200, { ok: true, app: 'dnd-scribe-vercel', campaignSlug: campaign });
+  }
+  if (path === '/api/jobs') {
+    return sendJson(res, 200, {
+      ok: true,
+      jobs: [],
+      mode: 'vercel_readonly',
+      note: 'Jobs locais rodam em tools/serve_frontend.py.'
+    });
+  }
+  if (path === '/api/craig-map') {
+    return sendJson(res, 501, {
+      ok: false,
+      error: 'Mapa Craig e editavel apenas no backend local.'
+    });
   }
   if (path === '/api/sessions') {
     return sendJson(res, 200, { ok: true, sessions: await listSessions(campaign, runId) });
@@ -1107,12 +1573,32 @@ async function handleGet(req, res, path, query) {
 }
 
 async function handlePost(req, res, path) {
+  if (path === '/api/ingest/craig') {
+    return sendJson(res, 501, {
+      ok: false,
+      error: 'Ingestao Craig roda no backend local. Use python3 tools/serve_frontend.py para processar ZIPs.'
+    });
+  }
+  if (path === '/api/craig-map/update') {
+    return sendJson(res, 501, {
+      ok: false,
+      error: 'Mapa Craig e editavel apenas no backend local.'
+    });
+  }
   const body = await readBody(req);
   const campaign = body.campaignSlug || DEFAULT_CAMPAIGN;
   const decisions = body.decisions || body;
   const sourceSessionId = body.sourceSessionId || decisions.sourceSessionId || DEFAULT_SOURCE_SESSION;
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
+  if (path === '/api/sessions/create') {
+    const session = await createSession(getPool(), campaign, body);
+    return sendJson(res, 200, { ok: true, session, sessions: await listSessions(campaign, runId) });
+  }
+  if (path === '/api/sessions/update') {
+    const session = await updateSession(getPool(), campaign, body.sourceSessionId || body.source_session_id || '', body);
+    return sendJson(res, 200, { ok: true, session, sessions: await listSessions(campaign, runId) });
+  }
   if (path === '/api/review-decisions/apply') {
     const client = await getPool().connect();
     let decisionSummary = null;

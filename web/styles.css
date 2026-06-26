@@ -43,7 +43,7 @@ button.primary { background: #244360; border-color: #426f97; }
 button.success { background: #244c38; border-color: #4c926c; }
 button.danger { background: #4f2628; border-color: #8f4949; }
 button.active { background: #26384d; border-color: var(--blue); }
-button:disabled { opacity: .55; cursor: wait; }
+button:disabled { opacity: .55; cursor: not-allowed; }
 a.button-link {
   display: inline-flex;
   align-items: center;
@@ -66,6 +66,7 @@ input, textarea, select {
   padding: 10px;
 }
 textarea { min-height: 90px; resize: vertical; }
+input[type="checkbox"] { width: auto; }
 h1, h2, h3, p { margin: 0; }
 h1 { font-size: clamp(1.4rem, 2.5vw, 2.3rem); line-height: 1.05; }
 h2 { font-size: 1.05rem; }
@@ -192,6 +193,10 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   background: var(--panel);
   padding: 10px;
 }
+.metric.dirty {
+  border-color: var(--gold);
+  background: #1d1a11;
+}
 .metric strong { display: block; font-size: 1.35rem; }
 .metric span { color: var(--muted); font-size: .78rem; }
 .tabs {
@@ -268,6 +273,10 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   padding: 12px;
   background: var(--panel-2);
 }
+.segment-row.dirty {
+  border-color: var(--gold);
+  background: #1b1a16;
+}
 .segment-row p {
   color: var(--text);
   font-size: .91rem;
@@ -305,6 +314,51 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
 }
+.session-manager {
+  display: grid;
+  grid-template-columns: minmax(320px, .8fr) minmax(360px, 1fr) minmax(360px, 1.1fr);
+  gap: 12px;
+  align-items: start;
+}
+.session-table {
+  display: grid;
+  gap: 8px;
+}
+.session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+}
+.session-row strong,
+.session-row small {
+  display: block;
+}
+.session-row small {
+  margin-top: 4px;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.audio-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 10px;
+}
+.audio-card.error { border-color: var(--red); }
+.audio-card audio {
+  width: 100%;
+  min-height: 38px;
+}
 .candidate-grid, .publication-grid, .ops-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -324,6 +378,10 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   padding: 12px;
   min-width: 0;
 }
+.candidate-card.dirty {
+  border-color: var(--gold);
+  background: #191912;
+}
 .candidate-card p, .publication-card p {
   margin: 8px 0;
   color: var(--text);
@@ -338,6 +396,29 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   background: #0d1219;
   color: var(--muted);
   padding: 10px;
+}
+.job-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.craig-map-list {
+  display: grid;
+  gap: 10px;
+  max-height: 720px;
+  overflow: auto;
+}
+.job-row {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 10px;
+}
+.job-row strong,
+.job-row small {
+  display: block;
 }
 .empty {
   border: 1px dashed var(--line-2);
@@ -440,13 +521,14 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   .session-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .status-strip, .candidate-grid, .publication-grid, .ops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .review-layout { grid-template-columns: 1fr; }
+  .session-manager { grid-template-columns: 1fr; }
   .segment-list { max-height: none; }
 }
 
 @media (max-width: 760px) {
   .workspace { padding: 12px 12px 118px; }
   .rail { padding: 12px; }
-  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .session-list {
+  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .session-list, .session-row {
     grid-template-columns: 1fr;
   }
   .top-actions {

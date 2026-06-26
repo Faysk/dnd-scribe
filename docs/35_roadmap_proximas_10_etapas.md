@@ -22,10 +22,21 @@ Cada documento de resultado precisa conter:
 
 Objetivo: proteger dados por usuario/campanha usando Supabase Auth e Row Level Security.
 
+Status atual:
+
+```txt
+login_google=implementado
+perfil_auth_vinculado=faysk
+endpoint_identidade=/api/auth/me
+modo_api=open_test
+rls=pending
+```
+
 Entregas:
 
-- mapa `profiles.id` -> `auth.users.id`;
+- mapa inicial `profiles.id` -> `auth.users.id`;
 - funcoes SQL auxiliares para membership e DM;
+- endpoint seguro para identidade autenticada;
 - policies iniciais para leitura segura;
 - plano de uso de service role apenas no backend/worker;
 - smoke com perfis DM, player e convidado.
@@ -45,9 +56,25 @@ Critério de pronto:
 consultas anonimas/cliente nao conseguem ler transcricao ou fonte privada sem permissao.
 ```
 
+Observacao:
+
+```txt
+Por decisao de teste, RLS nao fecha a API ainda.
+O portao de seguranca volta antes de abrir para jogadores/dados sensiveis.
+```
+
 ## Etapa 13 — Front real: UX de revisao
 
 Objetivo: transformar o Review Board local em ferramenta confortavel para uso real do DM.
+
+Status atual:
+
+```txt
+rascunho_persistente=implementado
+marcadores_visuais=implementado
+filtros_candidatos=implementado
+fontes_audio=pending
+```
 
 Entregas:
 
@@ -75,6 +102,15 @@ uma sessao real pode ser revisada pelo front sem depender de scripts diretos.
 
 Objetivo: permitir conferir trecho transcrito ouvindo a fonte.
 
+Status atual:
+
+```txt
+endpoint_audio_url=implementado
+url_assinada_r2=implementado
+player_no_segmento=implementado
+fonte_alternativa=pending
+```
+
 Entregas:
 
 - endpoint para URL assinada R2 por arquivo;
@@ -101,6 +137,15 @@ DM consegue auditar uma fala por audio em ate 2 cliques.
 
 Objetivo: sair da sessao fixa e permitir iniciar novas sessoes pela interface.
 
+Status atual:
+
+```txt
+aba_sessoes=implementada
+criar_sessao_manual=implementado
+editar_metadados_sessao=implementado
+participantes_esperados=pending
+```
+
 Entregas:
 
 - tela de lista/detalhe de sessoes;
@@ -126,6 +171,15 @@ DM cria uma sessao nova sem tocar no banco manualmente.
 
 Objetivo: importar ZIP Craig ou arquivos de sessao a partir da interface local.
 
+Status atual:
+
+```txt
+upload_zip_local=implementado
+exec_ingest_local=implementado
+resultado_manifest_ui=implementado
+job_worker=pending
+```
+
 Entregas:
 
 - seletor/upload local para ZIP;
@@ -150,6 +204,16 @@ um novo arquivo Craig entra no pipeline sem comando manual.
 ## Etapa 17 — Worker/queue local
 
 Objetivo: tirar tarefas longas do request da interface.
+
+Status atual:
+
+```txt
+fila_local_json=implementada
+job_ingest_craig=implementado
+monitor_jobs=implementado
+retry_ui=pending
+jobs_transcribe_classify_publish=pending
+```
 
 Entregas:
 
@@ -177,6 +241,16 @@ transcricao/classificacao rodam como jobs, nao como acao bloqueante do front.
 
 Objetivo: trazer eventos de mesa para a timeline.
 
+Status atual:
+
+```txt
+script_dnd=atualizado
+parser_import_roll20=implementado
+migration_roll20=aplicada
+front_eventos_roll20=implementado
+upload_export_roll20=pending
+```
+
 Entregas:
 
 - consolidar script `!dnd`;
@@ -201,6 +275,16 @@ marcadores Roll20 ajudam a revisar uma sessao real.
 ## Etapa 19 — Discord/Craig operacional
 
 Objetivo: reduzir atrito antes, durante e depois da sessao.
+
+Status atual:
+
+```txt
+editor_mapa_craig=implementado
+api_craig_map_local=implementado
+backup_mapa=implementado
+checklist_pre_sessao=pending
+deteccao_convidados=pending
+```
 
 Entregas:
 
@@ -227,6 +311,16 @@ captura de uma nova sessao tem menos passos manuais e menos risco de nick errado
 
 Objetivo: trazer o historico antigo da campanha sem misturar com a pipeline de audio.
 
+Status atual:
+
+```txt
+tabela_historical_documents=implementada
+importador_markdown=implementado
+dry_run=validado
+ui_revisao_historico=pending
+relatorio_conflitos=pending
+```
+
 Entregas:
 
 - inventario de arquivos `.md`;
@@ -251,6 +345,16 @@ historico antigo fica pesquisavel sem contaminar canon aprovado.
 ## Etapa 21 — Entidades e canon consolidado
 
 Objetivo: transformar decisoes aprovadas em memoria navegavel da campanha.
+
+Status atual:
+
+```txt
+schema_canon_entries=criado
+consolidator=implementado
+validacao_local=ok
+aplicacao_supabase=pending
+ui_memoria=pending
+```
 
 Entregas:
 

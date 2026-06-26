@@ -45,7 +45,7 @@ def build_payload(database_url: str, campaign_slug: str, source_session_id: str,
         "with target as ("
         "select c.id campaign_id, c.slug campaign_slug, c.name campaign_name, "
         "s.id session_id, s.title session_title, s.source_session_id, s.session_date, "
-        "s.status, s.duration_ms, s.summary_short, s.started_at "
+        "s.arc, s.status, s.duration_ms, s.summary_short, s.started_at "
         "from sessions s join campaigns c on c.id = s.campaign_id "
         f"where c.slug = {campaign_q} and s.source_session_id = {session_q}"
         ")"
@@ -152,6 +152,30 @@ select coalesce(json_agg(item order by item->>'job_type'), '[]'::json) from (
   ) item
   from processing_jobs pj
   join target t on t.session_id = pj.session_id
+) rows;
+""",
+    )
+
+    roll20_events = run_json(
+        database_url,
+        f"""
+{common}
+select coalesce(json_agg(item order by coalesce((item->>'approx_start_ms')::int, 2147483647), item->>'created_at'), '[]'::json) from (
+  select json_build_object(
+    'id', re.id,
+    'event_type', re.event_type,
+    'roll20_who', re.roll20_who,
+    'character_name', re.character_name,
+    'approx_start_ms', re.approx_start_ms,
+    'text', re.text,
+    'source_system', re.source_system,
+    'source_event_id', re.source_event_id,
+    'created_at_roll20', re.created_at_roll20,
+    'created_at', re.created_at,
+    'payload', re.payload
+  ) item
+  from roll20_events re
+  join target t on t.session_id = re.session_id
 ) rows;
 """,
     )
@@ -327,6 +351,7 @@ select coalesce(json_agg(item order by item->>'source_publication_id'), '[]'::js
             "sourceSessionId": session["source_session_id"],
             "title": session["session_title"],
             "date": session["session_date"],
+            "arc": session.get("arc"),
             "status": session["status"],
             "durationMs": session["duration_ms"],
             "startedAt": session["started_at"],
@@ -337,6 +362,7 @@ select coalesce(json_agg(item order by item->>'source_publication_id'), '[]'::js
         "segments": segments,
         "recordingFiles": recording_files,
         "jobs": jobs,
+        "roll20Events": roll20_events,
         "ai": {
             "runId": ai_run_id,
             "classifications": classifications,
@@ -356,6 +382,7 @@ select coalesce(json_agg(item order by item->>'source_publication_id'), '[]'::js
             "segments": len(segments),
             "participants": len(participants),
             "recordingFiles": len(recording_files),
+            "roll20Events": len(roll20_events),
             "words": sum(int(segment.get("text_words") or 0) for segment in segments),
             "durationMs": session["duration_ms"],
             "needsReview": sum(1 for segment in segments if segment.get("needs_review")),
