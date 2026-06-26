@@ -5,11 +5,18 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
+import math
 import re
+import struct
 import subprocess
+import wave
 import zipfile
 from pathlib import Path
+
+
+SILENCE_DBFS_THRESHOLD = -45.0
 
 
 def run(cmd: list[str]) -> None:
@@ -34,6 +41,52 @@ def load_map(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def wav_audio_stats(path: Path) -> dict:
+    if path.suffix.lower() != ".wav":
+        return {}
+    try:
+        with wave.open(str(path), "rb") as source:
+            sample_width = source.getsampwidth()
+            channels = source.getnchannels()
+            frames_count = source.getnframes()
+            raw = source.readframes(frames_count)
+    except (EOFError, OSError, wave.Error):
+        return {}
+
+    if sample_width != 2 or frames_count <= 0:
+        return {}
+
+    sample_count = len(raw) // sample_width
+    if not sample_count:
+        return {}
+
+    square_sum = 0
+    peak = 0
+    for (sample,) in struct.iter_unpack("<h", raw[: sample_count * sample_width]):
+        absolute = abs(sample)
+        peak = max(peak, absolute)
+        square_sum += sample * sample
+
+    rms = math.sqrt(square_sum / sample_count)
+    dbfs = 20 * math.log10(rms / 32768) if rms > 0 else -120.0
+    return {
+        "audio_channels_analyzed": channels,
+        "audio_rms": round(rms, 2),
+        "audio_peak": peak,
+        "audio_dbfs": round(dbfs, 2),
+        "probably_silent": dbfs < SILENCE_DBFS_THRESHOLD,
+        "silence_dbfs_threshold": SILENCE_DBFS_THRESHOLD,
+    }
+
+
 def ffprobe(path: Path) -> dict:
     cmd = [
         "ffprobe",
@@ -54,7 +107,7 @@ def probe_summary(path: Path) -> dict:
     fmt = data.get("format") or {}
     duration = float(fmt.get("duration") or 0)
     size = int(fmt.get("size") or path.stat().st_size)
-    return {
+    summary = {
         "duration_seconds": duration,
         "duration_minutes": round(duration / 60, 2),
         "size_bytes": size,
@@ -62,7 +115,10 @@ def probe_summary(path: Path) -> dict:
         "codec": stream.get("codec_name"),
         "sample_rate": int(stream.get("sample_rate") or 0),
         "channels": int(stream.get("channels") or 0),
+        "sha256": sha256_file(path),
     }
+    summary.update(wav_audio_stats(path))
+    return summary
 
 
 def parse_info(text: str) -> dict:

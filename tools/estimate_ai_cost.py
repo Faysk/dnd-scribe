@@ -30,20 +30,32 @@ def unit_cost(policy: dict[str, Any], key: str) -> float | None:
     return float(value) if value is not None else None
 
 
+def iter_chunks(tracks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    chunks: list[dict[str, Any]] = []
+    for track in tracks:
+        chunks.extend(track.get("chunks") or [])
+    return chunks
+
+
 def estimate(manifest: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
     tracks = manifest.get("tracks") or []
-    chunk_count = 0
-    total_seconds = 0.0
-    total_chunk_seconds = 0.0
+    chunks = iter_chunks(tracks)
+    total_seconds = sum(float(track.get("duration_seconds") or 0) for track in tracks)
+    total_chunk_seconds = sum(float(chunk.get("duration_seconds") or 0) for chunk in chunks)
+    chunk_count = len(chunks)
 
-    for track in tracks:
-        total_seconds += float(track.get("duration_seconds") or 0)
-        chunks = track.get("chunks") or []
-        chunk_count += len(chunks)
-        for chunk in chunks:
-            total_chunk_seconds += float(chunk.get("duration_seconds") or 0)
+    silence_flags_available = any("probably_silent" in chunk for chunk in chunks)
+    silent_chunks = [chunk for chunk in chunks if chunk.get("probably_silent") is True]
+    speech_chunks = [chunk for chunk in chunks if chunk.get("probably_silent") is not True]
+    silent_seconds = sum(float(chunk.get("duration_seconds") or 0) for chunk in silent_chunks)
+    speech_chunk_seconds = sum(float(chunk.get("duration_seconds") or 0) for chunk in speech_chunks)
 
-    audio_seconds = total_chunk_seconds or total_seconds
+    raw_audio_seconds = total_chunk_seconds or total_seconds
+    if silence_flags_available:
+        billable_audio_seconds = speech_chunk_seconds
+    else:
+        billable_audio_seconds = raw_audio_seconds
+
     estimation = policy.get("estimation") or {}
     guards = policy.get("guards") or {}
     speech_ratio = float(estimation.get("assumedSpeechRatio") or 0.7)
@@ -51,10 +63,14 @@ def estimate(manifest: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]
     classification_output_per_segment = float(estimation.get("assumedClassificationOutputTokensPerSegment") or 80)
     summary_output_tokens = float(estimation.get("assumedSummaryOutputTokensPerSession") or 1800)
 
-    audio_minutes = minutes(audio_seconds)
-    estimated_speech_minutes = round(audio_minutes * speech_ratio, 2)
+    audio_minutes = minutes(raw_audio_seconds)
+    skipped_silence_minutes = minutes(silent_seconds) if silence_flags_available else 0
+    if silence_flags_available:
+        estimated_speech_minutes = minutes(billable_audio_seconds)
+    else:
+        estimated_speech_minutes = round(audio_minutes * speech_ratio, 2)
     estimated_transcript_tokens = round(estimated_speech_minutes * transcript_tokens_per_minute)
-    estimated_classification_output_tokens = round(chunk_count * classification_output_per_segment)
+    estimated_classification_output_tokens = round(len(speech_chunks or chunks) * classification_output_per_segment)
 
     transcription_minute_cost = unit_cost(policy, "transcriptionAudioMinute")
     classification_input_cost = unit_cost(policy, "classificationInputMillionTokens")
@@ -95,12 +111,17 @@ def estimate(manifest: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]
         warnings.append(f"Estimativa acima do limite de aprovacao explicita: US$ {total_known_usd:.4f}")
     if transcription_minute_cost is None:
         warnings.append("Preco de transcricao nao configurado; confira a pagina oficial da OpenAI antes de executar job pago.")
+    if not silence_flags_available and chunks:
+        warnings.append("Manifest ainda nao tem flags de silencio; estimativa usa speech ratio conservador da politica.")
 
     return {
         "sessionId": manifest.get("session_id"),
         "tracks": len(tracks),
         "chunks": chunk_count,
+        "silentChunks": len(silent_chunks) if silence_flags_available else None,
+        "billableChunks": len(speech_chunks) if silence_flags_available else chunk_count,
         "audioMinutes": audio_minutes,
+        "skippedSilenceMinutes": skipped_silence_minutes,
         "estimatedSpeechMinutes": estimated_speech_minutes,
         "estimatedTranscriptTokens": estimated_transcript_tokens,
         "estimatedClassificationOutputTokens": estimated_classification_output_tokens,
@@ -122,7 +143,11 @@ def print_text(result: dict[str, Any]) -> None:
     print(f"Sessao: {result.get('sessionId') or 'desconhecida'}")
     print(f"Faixas: {result['tracks']}")
     print(f"Chunks: {result['chunks']}")
+    if result.get("silentChunks") is not None:
+        print(f"Chunks silenciosos: {result['silentChunks']}")
+        print(f"Chunks cobraveis estimados: {result['billableChunks']}")
     print(f"Audio: {result['audioMinutes']} min")
+    print(f"Silencio pulado: {result['skippedSilenceMinutes']} min")
     print(f"Fala estimada: {result['estimatedSpeechMinutes']} min")
     print(f"Tokens transcript estimados: {result['estimatedTranscriptTokens']}")
     print(f"Batch recomendado: {'sim' if result['batchRecommended'] else 'nao'}")

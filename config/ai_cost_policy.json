@@ -47,6 +47,7 @@
     "chunkSeconds": 300,
     "skipSilentChunks": true,
     "minimumSpeechSecondsPerChunk": 5,
+    "silenceDbfsThreshold": -45.0,
     "deduplicateChunksBySha256": true,
     "reuseTranscriptByAudioHash": true,
     "sampleFirstMinutesBeforeFullRun": 10
