@@ -105,38 +105,39 @@ select row_to_json(row) from (
     return session
 
 
-def fetch_chunks(database_url: str, session_id: str, model: str, prompt_version: str) -> list[dict[str, Any]]:
+def fetch_work_units(database_url: str, session_id: str, model: str, prompt_version: str) -> list[dict[str, Any]]:
     sql = f"""
-select coalesce(json_agg(row_to_json(row) order by row.track_key, row.chunk_index), '[]'::json) from (
+select coalesce(json_agg(row_to_json(row) order by row.track_key, row.start_ms, row.unit_type, row.unit_index), '[]'::json) from (
   select
-    ac.id::text audio_chunk_id,
-    ac.source_file_id::text source_file_id,
-    ac.track_key,
-    ac.chunk_index,
-    ac.start_ms,
-    ac.end_ms,
-    ac.duration_ms,
-    ac.sha256,
-    ac.probably_silent,
-    ac.audio_dbfs,
-    ac.storage_path,
-    ac.source_chunk_name,
-    ac.transcription_status,
+    wu.id::text work_unit_id,
+    wu.unit_type,
+    wu.source_chunk_id::text audio_chunk_id,
+    wu.source_file_id::text source_file_id,
+    wu.track_key,
+    wu.unit_index,
+    wu.start_ms,
+    wu.end_ms,
+    wu.duration_ms,
+    wu.sha256,
+    wu.probably_silent,
+    wu.audio_dbfs,
+    wu.storage_path,
+    wu.transcription_status,
     rf.original_filename,
     tc.id::text cache_id,
     tc.status cache_status,
     length(tc.transcript_text) > 0 cache_has_text,
     tc.model cache_model,
     tc.prompt_version cache_prompt_version
-  from audio_chunks ac
-  join recording_files rf on rf.id = ac.source_file_id
+  from audio_transcription_work_units wu
+  join recording_files rf on rf.id = wu.source_file_id
   left join transcription_cache tc
-    on tc.audio_sha256 = ac.sha256
+    on tc.audio_sha256 = wu.sha256
    and tc.provider = 'openai'
    and tc.model = {sql_literal(model)}
    and tc.prompt_version = {sql_literal(prompt_version)}
    and tc.status = 'succeeded'
-  where ac.session_id = {sql_literal(session_id)}::uuid
+  where wu.session_id = {sql_literal(session_id)}::uuid
 ) row;
 """
     return run_json(database_url, sql) or []
@@ -149,44 +150,61 @@ def estimate_cost(minutes: float, policy: dict[str, Any]) -> float | None:
     return round(minutes * per_minute, 6)
 
 
-def build_plan(session: dict[str, Any], chunks: list[dict[str, Any]], policy: dict[str, Any], model: str, prompt_version: str) -> dict[str, Any]:
-    planned_chunks: list[dict[str, Any]] = []
-    counts = {"total": 0, "skipSilence": 0, "cacheHit": 0, "transcribe": 0, "missingHash": 0, "blockedMissingHash": 0}
+def build_plan(session: dict[str, Any], units: list[dict[str, Any]], policy: dict[str, Any], model: str, prompt_version: str) -> dict[str, Any]:
+    planned_units: list[dict[str, Any]] = []
+    counts = {
+        "total": 0,
+        "speechSlices": 0,
+        "chunkFallbacks": 0,
+        "skipSilence": 0,
+        "cacheHit": 0,
+        "transcribe": 0,
+        "missingHash": 0,
+        "blockedMissingHash": 0,
+    }
     billable_ms = 0
 
-    for chunk in chunks:
+    for unit in units:
         counts["total"] += 1
+        if unit.get("unit_type") == "speech_slice":
+            counts["speechSlices"] += 1
+        else:
+            counts["chunkFallbacks"] += 1
+
         reason = "transcribe_missing_cache"
         action = "transcribe"
-        if not chunk.get("sha256"):
+        if not unit.get("sha256"):
             action = "blocked"
             counts["missingHash"] += 1
             counts["blockedMissingHash"] += 1
             reason = "missing_sha256"
-        elif chunk.get("probably_silent") is True:
+        elif unit.get("probably_silent") is True:
             action = "skip"
             reason = "probably_silent"
             counts["skipSilence"] += 1
-        elif chunk.get("cache_id"):
+        elif unit.get("cache_id"):
             action = "cache_hit"
             reason = "transcription_cache_hit"
             counts["cacheHit"] += 1
         else:
             counts["transcribe"] += 1
 
+        duration_ms = int(unit.get("duration_ms") or max(0, int(unit.get("end_ms") or 0) - int(unit.get("start_ms") or 0)))
         if action == "transcribe":
-            billable_ms += int(chunk.get("duration_ms") or max(0, int(chunk.get("end_ms") or 0) - int(chunk.get("start_ms") or 0)))
+            billable_ms += duration_ms
 
-        planned_chunks.append(
+        planned_units.append(
             {
-                "audioChunkId": chunk.get("audio_chunk_id"),
-                "sourceFileId": chunk.get("source_file_id"),
-                "trackKey": chunk.get("track_key"),
-                "chunkIndex": chunk.get("chunk_index"),
-                "sha256": chunk.get("sha256"),
-                "durationMs": chunk.get("duration_ms"),
-                "audioDbfs": chunk.get("audio_dbfs"),
-                "cacheId": chunk.get("cache_id"),
+                "workUnitId": unit.get("work_unit_id"),
+                "unitType": unit.get("unit_type"),
+                "audioChunkId": unit.get("audio_chunk_id"),
+                "sourceFileId": unit.get("source_file_id"),
+                "trackKey": unit.get("track_key"),
+                "unitIndex": unit.get("unit_index"),
+                "sha256": unit.get("sha256"),
+                "durationMs": duration_ms,
+                "audioDbfs": unit.get("audio_dbfs"),
+                "cacheId": unit.get("cache_id"),
                 "action": action,
                 "reason": reason,
             }
@@ -204,7 +222,8 @@ def build_plan(session: dict[str, Any], chunks: list[dict[str, Any]], policy: di
         "estimatedCostUsd": estimate_cost(billable_minutes, policy),
         "requiresPriceConfig": unit_cost(policy, "transcriptionAudioMinute") is None,
         "batchRecommended": bool((policy.get("guards") or {}).get("preferBatchForAsyncJobs", True)),
-        "chunks": planned_chunks,
+        "workUnits": planned_units,
+        "chunks": planned_units,
     }
 
 
@@ -228,26 +247,28 @@ returning id::text;
 
 def write_ledger(database_url: str, plan: dict[str, Any], job_id: str, policy: dict[str, Any]) -> None:
     rows = []
-    for chunk in plan["chunks"]:
-        duration_ms = int(chunk.get("durationMs") or 0)
-        minutes = round(duration_ms / 60000, 6) if chunk["action"] == "transcribe" else 0
-        if chunk["action"] in {"skip", "blocked"}:
+    for unit in plan["workUnits"]:
+        duration_ms = int(unit.get("durationMs") or 0)
+        minutes = round(duration_ms / 60000, 6) if unit["action"] == "transcribe" else 0
+        if unit["action"] in {"skip", "blocked"}:
             status = "skipped"
             estimated = "null"
-        elif chunk["action"] == "cache_hit":
+        elif unit["action"] == "cache_hit":
             status = "cached"
             estimated = "0"
         else:
             status = "estimated"
             estimated = sql_optional_number(estimate_cost(minutes, policy))
         metadata = {
-            "audioChunkId": chunk.get("audioChunkId"),
-            "sourceFileId": chunk.get("sourceFileId"),
-            "trackKey": chunk.get("trackKey"),
-            "chunkIndex": chunk.get("chunkIndex"),
-            "action": chunk.get("action"),
-            "reason": chunk.get("reason"),
-            "cacheId": chunk.get("cacheId"),
+            "workUnitId": unit.get("workUnitId"),
+            "unitType": unit.get("unitType"),
+            "audioChunkId": unit.get("audioChunkId"),
+            "sourceFileId": unit.get("sourceFileId"),
+            "trackKey": unit.get("trackKey"),
+            "unitIndex": unit.get("unitIndex"),
+            "action": unit.get("action"),
+            "reason": unit.get("reason"),
+            "cacheId": unit.get("cacheId"),
         }
         rows.append(
             "(" + ", ".join(
@@ -259,7 +280,7 @@ def write_ledger(database_url: str, plan: dict[str, Any], job_id: str, policy: d
                     sql_literal(plan["model"]),
                     "'transcription'",
                     sql_literal(status),
-                    sql_optional_text(chunk.get("sha256")),
+                    sql_optional_text(unit.get("sha256")),
                     sql_optional_number(minutes),
                     estimated,
                     sql_json(metadata),
@@ -299,8 +320,8 @@ def main() -> int:
     policy = load_json(args.policy)
     model = transcription_model(policy, args.model)
     session = find_session(database_url, args.campaign, args.source_session_id)
-    chunks = fetch_chunks(database_url, session["id"], model, args.prompt_version)
-    plan = build_plan(session, chunks, policy, model, args.prompt_version)
+    units = fetch_work_units(database_url, session["id"], model, args.prompt_version)
+    plan = build_plan(session, units, policy, model, args.prompt_version)
 
     if args.write_ledger:
         job_id = write_processing_job(database_url, plan)
@@ -312,11 +333,13 @@ def main() -> int:
     else:
         print(f"session={plan['session']['source_session_id']}")
         print(f"model={plan['model']}")
-        print(f"chunks_total={plan['counts']['total']}")
-        print(f"chunks_skip_silence={plan['counts']['skipSilence']}")
-        print(f"chunks_cache_hit={plan['counts']['cacheHit']}")
-        print(f"chunks_blocked_missing_hash={plan['counts']['blockedMissingHash']}")
-        print(f"chunks_transcribe={plan['counts']['transcribe']}")
+        print(f"work_units_total={plan['counts']['total']}")
+        print(f"work_units_speech_slices={plan['counts']['speechSlices']}")
+        print(f"work_units_chunk_fallbacks={plan['counts']['chunkFallbacks']}")
+        print(f"work_units_skip_silence={plan['counts']['skipSilence']}")
+        print(f"work_units_cache_hit={plan['counts']['cacheHit']}")
+        print(f"work_units_blocked_missing_hash={plan['counts']['blockedMissingHash']}")
+        print(f"work_units_transcribe={plan['counts']['transcribe']}")
         print(f"billable_audio_minutes={plan['billableAudioMinutes']}")
         if plan.get("estimatedCostUsd") is None:
             print("estimated_cost_usd=pending_price_config")
