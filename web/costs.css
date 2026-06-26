@@ -1,0 +1,119 @@
+.cost-page {
+  display: grid;
+  gap: 14px;
+}
+
+.cost-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cost-head h2 {
+  margin-top: 3px;
+  font-size: 1.15rem;
+}
+
+.cost-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.cost-metric {
+  min-height: 78px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 10px;
+}
+
+.cost-metric strong {
+  display: block;
+  font-size: 1.2rem;
+}
+
+.cost-metric span {
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+.cost-metric.success { border-color: #4c926c; }
+.cost-metric.warn { border-color: var(--gold); background: #1d1a11; }
+.cost-metric.danger { border-color: var(--red); background: #211316; }
+
+.cost-warnings {
+  display: grid;
+  gap: 8px;
+}
+
+.cost-warning {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 10px;
+}
+
+.cost-warning strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.cost-warning.success { border-color: #4c926c; }
+.cost-warning.warn, .cost-warning.cost { border-color: var(--gold); }
+.cost-warning.danger, .cost-warning.blocked { border-color: var(--red); }
+
+.cost-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cost-table {
+  display: grid;
+  gap: 8px;
+}
+
+.cost-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) repeat(5, minmax(74px, auto));
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 9px;
+  font-size: .85rem;
+}
+
+.cost-row span {
+  color: var(--muted);
+  text-align: right;
+}
+
+.cost-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--muted);
+  font-size: .76rem;
+}
+
+.cost-chip.blue { border-color: var(--blue); color: var(--blue); }
+.cost-chip.gold { border-color: var(--gold); color: var(--gold); }
+
+@media (max-width: 1100px) {
+  .cost-metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+  .cost-grid { grid-template-columns: 1fr; }
+  .cost-row { grid-template-columns: 1fr 1fr; }
+  .cost-row span { text-align: left; }
+}
+
+@media (max-width: 720px) {
+  .cost-head { display: grid; }
+  .cost-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
