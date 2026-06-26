@@ -13,6 +13,7 @@ DEFAULT_SCHEMA_FILES = [
     Path("schemas/20260625_001_local_ingest_extensions.sql"),
     Path("schemas/20260625_002_ai_candidates_extensions.sql"),
     Path("schemas/20260625_003_publication_extensions.sql"),
+    Path("schemas/20260625_003_publication_extensions.sql"),
     Path("schemas/20260625_004_review_decisions_extensions.sql"),
     Path("schemas/20260626_005_auth_profiles_extensions.sql"),
     Path("schemas/20260626_006_roll20_event_extensions.sql"),
@@ -20,6 +21,7 @@ DEFAULT_SCHEMA_FILES = [
     Path("schemas/20260626_008_canon_entries.sql"),
     Path("schemas/20260626_009_ai_cost_cache.sql"),
     Path("schemas/20260626_010_audio_speech_slices.sql"),
+    Path("schemas/20260626_011_audio_work_units_absolute_times.sql"),
 ]
 
 
