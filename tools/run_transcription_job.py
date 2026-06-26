@@ -120,44 +120,47 @@ with target_session as (
   limit 1
 ), candidates as (
   select
-    ac.id::text audio_chunk_id,
-    ac.session_id::text session_id,
-    ac.source_file_id::text source_file_id,
-    ac.track_key,
-    ac.chunk_index,
-    ac.start_ms,
-    ac.end_ms,
-    coalesce(ac.duration_ms, greatest(0, coalesce(ac.end_ms, 0) - coalesce(ac.start_ms, 0)), 0)::int duration_ms,
-    ac.sha256,
-    ac.storage_path,
-    ac.source_chunk_name,
-    ac.audio_dbfs,
+    wu.id::text work_unit_id,
+    wu.unit_type,
+    wu.source_chunk_id::text audio_chunk_id,
+    wu.session_id::text session_id,
+    wu.source_file_id::text source_file_id,
+    wu.track_key,
+    wu.unit_index,
+    wu.start_ms,
+    wu.end_ms,
+    coalesce(wu.duration_ms, greatest(0, coalesce(wu.end_ms, 0) - coalesce(wu.start_ms, 0)), 0)::int duration_ms,
+    wu.sha256,
+    wu.storage_path,
+    wu.audio_dbfs,
     rf.original_filename,
     p.id::text participant_id,
     p.player_name,
     p.character_name,
     p.role speaker_role
-  from audio_chunks ac
-  join recording_files rf on rf.id = ac.source_file_id
+  from audio_transcription_work_units wu
+  join recording_files rf on rf.id = wu.source_file_id
   left join participants p on p.id = rf.participant_id
-  where ac.session_id = (select id from target_session)
-    and nullif(ac.sha256, '') is not null
-    and nullif(ac.storage_path, '') is not null
-    and coalesce(ac.probably_silent, false) is false
-    and coalesce(ac.transcription_status, 'pending') not in ('skipped_silence', 'transcribed', 'cached')
+  where wu.session_id = (select id from target_session)
+    and nullif(wu.sha256, '') is not null
+    and nullif(wu.storage_path, '') is not null
+    and coalesce(wu.probably_silent, false) is false
+    and coalesce(wu.transcription_status, 'pending') not in ('skipped_silence', 'transcribed', 'cached')
     and not exists (
       select 1
       from transcription_cache tc
-      where tc.audio_sha256 = ac.sha256
+      where tc.audio_sha256 = wu.sha256
         and tc.provider = 'openai'
         and tc.model = {sql_literal(model)}
         and tc.prompt_version = {sql_literal(prompt_version)}
         and tc.status = 'succeeded'
     )
-  order by ac.track_key, ac.chunk_index
+  order by wu.track_key, wu.start_ms, wu.unit_type, wu.unit_index
 ), stats as (
   select
     count(*)::int total_candidates,
+    count(*) filter (where unit_type = 'speech_slice')::int speech_slice_candidates,
+    count(*) filter (where unit_type = 'chunk')::int chunk_fallback_candidates,
     round((coalesce(sum(duration_ms), 0) / 60000.0)::numeric, 3) candidate_audio_minutes
   from candidates
 )
@@ -165,7 +168,7 @@ select json_build_object(
   'session', (select row_to_json(target_session) from target_session),
   'stats', (select row_to_json(stats) from stats),
   'chunks', coalesce((
-    select json_agg(row_to_json(row) order by row.track_key, row.chunk_index)
+    select json_agg(row_to_json(row) order by row.track_key, row.start_ms, row.unit_type, row.unit_index)
     from (select * from candidates limit {int(limit)}) row
   ), '[]'::json)
 );
@@ -173,12 +176,12 @@ select json_build_object(
     return run_json(database_url, sql) or {"session": None, "stats": {}, "chunks": []}
 
 
-def cache_entry(database_url: str, chunk: dict[str, Any], model: str, prompt_version: str) -> dict[str, Any] | None:
+def cache_entry(database_url: str, unit: dict[str, Any], model: str, prompt_version: str) -> dict[str, Any] | None:
     sql = f"""
 select row_to_json(row) from (
   select id::text, transcript_text, raw_response, provider_request_id
   from transcription_cache
-  where audio_sha256 = {sql_literal(chunk['sha256'])}
+  where audio_sha256 = {sql_literal(unit['sha256'])}
     and provider = 'openai'
     and model = {sql_literal(model)}
     and prompt_version = {sql_literal(prompt_version)}
@@ -222,11 +225,11 @@ where id = {sql_literal(job_id)}::uuid;
     )
 
 
-def estimate_cost(chunk: dict[str, Any], policy: dict[str, Any]) -> float | None:
+def estimate_cost(unit: dict[str, Any], policy: dict[str, Any]) -> float | None:
     per_minute = unit_cost(policy, "transcriptionAudioMinute")
     if per_minute is None:
         return None
-    minutes = (int(chunk.get("duration_ms") or 0) / 60000.0)
+    minutes = (int(unit.get("duration_ms") or 0) / 60000.0)
     return round(minutes * per_minute, 6)
 
 
@@ -234,7 +237,7 @@ def write_ledger(
     database_url: str,
     session: dict[str, Any],
     job_id: str,
-    chunk: dict[str, Any],
+    unit: dict[str, Any],
     model: str,
     status: str,
     estimated_cost: float | None,
@@ -242,7 +245,7 @@ def write_ledger(
     metadata: dict[str, Any],
     provider_request_id: str | None = None,
 ) -> None:
-    minutes = round((int(chunk.get("duration_ms") or 0) / 60000.0), 6)
+    minutes = round((int(unit.get("duration_ms") or 0) / 60000.0), 6)
     execute(
         database_url,
         f"""
@@ -258,7 +261,7 @@ insert into ai_usage_ledger (
   {sql_literal(model)},
   'transcription',
   {sql_literal(status)},
-  {sql_optional_text(chunk.get('sha256'))},
+  {sql_optional_text(unit.get('sha256'))},
   {sql_optional_text(provider_request_id)},
   {sql_optional_number(minutes if status != 'cached' else 0)},
   {sql_optional_number(estimated_cost)},
@@ -271,7 +274,7 @@ insert into ai_usage_ledger (
 
 def upsert_cache(
     database_url: str,
-    chunk: dict[str, Any],
+    unit: dict[str, Any],
     model: str,
     prompt_version: str,
     language: str | None,
@@ -282,11 +285,13 @@ def upsert_cache(
 ) -> str:
     usage = raw_response.get("usage") if isinstance(raw_response.get("usage"), dict) else {}
     metadata = {
-        "audioChunkId": chunk.get("audio_chunk_id"),
-        "sourceFileId": chunk.get("source_file_id"),
-        "trackKey": chunk.get("track_key"),
-        "chunkIndex": chunk.get("chunk_index"),
-        "storagePath": chunk.get("storage_path"),
+        "workUnitId": unit.get("work_unit_id"),
+        "unitType": unit.get("unit_type"),
+        "audioChunkId": unit.get("audio_chunk_id"),
+        "sourceFileId": unit.get("source_file_id"),
+        "trackKey": unit.get("track_key"),
+        "unitIndex": unit.get("unit_index"),
+        "storagePath": unit.get("storage_path"),
         "executor": "tools/run_transcription_job.py",
     }
     segments = raw_response.get("segments") if isinstance(raw_response.get("segments"), list) else []
@@ -299,8 +304,8 @@ insert into transcription_cache (
   input_audio_minutes, input_tokens, output_tokens, estimated_cost_usd, metadata,
   created_at, updated_at
 ) values (
-  {sql_literal(chunk['sha256'])},
-  {sql_optional_number(chunk.get('duration_ms'))},
+  {sql_literal(unit['sha256'])},
+  {sql_optional_number(unit.get('duration_ms'))},
   'openai',
   {sql_literal(model)},
   {sql_literal(prompt_version)},
@@ -310,7 +315,7 @@ insert into transcription_cache (
   {sql_json(segments)},
   {sql_json(raw_response)},
   {sql_optional_text(provider_request_id)},
-  {sql_optional_number(round((int(chunk.get('duration_ms') or 0) / 60000.0), 6))},
+  {sql_optional_number(round((int(unit.get('duration_ms') or 0) / 60000.0), 6))},
   {sql_optional_number(usage.get('input_tokens'))},
   {sql_optional_number(usage.get('output_tokens'))},
   {sql_optional_number(estimated_cost)},
@@ -341,20 +346,24 @@ returning id::text;
 def materialize_segment(
     database_url: str,
     session: dict[str, Any],
-    chunk: dict[str, Any],
+    unit: dict[str, Any],
     model: str,
     prompt_version: str,
+    language: str,
     transcript_text: str,
     cache_id: str | None,
 ) -> None:
     text = transcript_text.strip()
-    segment_id = f"openai:{model}:{prompt_version}:{chunk['audio_chunk_id']}"
+    segment_id = f"openai:{model}:{prompt_version}:{unit['work_unit_id']}"
     metadata = {
         "transcriptionCacheId": cache_id,
+        "workUnitId": unit.get("work_unit_id"),
+        "unitType": unit.get("unit_type"),
         "model": model,
         "promptVersion": prompt_version,
         "source": "transcription_executor",
     }
+    participant_sql = sql_literal(unit["participant_id"]) + "::uuid" if unit.get("participant_id") else "null"
     execute(
         database_url,
         f"""
@@ -365,21 +374,21 @@ insert into transcript_segments (
   text_chars, text_words, is_empty, needs_review, review_status, metadata
 ) values (
   {sql_literal(session['id'])}::uuid,
-  {sql_literal(chunk['participant_id']) + '::uuid' if chunk.get('participant_id') else 'null'},
-  {sql_optional_text(chunk.get('character_name'))},
-  {sql_literal(chunk['source_file_id'])}::uuid,
-  {sql_literal(chunk['audio_chunk_id'])}::uuid,
-  {int(chunk.get('start_ms') or 0)},
-  {int(chunk.get('end_ms') or 0)},
+  {participant_sql},
+  {sql_optional_text(unit.get('character_name'))},
+  {sql_literal(unit['source_file_id'])}::uuid,
+  {sql_literal(unit['audio_chunk_id'])}::uuid,
+  {int(unit.get('start_ms') or 0)},
+  {int(unit.get('end_ms') or 0)},
   {sql_literal(text)},
-  'pt',
+  {sql_optional_text(language)},
   {sql_literal(segment_id)},
-  {int(chunk.get('chunk_index') or 0)},
-  {sql_optional_text(chunk.get('track_key'))},
-  {sql_optional_text(chunk.get('player_name'))},
-  {sql_optional_text(chunk.get('speaker_role'))},
-  {sql_optional_text(chunk.get('storage_path'))},
-  {int(chunk.get('chunk_index') or 0)},
+  {int(unit.get('unit_index') or 0)},
+  {sql_optional_text(unit.get('track_key'))},
+  {sql_optional_text(unit.get('player_name'))},
+  {sql_optional_text(unit.get('speaker_role'))},
+  {sql_optional_text(unit.get('storage_path'))},
+  {int(unit.get('unit_index') or 0)},
   {len(text)},
   {len(re.findall(r'\S+', text))},
   {'true' if not text else 'false'},
@@ -399,17 +408,24 @@ do update set
     )
 
 
-def update_chunk_status(database_url: str, chunk: dict[str, Any], status: str, metadata: dict[str, Any] | None = None) -> None:
+def update_work_unit_status(database_url: str, unit: dict[str, Any], status: str, metadata: dict[str, Any] | None = None) -> None:
     metadata_sql = "metadata"
     if metadata:
         metadata_sql = f"coalesce(metadata, '{{}}'::jsonb) || {sql_json(metadata)}"
+    if unit.get("unit_type") == "speech_slice":
+        table = "audio_speech_slices"
+        key = "work_unit_id"
+    else:
+        table = "audio_chunks"
+        key = "audio_chunk_id"
     execute(
         database_url,
         f"""
-update audio_chunks
+update {table}
 set transcription_status = {sql_literal(status)},
-    metadata = {metadata_sql}
-where id = {sql_literal(chunk['audio_chunk_id'])}::uuid;
+    metadata = {metadata_sql},
+    updated_at = now()
+where id = {sql_literal(unit[key])}::uuid;
 """,
     )
 
@@ -425,9 +441,7 @@ def encode_multipart(fields: dict[str, str], file_path: Path) -> tuple[bytes, st
 
     mime_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
     body.extend(f"--{boundary}\r\n".encode())
-    body.extend(
-        f'Content-Disposition: form-data; name="file"; filename="{file_path.name}"\r\n'.encode()
-    )
+    body.extend(f'Content-Disposition: form-data; name="file"; filename="{file_path.name}"\r\n'.encode())
     body.extend(f"Content-Type: {mime_type}\r\n\r\n".encode())
     body.extend(file_path.read_bytes())
     body.extend(b"\r\n")
@@ -443,11 +457,7 @@ def openai_transcribe(
     prompt: str | None,
     timeout: int,
 ) -> tuple[dict[str, Any], str | None]:
-    fields = {
-        "model": model,
-        "response_format": "json",
-        "temperature": "0",
-    }
+    fields = {"model": model, "response_format": "json", "temperature": "0"}
     if language:
         fields["language"] = language
     if prompt:
@@ -492,99 +502,92 @@ def handle_cache_hit(
     database_url: str,
     session: dict[str, Any],
     job_id: str,
-    chunk: dict[str, Any],
+    unit: dict[str, Any],
     model: str,
     prompt_version: str,
+    language: str,
     cache: dict[str, Any],
 ) -> dict[str, Any]:
     transcript_text = str(cache.get("transcript_text") or "")
-    materialize_segment(database_url, session, chunk, model, prompt_version, transcript_text, cache.get("id"))
-    update_chunk_status(database_url, chunk, "cached", {"transcriptionCacheId": cache.get("id")})
+    materialize_segment(database_url, session, unit, model, prompt_version, language, transcript_text, cache.get("id"))
+    update_work_unit_status(database_url, unit, "cached", {"transcriptionCacheId": cache.get("id")})
     write_ledger(
         database_url,
         session,
         job_id,
-        chunk,
+        unit,
         model,
         "cached",
         0,
         0,
-        {"audioChunkId": chunk.get("audio_chunk_id"), "cacheId": cache.get("id"), "reason": "cache_hit_before_call"},
+        {"workUnitId": unit.get("work_unit_id"), "unitType": unit.get("unit_type"), "cacheId": cache.get("id"), "reason": "cache_hit_before_call"},
         cache.get("provider_request_id"),
     )
-    return {"audioChunkId": chunk.get("audio_chunk_id"), "action": "cache_hit", "cacheId": cache.get("id")}
+    return {"workUnitId": unit.get("work_unit_id"), "unitType": unit.get("unit_type"), "action": "cache_hit", "cacheId": cache.get("id")}
 
 
-def transcribe_chunk(
+def transcribe_unit(
     database_url: str,
     session: dict[str, Any],
     job_id: str,
-    chunk: dict[str, Any],
+    unit: dict[str, Any],
     policy: dict[str, Any],
     api_key: str,
     model: str,
     prompt_version: str,
-    language: str | None,
+    language: str,
     prompt: str | None,
     max_file_bytes: int,
     timeout: int,
     execute_mode: bool,
 ) -> dict[str, Any]:
-    path = resolve_path(chunk["storage_path"])
+    path = resolve_path(unit["storage_path"])
     base = {
-        "audioChunkId": chunk.get("audio_chunk_id"),
-        "trackKey": chunk.get("track_key"),
-        "chunkIndex": chunk.get("chunk_index"),
+        "workUnitId": unit.get("work_unit_id"),
+        "unitType": unit.get("unit_type"),
+        "audioChunkId": unit.get("audio_chunk_id"),
+        "trackKey": unit.get("track_key"),
+        "unitIndex": unit.get("unit_index"),
         "path": str(path),
     }
 
     if not path.exists():
         message = f"Local audio file not found: {path}"
         if execute_mode:
-            update_chunk_status(database_url, chunk, "failed", {"error": message})
-            write_ledger(database_url, session, job_id, chunk, model, "failed", estimate_cost(chunk, policy), None, {**base, "error": message})
+            update_work_unit_status(database_url, unit, "failed", {"error": message})
+            write_ledger(database_url, session, job_id, unit, model, "failed", estimate_cost(unit, policy), None, {**base, "error": message})
         return {**base, "action": "missing_file", "error": message}
 
     size = path.stat().st_size
     if size > max_file_bytes:
-        message = f"Audio chunk exceeds max file size: {size} bytes"
+        message = f"Audio work unit exceeds max file size: {size} bytes"
         if execute_mode:
-            update_chunk_status(database_url, chunk, "failed", {"error": message, "sizeBytes": size})
-            write_ledger(database_url, session, job_id, chunk, model, "failed", estimate_cost(chunk, policy), None, {**base, "error": message, "sizeBytes": size})
+            update_work_unit_status(database_url, unit, "failed", {"error": message, "sizeBytes": size})
+            write_ledger(database_url, session, job_id, unit, model, "failed", estimate_cost(unit, policy), None, {**base, "error": message, "sizeBytes": size})
         return {**base, "action": "too_large", "sizeBytes": size, "error": message}
 
-    cache = cache_entry(database_url, chunk, model, prompt_version)
+    cache = cache_entry(database_url, unit, model, prompt_version)
     if cache:
         if execute_mode:
-            return handle_cache_hit(database_url, session, job_id, chunk, model, prompt_version, cache)
+            return handle_cache_hit(database_url, session, job_id, unit, model, prompt_version, language, cache)
         return {**base, "action": "cache_hit", "cacheId": cache.get("id")}
 
-    estimated = estimate_cost(chunk, policy)
+    estimated = estimate_cost(unit, policy)
     if not execute_mode:
-        return {**base, "action": "would_transcribe", "durationMs": chunk.get("duration_ms"), "estimatedCostUsd": estimated}
+        return {**base, "action": "would_transcribe", "durationMs": unit.get("duration_ms"), "estimatedCostUsd": estimated}
 
     try:
         raw_response, request_id = openai_transcribe(api_key, path, model, language, prompt, timeout)
         transcript_text = str(raw_response.get("text") or "")
-        cache_id = upsert_cache(
-            database_url,
-            chunk,
-            model,
-            prompt_version,
-            language,
-            transcript_text,
-            raw_response,
-            request_id,
-            estimated,
-        )
-        materialize_segment(database_url, session, chunk, model, prompt_version, transcript_text, cache_id)
-        update_chunk_status(database_url, chunk, "transcribed", {"transcriptionCacheId": cache_id, "providerRequestId": request_id})
+        cache_id = upsert_cache(database_url, unit, model, prompt_version, language, transcript_text, raw_response, request_id, estimated)
+        materialize_segment(database_url, session, unit, model, prompt_version, language, transcript_text, cache_id)
+        update_work_unit_status(database_url, unit, "transcribed", {"transcriptionCacheId": cache_id, "providerRequestId": request_id})
         actual = response_actual_cost(raw_response)
         write_ledger(
             database_url,
             session,
             job_id,
-            chunk,
+            unit,
             model,
             "succeeded",
             estimated,
@@ -598,8 +601,8 @@ def transcribe_chunk(
     except Exception as error:
         message = str(error)
 
-    update_chunk_status(database_url, chunk, "failed", {"error": message})
-    write_ledger(database_url, session, job_id, chunk, model, "failed", estimated, None, {**base, "error": message})
+    update_work_unit_status(database_url, unit, "failed", {"error": message})
+    write_ledger(database_url, session, job_id, unit, model, "failed", estimated, None, {**base, "error": message})
     return {**base, "action": "failed", "error": message}
 
 
@@ -645,7 +648,7 @@ def main() -> int:
     if not session:
         raise SystemExit(f"Session not found: {args.campaign}/{args.source_session_id}")
 
-    chunks = work.get("chunks") or []
+    units = work.get("chunks") or []
     job_id = ""
     if args.execute:
         job_id = create_job(
@@ -658,6 +661,7 @@ def main() -> int:
                 "limit": args.limit,
                 "language": args.language,
                 "maxFileMiB": args.max_file_mib,
+                "workUnitMode": "audio_transcription_work_units",
             },
         )
 
@@ -665,12 +669,12 @@ def main() -> int:
     max_file_bytes = int(args.max_file_mib * 1024 * 1024)
     prompt = None if args.no_prompt else args.prompt
     failed = False
-    for chunk in chunks:
-        result = transcribe_chunk(
+    for unit in units:
+        result = transcribe_unit(
             database_url,
             session,
             job_id,
-            chunk,
+            unit,
             policy,
             api_key,
             model,
@@ -697,23 +701,26 @@ def main() -> int:
         "results": results,
     }
     if args.execute:
-        finish_job(database_url, job_id, "failed" if failed else "succeeded", output, "one_or_more_chunks_failed" if failed else None)
+        finish_job(database_url, job_id, "failed" if failed else "succeeded", output, "one_or_more_units_failed" if failed else None)
 
     if args.json:
         print(json.dumps(output, ensure_ascii=False, indent=2))
     else:
+        stats = work.get("stats") or {}
         print(f"execute={str(args.execute).lower()}")
         print(f"session={session['source_session_id']}")
         print(f"model={model}")
-        print(f"total_candidates={((work.get('stats') or {}).get('total_candidates') or 0)}")
-        print(f"candidate_audio_minutes={((work.get('stats') or {}).get('candidate_audio_minutes') or 0)}")
+        print(f"total_candidates={stats.get('total_candidates') or 0}")
+        print(f"speech_slice_candidates={stats.get('speech_slice_candidates') or 0}")
+        print(f"chunk_fallback_candidates={stats.get('chunk_fallback_candidates') or 0}")
+        print(f"candidate_audio_minutes={stats.get('candidate_audio_minutes') or 0}")
         print(f"processed={len(results)}")
         if job_id:
             print(f"processing_job_id={job_id}")
         for result in results:
             print(
-                f"{result.get('action')} {result.get('trackKey')}#{result.get('chunkIndex')} "
-                f"chunk={result.get('audioChunkId')} cost={result.get('estimatedCostUsd')}"
+                f"{result.get('action')} {result.get('unitType')} {result.get('trackKey')}#{result.get('unitIndex')} "
+                f"unit={result.get('workUnitId')} cost={result.get('estimatedCostUsd')}"
             )
     return 1 if failed else 0
 
