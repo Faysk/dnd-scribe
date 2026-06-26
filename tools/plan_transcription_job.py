@@ -151,7 +151,7 @@ def estimate_cost(minutes: float, policy: dict[str, Any]) -> float | None:
 
 def build_plan(session: dict[str, Any], chunks: list[dict[str, Any]], policy: dict[str, Any], model: str, prompt_version: str) -> dict[str, Any]:
     planned_chunks: list[dict[str, Any]] = []
-    counts = {"total": 0, "skipSilence": 0, "cacheHit": 0, "transcribe": 0, "missingHash": 0}
+    counts = {"total": 0, "skipSilence": 0, "cacheHit": 0, "transcribe": 0, "missingHash": 0, "blockedMissingHash": 0}
     billable_ms = 0
 
     for chunk in chunks:
@@ -159,7 +159,9 @@ def build_plan(session: dict[str, Any], chunks: list[dict[str, Any]], policy: di
         reason = "transcribe_missing_cache"
         action = "transcribe"
         if not chunk.get("sha256"):
+            action = "blocked"
             counts["missingHash"] += 1
+            counts["blockedMissingHash"] += 1
             reason = "missing_sha256"
         elif chunk.get("probably_silent") is True:
             action = "skip"
@@ -229,7 +231,7 @@ def write_ledger(database_url: str, plan: dict[str, Any], job_id: str, policy: d
     for chunk in plan["chunks"]:
         duration_ms = int(chunk.get("durationMs") or 0)
         minutes = round(duration_ms / 60000, 6) if chunk["action"] == "transcribe" else 0
-        if chunk["action"] == "skip":
+        if chunk["action"] in {"skip", "blocked"}:
             status = "skipped"
             estimated = "null"
         elif chunk["action"] == "cache_hit":
@@ -243,6 +245,7 @@ def write_ledger(database_url: str, plan: dict[str, Any], job_id: str, policy: d
             "sourceFileId": chunk.get("sourceFileId"),
             "trackKey": chunk.get("trackKey"),
             "chunkIndex": chunk.get("chunkIndex"),
+            "action": chunk.get("action"),
             "reason": chunk.get("reason"),
             "cacheId": chunk.get("cacheId"),
         }
@@ -312,6 +315,7 @@ def main() -> int:
         print(f"chunks_total={plan['counts']['total']}")
         print(f"chunks_skip_silence={plan['counts']['skipSilence']}")
         print(f"chunks_cache_hit={plan['counts']['cacheHit']}")
+        print(f"chunks_blocked_missing_hash={plan['counts']['blockedMissingHash']}")
         print(f"chunks_transcribe={plan['counts']['transcribe']}")
         print(f"billable_audio_minutes={plan['billableAudioMinutes']}")
         if plan.get("estimatedCostUsd") is None:
