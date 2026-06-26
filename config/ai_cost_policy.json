@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "name": "DND Scribe OpenAI cost policy",
+  "mode": "economy_first",
+  "officialPricingUrl": "https://openai.com/api/pricing/",
+  "officialBatchDocsUrl": "https://platform.openai.com/docs/guides/batch",
+  "officialPromptCachingDocsUrl": "https://platform.openai.com/docs/guides/prompt-caching",
+  "modelRouting": {
+    "transcription": {
+      "defaultModel": "gpt-4o-mini-transcribe",
+      "qualityRescueModel": "gpt-4o-transcribe",
+      "legacyFallbackModel": "whisper-1",
+      "qualityRescuePolicy": "only_for_failed_or_low_confidence_chunks"
+    },
+    "classification": {
+      "defaultTier": "nano_or_cheapest_current_text_model",
+      "balancedTier": "mini_current_text_model",
+      "premiumTier": "full_current_text_model",
+      "premiumPolicy": "dm_approval_required"
+    },
+    "summarization": {
+      "defaultTier": "mini_current_text_model",
+      "premiumTier": "full_current_text_model",
+      "premiumPolicy": "only_for_final_dm_digest_or_complex_retcon"
+    },
+    "embeddings": {
+      "defaultTier": "small_current_embedding_model",
+      "policy": "only_after_transcript_is_deduplicated_and_canonical_ids_exist"
+    }
+  },
+  "guards": {
+    "requireEstimateBeforeRun": true,
+    "requireExplicitApprovalForPremiumModel": true,
+    "requireExplicitApprovalAboveUsd": 5.0,
+    "monthlySoftBudgetUsd": 25.0,
+    "monthlyHardBudgetUsd": 50.0,
+    "defaultMaxAudioMinutesPerRun": 180,
+    "defaultMaxChunksPerRun": 300,
+    "preferBatchForAsyncJobs": true,
+    "storeProviderRequestIds": true,
+    "storeEstimatedCost": true,
+    "storeActualUsageWhenAvailable": true
+  },
+  "audioPreprocessing": {
+    "convertToMono": true,
+    "sampleRateHz": 16000,
+    "chunkSeconds": 300,
+    "skipSilentChunks": true,
+    "minimumSpeechSecondsPerChunk": 5,
+    "deduplicateChunksBySha256": true,
+    "reuseTranscriptByAudioHash": true,
+    "sampleFirstMinutesBeforeFullRun": 10
+  },
+  "promptPolicy": {
+    "keepStableInstructionsAtPromptStart": true,
+    "doNotSendFullSessionForSegmentTasks": true,
+    "sendOnlyRelevantWindowForClassification": true,
+    "reuseCanonicalGlossaryAcrossCalls": true,
+    "separateExtractionFromNarrativeWriting": true
+  },
+  "estimation": {
+    "assumedSpeechRatio": 0.7,
+    "assumedTranscriptTokensPerMinute": 180,
+    "assumedClassificationOutputTokensPerSegment": 80,
+    "assumedSummaryOutputTokensPerSession": 1800,
+    "unitCostsUsd": {
+      "transcriptionAudioMinute": null,
+      "classificationInputMillionTokens": null,
+      "classificationOutputMillionTokens": null,
+      "summaryInputMillionTokens": null,
+      "summaryOutputMillionTokens": null
+    },
+    "note": "Keep unit costs null in the public repo. Copy current values from the official pricing page into local/private config before running paid jobs."
+  }
+}
