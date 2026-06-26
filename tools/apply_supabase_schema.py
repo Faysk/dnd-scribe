@@ -19,6 +19,7 @@ DEFAULT_SCHEMA_FILES = [
     Path("schemas/20260626_007_historical_import.sql"),
     Path("schemas/20260626_008_canon_entries.sql"),
     Path("schemas/20260626_009_ai_cost_cache.sql"),
+    Path("schemas/20260626_010_audio_speech_slices.sql"),
 ]
 
 
