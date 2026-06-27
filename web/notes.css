@@ -1,0 +1,80 @@
+.notes-page {
+  display: grid;
+  gap: 16px;
+}
+
+.notes-title {
+  align-items: flex-start;
+}
+
+.notes-title h2 {
+  margin: 4px 0 0;
+  font-size: 24px;
+}
+
+.notes-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.notes-toolbar select,
+.notes-toolbar button {
+  min-height: 36px;
+}
+
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.notes-summary {
+  align-self: start;
+}
+
+.note-card {
+  align-self: start;
+}
+
+.note-card.pending {
+  border-color: rgba(214, 158, 46, 0.35);
+}
+
+.note-card.approved,
+.note-card.converted {
+  border-color: rgba(47, 133, 90, 0.35);
+}
+
+.note-card.rejected,
+.note-card.private {
+  border-color: rgba(197, 48, 48, 0.35);
+}
+
+.note-body p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.note-editor textarea {
+  min-height: 140px;
+}
+
+.notes-empty {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .notes-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .notes-toolbar select,
+  .notes-toolbar button {
+    width: 100%;
+  }
+}
