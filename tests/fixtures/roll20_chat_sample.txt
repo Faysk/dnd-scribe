@@ -1,0 +1,6 @@
+[21:04] Dandelion: !dnd sessao estado:inicio titulo:"Estradas de Cinza"
+[21:18] Astel: !dnd acao personagem:"Astel" texto:"Investigou o simbolo no altar"
+[21:31] GM: !dnd canon tipo:npc texto:"O ferreiro reconhece o selo antigo"
+[22:02] GM: !dnd dm tipo:gancho texto:"A testemunha sabe mais do que contou"
+[22:40] Dandelion: conversa comum sem comando
+[23:05] Feh: !dnd audio prioridade:alta motivo:"Cena importante"
