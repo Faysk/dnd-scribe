@@ -60,9 +60,8 @@ Known channels:
 - `DISCORD_RECORDINGS_CHANNEL_ID=1389718366880792761`
   - Name: `rec`
   - Type: text channel
-  - Bot access: still blocked with 403 `Missing Access`
-  - Permission detail: `@everyone` has `View Channel` denied on the channel, and the managed role `DND-SCRIBE` does not have an explicit channel allow yet.
-  - Required fix: allow `DND-SCRIBE` on this channel or its category with `View Channel`, `Send Messages`, `Embed Links`, `Attach Files`, and `Read Message History`.
+  - Bot access: OK
+  - Message send test: OK
 
 ## Recommended channel layout
 
@@ -109,7 +108,7 @@ Validated with Discord API:
 - Guild commands: OK
 - DnD voice channel: visible to bot
 - Ops/logs channel: visible and writable
-- Recordings channel `rec`: visible in guild channel list, but direct channel access and message send are blocked by channel overwrite.
+- Recordings channel `rec`: initially blocked by channel overwrite; later revalidated as visible and writable after the `DND-SCRIBE` role was allowed.
 
 ## Vercel environment sync
 
@@ -120,3 +119,30 @@ Synced variables:
 - `DISCORD_DND_CHANNEL_ID`
 - `DISCORD_RECORDINGS_CHANNEL_ID`
 - `DISCORD_OPS_CHANNEL_ID`
+
+## Revalidation after channel permission update
+
+After granting the bot access to `rec`, validation returned:
+
+- Bot identity: OK
+- Guild access: OK
+- Commands registered: OK
+- `rec` channel access: OK
+- `rec` message send: OK
+- `dnd-scribe-logs` channel access: OK
+- `dnd-scribe-logs` message send: OK
+- Webhook notification: OK
+- Production interactions health: `configured:true`
+
+Local command handler checks:
+
+- `/dnd status`: returned ephemeral session status response.
+- `/dnd vincular`: returned ephemeral Discord-first link guidance.
+
+Checks run:
+
+```bash
+npm run check:api
+npm run check:web
+npm run build
+```
