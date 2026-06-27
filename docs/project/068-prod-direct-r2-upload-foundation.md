@@ -94,6 +94,12 @@ Resultados:
 - rota local `/api/craig-map` testada com mock de `pg`, retornando 5 tracks.
 - CORS R2 aplicado com sucesso.
 - rota aninhada de upload precisou de endpoints fisicos em `api/uploads/` para evitar 404 da Vercel.
+- deploy de producao final: `dpl_CwzDAjkB5FhesZ7bmviqJXb4bWvq`.
+- alias final confirmado: `https://dnd.faysk.dev`.
+- `GET /api/health`: 200.
+- `GET /api/craig-map`: 200, modo `deploy_config_readonly`, 5 tracks.
+- `GET /api/jobs`: 200, lendo `processing_jobs` do Supabase.
+- `POST /api/uploads/craig-url` com sessao inexistente: 404 JSON da propria API, confirmando roteamento correto.
 
 ## Riscos e residuos
 
