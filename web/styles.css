@@ -373,6 +373,61 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
+.roll20-review-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr);
+  gap: 12px;
+  align-items: start;
+}
+.roll20-toolbar {
+  grid-template-columns: minmax(260px, 1fr) 190px auto;
+}
+.roll20-event-list {
+  display: grid;
+  gap: 10px;
+}
+.roll20-review-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  padding: 12px;
+}
+.roll20-review-card.private {
+  border-color: #7c6230;
+  background: #19160e;
+}
+.roll20-review-card h2 {
+  font-size: 1rem;
+}
+.roll20-review-card code {
+  display: block;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #070a0f;
+  color: var(--muted);
+  padding: 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .8rem;
+}
+.roll20-review-meta, .roll20-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.roll20-review-meta div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 8px;
+}
+.roll20-review-meta strong {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
 .plain-list {
   margin: 10px 0 0;
   padding-left: 18px;
@@ -529,6 +584,7 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   .rail { position: relative; height: auto; }
   .session-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .status-strip, .candidate-grid, .publication-grid, .ops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .roll20-review-layout { grid-template-columns: 1fr; }
   .review-layout { grid-template-columns: 1fr; }
   .session-manager { grid-template-columns: 1fr; }
   .segment-list { max-height: none; }
@@ -537,7 +593,7 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .workspace { padding: 12px 12px 118px; }
   .rail { padding: 12px; }
-  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .session-list, .session-row {
+  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row {
     grid-template-columns: 1fr;
   }
   .top-actions {

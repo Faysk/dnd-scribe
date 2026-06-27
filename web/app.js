@@ -43,6 +43,8 @@ const state = {
   status: 'all',
   candidateKind: 'all',
   candidateStatus: 'all',
+  roll20Type: 'all',
+  roll20Query: '',
   selectedSegmentId: null,
   segmentDecisions: {},
   candidateDecisions: {},
@@ -756,6 +758,7 @@ function renderSessions() {
       <div class="session-meta">
         ${badge(`${session.segments || 0} seg`, 'blue')}
         ${badge(`${session.aiCandidates || 0} IA`, 'violet')}
+        ${badge(`${session.roll20Events || 0} Roll20`, 'green')}
         ${badge(`${session.reviewDecisions || 0} decisoes`, 'gold')}
       </div>
     </button>
@@ -786,6 +789,7 @@ function render() {
     sessions: renderSessionsManager,
     review: renderReview,
     candidates: renderCandidates,
+    roll20: renderRoll20Review,
     publications: renderPublications,
     ops: renderOps
   };
@@ -842,6 +846,7 @@ function renderStatusStrip() {
     ${metric(review?.summary?.participants || 0, 'participantes')}
     ${metric(review?.ai?.summary?.canonCandidates || 0, 'canon IA')}
     ${metric((review?.ai?.summary?.quoteCandidates || 0) + (review?.ai?.summary?.outtakeCandidates || 0), 'falas/bastidores')}
+    ${metric(review?.roll20Events?.length || 0, 'eventos Roll20')}
     ${metric(summary.reviewDecisions || 0, 'decisoes salvas')}
     ${metric(counts.segments + counts.candidates, 'rascunho local', hasDraftChanges() ? 'dirty' : '')}
   `;
@@ -1063,6 +1068,7 @@ function sessionCatalogRow(session) {
         ${badge(sessionStatusLabel(session.status), session.status === 'failed' ? 'red' : 'blue')}
         ${badge(`${session.participants || 0} participantes`, 'green')}
         ${badge(`${session.segments || 0} seg`, 'violet')}
+        ${badge(`${session.roll20Events || 0} Roll20`, 'green')}
       </div>
     </button>
   `;
@@ -1653,6 +1659,144 @@ function setCandidateDecision(targetType, sourceCandidateId, noteId, decision) {
   render();
 }
 
+function eventTypeLabel(type = '') {
+  return {
+    session_marker: 'Sessao',
+    character_action_candidate: 'Acao',
+    canon_candidate: 'Canon',
+    dm_backstage_note: 'DM',
+    audio_processing_hint: 'Audio',
+    raw_roll20_note: 'Nota',
+    invalid_roll20_command: 'Invalido'
+  }[type] || type || 'Evento';
+}
+
+function eventTypeTone(type = '') {
+  if (type === 'dm_backstage_note') return 'gold';
+  if (type === 'canon_candidate') return 'violet';
+  if (type === 'character_action_candidate') return 'green';
+  if (type === 'audio_processing_hint') return 'blue';
+  if (type === 'invalid_roll20_command') return 'red';
+  return 'blue';
+}
+
+function roll20EventText(event) {
+  return event.text
+    || event.payload?.text
+    || event.payload?.args?.motivo
+    || event.payload?.args?.titulo
+    || event.payload?.rawCommand
+    || event.raw_line
+    || '';
+}
+
+function roll20EventCommand(event) {
+  return event.payload?.command || event.payload?.rawCommand?.split(/\s+/)?.[0] || '';
+}
+
+function roll20TypeOptions(events) {
+  const types = Array.from(new Set(events.map(event => event.event_type).filter(Boolean))).sort();
+  return ['all', ...types].map(type => {
+    const label = type === 'all' ? 'Todos tipos' : eventTypeLabel(type);
+    return `<option value="${escapeHtml(type)}" ${state.roll20Type === type ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+  }).join('');
+}
+
+function filteredRoll20Events() {
+  const query = state.roll20Query.trim().toLowerCase();
+  return (state.review?.roll20Events || []).filter(event => {
+    const text = [
+      event.event_type,
+      event.roll20_who,
+      event.character_name,
+      event.source_event_id,
+      roll20EventCommand(event),
+      roll20EventText(event),
+      event.raw_line
+    ].join(' ').toLowerCase();
+    return (state.roll20Type === 'all' || event.event_type === state.roll20Type)
+      && (!query || text.includes(query));
+  });
+}
+
+function renderRoll20Review() {
+  const allEvents = state.review?.roll20Events || [];
+  const events = filteredRoll20Events();
+  const counts = allEvents.reduce((acc, event) => {
+    acc[event.event_type || 'raw_roll20_note'] = (acc[event.event_type || 'raw_roll20_note'] || 0) + 1;
+    return acc;
+  }, {});
+  return `
+    <section class="toolbar roll20-toolbar">
+      <input value="${escapeHtml(state.roll20Query)}" placeholder="Buscar speaker, personagem, texto, source id..." oninput="state.roll20Query=this.value; render();" />
+      <select onchange="state.roll20Type=this.value; render();">
+        ${roll20TypeOptions(allEvents)}
+      </select>
+      <a class="button-link" href="/roll20.html">Importar chat</a>
+    </section>
+    <section class="roll20-review-layout">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Eventos Roll20</h2>
+          <div class="badges">${badge(`${events.length}/${allEvents.length}`, 'blue')}${badge('producao', 'green')}</div>
+        </div>
+        <div class="panel-body roll20-event-list">
+          ${events.map(roll20EventCard).join('') || renderRoll20Empty()}
+        </div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><h2>Resumo</h2>${badge('sem IA', 'green')}</div>
+        <div class="panel-body">
+          <div class="roll20-metric-grid">
+            ${metric(allEvents.length, 'total')}
+            ${metric(counts.canon_candidate || 0, 'canon')}
+            ${metric(counts.dm_backstage_note || 0, 'DM')}
+            ${metric(counts.character_action_candidate || 0, 'acoes')}
+          </div>
+          <div class="empty">Eventos gravados aqui ainda sao materia-prima de review. Nada vira canon final sem decisao do DM.</div>
+          <div class="actions">
+            <a class="button-link primary" href="/roll20.html">Validar ou gravar novo chat</a>
+          </div>
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function renderRoll20Empty() {
+  return `
+    <div class="empty">
+      Nenhum evento Roll20 nesta sessao.
+    </div>
+  `;
+}
+
+function roll20EventCard(event) {
+  const text = roll20EventText(event);
+  const command = roll20EventCommand(event);
+  const raw = event.payload?.rawLine || event.raw_line || '';
+  return `
+    <article class="roll20-review-card ${event.event_type === 'dm_backstage_note' ? 'private' : ''}">
+      <div class="row between">
+        <div>
+          <span class="label">${escapeHtml(event.source_event_id || event.id || '')}</span>
+          <h2>${escapeHtml(text || eventTypeLabel(event.event_type))}</h2>
+        </div>
+        <div class="badges">
+          ${badge(eventTypeLabel(event.event_type), eventTypeTone(event.event_type))}
+          ${command ? badge(command, 'blue') : ''}
+        </div>
+      </div>
+      <div class="roll20-review-meta">
+        <div><span class="label">Speaker</span><strong>${escapeHtml(event.roll20_who || '-')}</strong></div>
+        <div><span class="label">Personagem</span><strong>${escapeHtml(event.character_name || event.payload?.targetCharacter || '-')}</strong></div>
+        <div><span class="label">Criado</span><strong>${escapeHtml(event.created_at_roll20 || event.created_at || '-')}</strong></div>
+      </div>
+      ${raw ? `<code>${escapeHtml(raw)}</code>` : ''}
+    </article>
+  `;
+}
+
 function renderPublications() {
   const publications = state.review?.ai?.publications || [];
   return `
@@ -1721,13 +1865,14 @@ function renderRoll20Events() {
       ${events.slice(0, 10).map(event => `
         <div class="job-row">
           <div class="row between">
-            <strong>${escapeHtml(event.event_type || 'evento')}</strong>
-            ${event.approx_start_ms !== null && event.approx_start_ms !== undefined ? badge(fmtDuration(event.approx_start_ms), 'blue') : ''}
+            <strong>${escapeHtml(eventTypeLabel(event.event_type))}</strong>
+            <div class="badges">${badge(event.event_type || 'evento', eventTypeTone(event.event_type))}</div>
           </div>
           <small>${escapeHtml(event.roll20_who || 'Roll20')}</small>
-          <p>${escapeHtml(event.text || '')}</p>
+          <p>${escapeHtml(roll20EventText(event))}</p>
         </div>
       `).join('')}
+      ${events.length > 10 ? `<div class="empty">Mais ${events.length - 10} eventos na aba Roll20.</div>` : ''}
     </div>
   `;
 }

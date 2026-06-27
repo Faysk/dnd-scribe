@@ -1129,6 +1129,7 @@ select coalesce(json_agg(item order by item->>'sessionDate' desc nulls last, ite
     'segments', (select count(*) from transcript_segments ts where ts.session_id = s.id and ts.is_empty = false),
     'participants', (select count(*) from participants p where p.session_id = s.id),
     'recordingFiles', (select count(*) from recording_files rf where rf.session_id = s.id),
+    'roll20Events', (select count(*) from roll20_events re where re.session_id = s.id),
     'aiCandidates', (
       (select count(*) from canon_candidates cc where cc.session_id = s.id and cc.source_run_id = $2) +
       (select count(*) from quote_candidates qc where qc.session_id = s.id and qc.source_run_id = $2) +
