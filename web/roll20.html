@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Roll20 Import — DnD Scribe</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/roll20.css" />
+</head>
+<body>
+  <main class="roll20-tool">
+    <header class="roll20-header">
+      <div>
+        <span class="label">Roll20</span>
+        <h1>Importar chat da mesa</h1>
+        <p>Preview local para comandos <code>!dnd</code>. Nada sai do navegador nesta etapa.</p>
+      </div>
+      <div class="roll20-header-actions">
+        <a class="button-link" href="/">Voltar</a>
+        <button id="sampleBtn">Exemplo</button>
+        <button id="parseBtn" class="primary">Processar</button>
+      </div>
+    </header>
+
+    <section class="roll20-grid">
+      <form class="roll20-input-panel" id="roll20Form">
+        <div class="field-grid">
+          <label>
+            <span class="label">Campanha</span>
+            <input id="campaignSlug" value="yuhara-main" autocomplete="off" />
+          </label>
+          <label>
+            <span class="label">Sessao</span>
+            <input id="sourceSessionId" placeholder="opcional" autocomplete="off" />
+          </label>
+          <label>
+            <span class="label">Prefixo</span>
+            <input id="commandPrefix" value="!dnd" autocomplete="off" />
+          </label>
+        </div>
+        <label>
+          <span class="label">Chat copiado do Roll20</span>
+          <textarea id="chatInput" spellcheck="false" placeholder="Cole aqui linhas do chat com comandos !dnd"></textarea>
+        </label>
+        <div class="roll20-actions">
+          <button type="submit" class="primary">Gerar preview</button>
+          <button type="button" id="copyJsonBtn">Copiar JSON</button>
+          <button type="button" id="downloadJsonBtn">Baixar JSON</button>
+          <button type="button" id="clearBtn">Limpar</button>
+        </div>
+      </form>
+
+      <aside class="roll20-summary" id="summaryPanel">
+        <div class="empty">Cole o chat e gere o preview.</div>
+      </aside>
+    </section>
+
+    <section class="roll20-results">
+      <div class="roll20-results-head">
+        <div>
+          <span class="label">Eventos</span>
+          <h2>Preview normalizado</h2>
+        </div>
+        <span id="resultCount" class="badge blue">0 eventos</span>
+      </div>
+      <div id="eventsList" class="roll20-events"></div>
+    </section>
+
+    <section class="roll20-json-panel">
+      <div class="roll20-results-head">
+        <div>
+          <span class="label">Saida</span>
+          <h2>JSON para etapa de ingestao</h2>
+        </div>
+      </div>
+      <pre id="jsonOutput">{}</pre>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/roll20.js"></script>
+</body>
+</html>
