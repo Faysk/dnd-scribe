@@ -2238,6 +2238,269 @@ select coalesce(json_agg(item order by item->>'source_publication_id'), '[]'::js
   };
 }
 
+function splitTextIntoPhrases(text) {
+  const clean = cleanText(text, 20000);
+  if (!clean) return [];
+  const matches = clean.match(/[^.!?;:\n]+[.!?;:]?/g) || [clean];
+  const phrases = matches.map(item => item.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  if (phrases.length <= 1) return phrases;
+  const compact = [];
+  for (const phrase of phrases) {
+    const previous = compact[compact.length - 1] || '';
+    if (phrase.length < 18 && previous && `${previous} ${phrase}`.length <= 160) {
+      compact[compact.length - 1] = `${previous} ${phrase}`;
+    } else {
+      compact.push(phrase);
+    }
+  }
+  return compact;
+}
+
+function phraseTimelineItems(segment) {
+  const text = cleanText(segment.text, 20000);
+  if (!text) return [];
+  const startMs = Number(segment.start_ms || 0);
+  const endMs = Number(segment.end_ms || startMs);
+  const durationMs = Math.max(0, endMs - startMs);
+  const phrases = splitTextIntoPhrases(text);
+  if (!phrases.length) return [];
+  if (phrases.length === 1 || durationMs < 2500) {
+    return [{
+      id: `${segment.id || segment.source_segment_id}:phrase:0`,
+      segmentId: segment.id || segment.source_segment_id,
+      sourceSegmentId: segment.source_segment_id || null,
+      phraseIndex: 0,
+      trackKey: segment.track_key || null,
+      speakerName: segment.speaker_name || null,
+      characterName: segment.character_name || null,
+      startMs,
+      endMs,
+      durationMs,
+      text,
+      confidence: segment.raw_confidence || null,
+      timingMode: 'segment_exact'
+    }];
+  }
+  const totalWeight = phrases.reduce((sum, phrase) => sum + Math.max(1, phrase.length), 0);
+  let cursor = startMs;
+  return phrases.map((phrase, index) => {
+    const isLast = index === phrases.length - 1;
+    const weight = Math.max(1, phrase.length);
+    const phraseDuration = isLast ? endMs - cursor : Math.max(200, Math.round(durationMs * (weight / totalWeight)));
+    const phraseEnd = isLast ? endMs : Math.min(endMs, cursor + phraseDuration);
+    const item = {
+      id: `${segment.id || segment.source_segment_id}:phrase:${index}`,
+      segmentId: segment.id || segment.source_segment_id,
+      sourceSegmentId: segment.source_segment_id || null,
+      phraseIndex: index,
+      trackKey: segment.track_key || null,
+      speakerName: segment.speaker_name || null,
+      characterName: segment.character_name || null,
+      startMs: cursor,
+      endMs: phraseEnd,
+      durationMs: Math.max(0, phraseEnd - cursor),
+      text: phrase,
+      confidence: segment.raw_confidence || null,
+      timingMode: 'phrase_estimated_from_segment'
+    };
+    cursor = phraseEnd;
+    return item;
+  });
+}
+
+async function buildTimelinePayload(campaign, sourceSessionId, db = getPool()) {
+  const common = targetCte();
+  const params = [campaign, sourceSessionId];
+  const session = await data(`${common} select row_to_json(target) data from target;`, params, db);
+  if (!session) throw httpError(404, `Sessao nao encontrada: ${sourceSessionId}`);
+  const [
+    participants,
+    segments,
+    recordingFiles,
+    roll20Events
+  ] = await Promise.all([
+    data(
+      `${common}
+select coalesce(json_agg(item order by item->>'trackKey'), '[]'::json) data from (
+  select json_build_object(
+    'id', p.id,
+    'trackKey', p.source_track_key,
+    'playerName', p.player_name,
+    'characterName', p.character_name,
+    'role', p.role,
+    'audioTrackLabel', p.audio_track_label,
+    'discordHandle', p.discord_handle
+  ) item
+  from participants p
+  join target t on t.session_id = p.session_id
+) rows;`,
+      params,
+      db
+    ),
+    data(
+      `${common}
+select coalesce(json_agg(item order by (item->>'startMs')::int, item->>'trackKey', item->>'sourceSegmentId'), '[]'::json) data from (
+  select json_build_object(
+    'id', ts.id,
+    'sourceSegmentId', ts.source_segment_id,
+    'sourceSequence', ts.source_sequence,
+    'trackKey', ts.track_key,
+    'speakerName', ts.speaker_name,
+    'speakerRole', ts.speaker_role,
+    'characterName', ts.character_name,
+    'startMs', ts.start_ms,
+    'endMs', ts.end_ms,
+    'chunkIndex', ts.chunk_index,
+    'text', ts.text,
+    'textChars', ts.text_chars,
+    'textWords', ts.text_words,
+    'reviewStatus', ts.review_status,
+    'needsReview', ts.needs_review,
+    'tags', ts.tags,
+    'sourceChunkPath', ts.source_chunk_path,
+    'metadata', ts.metadata
+  ) item
+  from transcript_segments ts
+  join target t on t.session_id = ts.session_id
+  where ts.is_empty = false
+) rows;`,
+      params,
+      db
+    ),
+    data(
+      `${common}
+select coalesce(json_agg(item order by item->>'sourceFileRole'), '[]'::json) data from (
+  select json_build_object(
+    'id', rf.id,
+    'sourceFileRole', rf.source_file_role,
+    'fileType', rf.file_type,
+    'storageBucket', rf.storage_bucket,
+    'storagePath', rf.storage_path,
+    'originalFilename', rf.original_filename,
+    'mimeType', rf.mime_type,
+    'sizeBytes', rf.size_bytes,
+    'durationMs', rf.duration_ms
+  ) item
+  from recording_files rf
+  join target t on t.session_id = rf.session_id
+) rows;`,
+      params,
+      db
+    ),
+    data(
+      `${common}
+select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483647), item->>'createdAt'), '[]'::json) data from (
+  select json_build_object(
+    'id', re.id,
+    'eventType', re.event_type,
+    'speaker', re.roll20_who,
+    'characterName', re.character_name,
+    'startMs', re.approx_start_ms,
+    'text', re.text,
+    'sourceSystem', re.source_system,
+    'sourceEventId', re.source_event_id,
+    'createdAtRoll20', re.created_at_roll20,
+    'createdAt', re.created_at,
+    'payload', re.payload
+  ) item
+  from roll20_events re
+  join target t on t.session_id = re.session_id
+) rows;`,
+      params,
+      db
+    )
+  ]);
+
+  const phraseItems = (segments || []).flatMap(segment => phraseTimelineItems({
+    ...segment,
+    id: segment.id,
+    source_segment_id: segment.sourceSegmentId,
+    track_key: segment.trackKey,
+    speaker_name: segment.speakerName,
+    character_name: segment.characterName,
+    start_ms: segment.startMs,
+    end_ms: segment.endMs,
+    raw_confidence: segment.rawConfidence
+  }));
+  const timelineItems = [
+    ...phraseItems.map(item => ({
+      ...item,
+      kind: 'speech',
+      laneId: `speaker:${item.trackKey || item.speakerName || 'unknown'}`,
+      title: item.characterName || item.speakerName || item.trackKey || 'Fala',
+      subtitle: item.speakerName || item.trackKey || 'audio'
+    })),
+    ...(roll20Events || []).map(event => ({
+      id: event.id,
+      kind: 'roll20',
+      laneId: 'event:roll20',
+      title: event.eventType || 'roll20',
+      subtitle: [event.speaker, event.characterName].filter(Boolean).join(' / ') || 'Roll20',
+      startMs: event.startMs,
+      endMs: event.startMs,
+      durationMs: 0,
+      text: event.text || event.payload?.rawCommand || event.sourceEventId || 'Evento Roll20',
+      raw: event
+    }))
+  ].sort((a, b) => {
+    const aAt = a.startMs === null || a.startMs === undefined ? Number.MAX_SAFE_INTEGER : Number(a.startMs);
+    const bAt = b.startMs === null || b.startMs === undefined ? Number.MAX_SAFE_INTEGER : Number(b.startMs);
+    if (aAt !== bAt) return aAt - bAt;
+    return String(a.kind).localeCompare(String(b.kind));
+  });
+  const durationMs = Math.max(
+    Number(session.duration_ms || 0),
+    ...timelineItems.map(item => Number(item.endMs || item.startMs || 0)),
+    ...(recordingFiles || []).map(file => Number(file.durationMs || 0))
+  );
+  const lanes = [
+    ...(participants || []).map(participant => ({
+      id: `speaker:${participant.trackKey || participant.playerName || participant.id}`,
+      type: 'speaker',
+      trackKey: participant.trackKey,
+      label: participant.characterName || participant.playerName || participant.trackKey || 'Speaker',
+      subtitle: participant.playerName || participant.discordHandle || '',
+      participantId: participant.id
+    })),
+    { id: 'event:roll20', type: 'event', label: 'Roll20', subtitle: 'chat, dados e notas' },
+    { id: 'event:discord', type: 'event', label: 'Discord', subtitle: 'pendente captura prod' },
+    { id: 'event:media', type: 'event', label: 'Midia', subtitle: 'imagens e anexos futuros' },
+    { id: 'event:ai', type: 'event', label: 'IA', subtitle: 'canon, quote e bastidores futuros' }
+  ];
+  return {
+    ok: true,
+    mode: 'timeline_readonly_v1',
+    campaignSlug: campaign,
+    sourceSessionId,
+    session: {
+      id: session.session_id,
+      title: session.session_title,
+      sourceSessionId: session.source_session_id,
+      sessionDate: session.session_date,
+      arc: session.arc,
+      status: session.status,
+      durationMs
+    },
+    stats: {
+      lanes: lanes.length,
+      transcriptSegments: (segments || []).length,
+      phraseItems: phraseItems.length,
+      roll20Events: (roll20Events || []).length,
+      recordingFiles: (recordingFiles || []).length,
+      syncedItems: timelineItems.filter(item => item.startMs !== null && item.startMs !== undefined).length,
+      totalItems: timelineItems.length,
+      timingNote: 'Phrase timings are local estimates inside already-transcribed segments; no extra OpenAI cost.'
+    },
+    lanes,
+    participants: participants || [],
+    recordingFiles: recordingFiles || [],
+    transcriptSegments: segments || [],
+    phrases: phraseItems,
+    roll20Events: roll20Events || [],
+    items: timelineItems
+  };
+}
+
 async function buildDecisionTemplate(campaign, sourceSessionId, runId, actorTrackKey, includeAllSegments) {
   const common = `
 with target as (
@@ -2902,6 +3165,10 @@ async function handleGet(req, res, path, query) {
       responseSummary(campaign, sourceSessionId, runId)
     ]);
     return sendJson(res, 200, { ok: true, review, summary });
+  }
+  if (path === '/api/timeline') {
+    await requireCampaignAccess(req, campaign);
+    return sendJson(res, 200, await buildTimelinePayload(campaign, sourceSessionId));
   }
   if (path === '/api/review-template') {
     await requireCampaignAccess(req, campaign);

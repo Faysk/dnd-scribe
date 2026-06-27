@@ -31,6 +31,9 @@ DEFAULT_NOISE_DB = -45.0
 DEFAULT_MIN_SILENCE_SECONDS = 1.0
 DEFAULT_MIN_SPEECH_SECONDS = 2.0
 DEFAULT_PADDING_MS = 250
+DEFAULT_MERGE_GAP_SECONDS = 2.5
+DEFAULT_MIN_UNIT_SECONDS = 12.0
+DEFAULT_MAX_UNIT_SECONDS = 90.0
 
 
 def fetch_chunks(database_url: str, campaign_slug: str, source_session_id: str, limit: int, replace: bool) -> list[dict[str, Any]]:
@@ -153,6 +156,48 @@ def speech_intervals(
         else:
             padded[-1] = (padded[-1][0], max(padded[-1][1], padded_end))
     return padded
+
+
+def merge_transcription_units(
+    intervals: list[tuple[int, int]],
+    merge_gap_ms: int,
+    min_unit_ms: int,
+    max_unit_ms: int,
+) -> list[tuple[int, int]]:
+    """Merge nearby speech intervals into context-friendly transcription units.
+
+    Very small phrase-sized files create many paid requests and weak context.
+    This keeps the silence trimming benefit while avoiding word/phrase-sized
+    uploads to the transcription provider.
+    """
+    if not intervals:
+        return []
+    units: list[tuple[int, int]] = []
+    current_start, current_end = intervals[0]
+    for next_start, next_end in intervals[1:]:
+        gap_ms = max(0, next_start - current_end)
+        current_duration = current_end - current_start
+        proposed_duration = next_end - current_start
+        should_merge = (
+            gap_ms <= merge_gap_ms
+            or current_duration < min_unit_ms
+            or (proposed_duration <= min_unit_ms and gap_ms <= max(merge_gap_ms * 3, merge_gap_ms))
+        )
+        if should_merge and proposed_duration <= max_unit_ms:
+            current_end = next_end
+            continue
+        units.append((current_start, current_end))
+        current_start, current_end = next_start, next_end
+
+    if units and (current_end - current_start) < min_unit_ms:
+        previous_start, previous_end = units[-1]
+        if current_end - previous_start <= max_unit_ms:
+            units[-1] = (previous_start, current_end)
+        else:
+            units.append((current_start, current_end))
+    else:
+        units.append((current_start, current_end))
+    return units
 
 
 def slice_output_path(source_session_id: str, track_key: str | None, chunk_index: int, slice_index: int) -> Path:
@@ -295,19 +340,31 @@ def process_chunk(
         round(args.min_speech_seconds * 1000),
         args.padding_ms,
     )
+    merged_intervals = merge_transcription_units(
+        intervals,
+        round(args.merge_gap_seconds * 1000),
+        round(args.min_unit_seconds * 1000),
+        round(args.max_unit_seconds * 1000),
+    )
     detection_params = {
         "noiseDb": args.noise_db,
         "minSilenceSeconds": args.min_silence_seconds,
         "minSpeechSeconds": args.min_speech_seconds,
         "paddingMs": args.padding_ms,
+        "mergeGapSeconds": args.merge_gap_seconds,
+        "minUnitSeconds": args.min_unit_seconds,
+        "maxUnitSeconds": args.max_unit_seconds,
         "sourceDurationMs": duration_ms,
+        "rawSpeechIntervals": [{"startMs": start, "endMs": end} for start, end in intervals],
+        "rawSpeechIntervalCount": len(intervals),
+        "mergedSpeechIntervalCount": len(merged_intervals),
     }
 
     if args.write and args.replace:
         delete_existing_slices(database_url, chunk["audio_chunk_id"])
 
     speech_ms = 0
-    for index, (start_ms, end_ms) in enumerate(intervals):
+    for index, (start_ms, end_ms) in enumerate(merged_intervals):
         speech_ms += end_ms - start_ms
         output_path = slice_output_path(
             chunk["source_session_id"],
@@ -339,6 +396,8 @@ def process_chunk(
 
     result["sourceDurationMs"] = duration_ms
     result["speechDurationMs"] = speech_ms
+    result["rawSpeechIntervals"] = len(intervals)
+    result["mergedSpeechIntervals"] = len(merged_intervals)
     result["reductionPercent"] = round((1 - (speech_ms / duration_ms)) * 100, 2) if duration_ms else 0
     return result
 
@@ -353,6 +412,9 @@ def main() -> int:
     parser.add_argument("--min-silence-seconds", type=float, default=DEFAULT_MIN_SILENCE_SECONDS)
     parser.add_argument("--min-speech-seconds", type=float, default=DEFAULT_MIN_SPEECH_SECONDS)
     parser.add_argument("--padding-ms", type=int, default=DEFAULT_PADDING_MS)
+    parser.add_argument("--merge-gap-seconds", type=float, default=DEFAULT_MERGE_GAP_SECONDS)
+    parser.add_argument("--min-unit-seconds", type=float, default=DEFAULT_MIN_UNIT_SECONDS)
+    parser.add_argument("--max-unit-seconds", type=float, default=DEFAULT_MAX_UNIT_SECONDS)
     parser.add_argument("--replace", action="store_true")
     parser.add_argument("--write", action="store_true", help="Write slice WAV files and upsert Supabase rows")
     parser.add_argument("--strict", action="store_true")
@@ -392,7 +454,8 @@ def main() -> int:
         for item in results:
             print(
                 f"{item.get('trackKey')}#{item.get('chunkIndex')} "
-                f"slices={len(item.get('slices') or [])} reduction={item.get('reductionPercent')}%"
+                f"slices={len(item.get('slices') or [])} raw={item.get('rawSpeechIntervals')} "
+                f"merged={item.get('mergedSpeechIntervals')} reduction={item.get('reductionPercent')}%"
             )
     return 1 if args.strict and missing else 0
 

@@ -107,3 +107,16 @@ strategy.
 8. Add AI/canon/backstage/secret overlays with RBAC-aware visibility.
 9. Add editing/review actions from the inspector.
 10. Add performance virtualization for long sessions.
+
+## Progress
+
+Step 107 implemented the first read-only version of items 1-5:
+
+- `/api/timeline`;
+- speaker/event lanes;
+- phrase-level transcript estimates generated locally;
+- selected-item inspector;
+- on-demand audio playback from signed track URLs.
+
+The remaining timeline work should now focus on production Discord capture,
+media/AI overlays, review actions and virtualization.

@@ -56,6 +56,15 @@ const state = {
     error: null,
     result: null
   },
+  timeline: {
+    sourceSessionId: null,
+    loading: false,
+    error: null,
+    data: null,
+    selectedItemId: null,
+    filter: 'all',
+    zoom: 1
+  },
   jobs: [],
   jobsPolling: false,
   craigMap: null,
@@ -396,6 +405,15 @@ function resetCampaignData() {
   state.selectedSourceSessionId = null;
   state.review = null;
   state.summary = null;
+  state.timeline = {
+    sourceSessionId: null,
+    loading: false,
+    error: null,
+    data: null,
+    selectedItemId: null,
+    filter: 'all',
+    zoom: 1
+  };
   state.jobs = [];
   state.craigMap = null;
   state.craigMapEditable = false;
@@ -809,6 +827,15 @@ async function loadSession(sourceSessionId) {
     state.selectedSegmentId = state.review?.segments?.[0]?.id || null;
     state.segmentDecisions = {};
     state.candidateDecisions = {};
+    state.timeline = {
+      sourceSessionId,
+      loading: false,
+      error: null,
+      data: null,
+      selectedItemId: null,
+      filter: 'all',
+      zoom: 1
+    };
     state.audio = {
       segmentId: null,
       loading: false,
@@ -832,6 +859,38 @@ async function loadSession(sourceSessionId) {
     setBusy(false);
     render();
   }
+}
+
+async function loadTimelineData(force = false) {
+  const sourceSessionId = state.selectedSourceSessionId;
+  if (!sourceSessionId || state.timeline.loading) return;
+  if (!force && state.timeline.data && state.timeline.sourceSessionId === sourceSessionId) return;
+  state.timeline = {
+    ...state.timeline,
+    sourceSessionId,
+    loading: true,
+    error: null
+  };
+  render();
+  try {
+    const payload = await api(`/api/timeline?sourceSessionId=${encodeURIComponent(sourceSessionId)}`);
+    const firstItem = (payload.items || [])[0] || null;
+    state.timeline = {
+      ...state.timeline,
+      sourceSessionId,
+      loading: false,
+      error: null,
+      data: payload,
+      selectedItemId: state.timeline.selectedItemId || firstItem?.id || null
+    };
+  } catch (error) {
+    state.timeline = {
+      ...state.timeline,
+      loading: false,
+      error: error.message
+    };
+  }
+  render();
 }
 
 function renderSessions() {
@@ -1384,77 +1443,287 @@ function filteredSegments() {
   });
 }
 
-function timelineTextFromRoll20(event) {
-  return roll20EventText(event) || event.payload?.rawCommand || event.raw_line || event.source_event_id || 'Evento Roll20';
-}
-
-function timelineItems() {
-  const segments = (state.review?.segments || []).map(segment => ({
-    id: segment.db_id || segment.id,
-    source: 'audio',
-    at: segment.start_ms ?? null,
-    end: segment.end_ms ?? null,
-    title: segment.character_name || segment.speaker_name || segment.track_key || 'Fala',
-    subtitle: segment.speaker_name || segment.track_key || 'audio',
-    text: segment.text || '',
-    tone: segment.ai?.needs_review ? 'orange' : 'blue'
-  }));
-  const roll20 = (state.review?.roll20Events || []).map(event => ({
-    id: event.id || event.source_event_id,
-    source: 'roll20',
-    at: event.approx_start_ms ?? event.approxStartMs ?? null,
-    end: null,
-    title: eventTypeLabel(event.event_type),
-    subtitle: [event.roll20_who, event.character_name || event.payload?.targetCharacter].filter(Boolean).join(' / ') || 'Roll20',
-    text: timelineTextFromRoll20(event),
-    tone: eventTypeTone(event.event_type),
-    raw: event
-  }));
-  return [...segments, ...roll20].sort((a, b) => {
-    const aAt = a.at === null || a.at === undefined ? Number.MAX_SAFE_INTEGER : Number(a.at);
-    const bAt = b.at === null || b.at === undefined ? Number.MAX_SAFE_INTEGER : Number(b.at);
-    if (aAt !== bAt) return aAt - bAt;
-    return String(a.source).localeCompare(String(b.source));
-  });
-}
-
 function renderTimeline() {
-  const items = timelineItems();
-  const synced = items.filter(item => item.at !== null && item.at !== undefined).length;
+  if (!state.selectedSourceSessionId) return loadingView('Escolha uma sessao para abrir a timeline.');
+  const timeline = state.timeline;
+  if (!timeline.data && !timeline.loading && !timeline.error) {
+    window.setTimeout(() => loadTimelineData(false), 0);
+  }
+  if (timeline.loading && !timeline.data) return loadingView('Montando timeline sincronizada...');
+  if (timeline.error) {
+    return `
+      <section class="loading-panel">
+        <h2>Timeline indisponivel</h2>
+        <p>${escapeHtml(timeline.error)}</p>
+        <button onclick="loadTimelineData(true)">Tentar de novo</button>
+      </section>
+    `;
+  }
+  const data = timeline.data;
+  if (!data) return loadingView('Preparando timeline...');
+  const items = filteredTimelineItems();
+  if (!timeline.selectedItemId || !items.some(item => item.id === timeline.selectedItemId)) {
+    timeline.selectedItemId = items[0]?.id || data.items?.[0]?.id || null;
+  }
+  const selected = timelineSelectedItem();
+  const stats = data.stats || {};
   return `
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <h2>Timeline da sessao</h2>
-          <small>Falas, chat Roll20, rolagens e marcadores no mesmo eixo temporal.</small>
+    <section class="timeline-workbench">
+      <div class="panel timeline-command">
+        <div class="panel-head">
+          <div>
+            <h2>Timeline da sessao</h2>
+            <small>${escapeHtml(data.session?.title || data.sourceSessionId)} • ${escapeHtml(data.stats?.timingNote || '')}</small>
+          </div>
+          <div class="badges">
+            ${badge(`${stats.syncedItems || 0}/${stats.totalItems || 0} sincronizados`, 'green')}
+            ${badge(`${stats.phraseItems || 0} frases`, 'blue')}
+            ${badge(`${stats.roll20Events || 0} Roll20`, 'violet')}
+          </div>
         </div>
-        <div class="badges">${badge(synced + '/' + items.length + ' sincronizados', 'green')}${badge('sem IA', 'blue')}</div>
+        <div class="timeline-toolbar">
+          <select onchange="state.timeline.filter=this.value; render();">
+            ${['all', 'speech', 'roll20'].map(value => `<option value="${value}" ${state.timeline.filter === value ? 'selected' : ''}>${escapeHtml(timelineFilterLabel(value))}</option>`).join('')}
+          </select>
+          <label><span class="label">Zoom</span><input type="range" min="1" max="6" step="1" value="${Number(state.timeline.zoom || 1)}" oninput="state.timeline.zoom=Number(this.value); render();" /></label>
+          <button onclick="loadTimelineData(true)">Atualizar</button>
+        </div>
       </div>
-      <div class="panel-body timeline-list">
-        ${items.map(renderTimelineItem).join('') || '<div class="empty">Nenhum item de timeline nesta sessao.</div>'}
+
+      <section class="timeline-layout">
+        <div class="timeline-main">
+          ${renderTimelineScale(data, items)}
+          ${renderTimelineLanes(data, items)}
+          ${renderTimelineTranscript(items)}
+        </div>
+        ${renderTimelineInspector(selected)}
+      </section>
+    </section>
+  `;
+}
+
+function timelineFilterLabel(value) {
+  return { all: 'Tudo', speech: 'Falas', roll20: 'Roll20' }[value] || value;
+}
+
+function filteredTimelineItems() {
+  const data = state.timeline.data;
+  const filter = state.timeline.filter || 'all';
+  return (data?.items || []).filter(item => filter === 'all' || item.kind === filter);
+}
+
+function timelineSelectedItem() {
+  const data = state.timeline.data;
+  const id = state.timeline.selectedItemId;
+  return (data?.items || []).find(item => item.id === id) || null;
+}
+
+function timelineDuration(data, items) {
+  return Math.max(
+    Number(data?.session?.durationMs || 0),
+    ...items.map(item => Number(item.endMs || item.startMs || 0)),
+    60000
+  );
+}
+
+function renderTimelineScale(data, items) {
+  const duration = timelineDuration(data, items);
+  const markers = Array.from({ length: 7 }, (_, index) => Math.round(duration * (index / 6)));
+  return `
+    <div class="timeline-scale" style="--timeline-zoom:${Number(state.timeline.zoom || 1)}">
+      ${markers.map(ms => `<span style="left:${Math.min(100, Math.max(0, (ms / duration) * 100))}%">${escapeHtml(fmtDuration(ms))}</span>`).join('')}
+    </div>
+  `;
+}
+
+function renderTimelineLanes(data, items) {
+  const lanes = data.lanes || [];
+  const duration = timelineDuration(data, items);
+  return `
+    <div class="timeline-lanes" style="--timeline-zoom:${Number(state.timeline.zoom || 1)}">
+      ${lanes.map(lane => renderTimelineLane(lane, items.filter(item => item.laneId === lane.id), duration)).join('')}
+    </div>
+  `;
+}
+
+function renderTimelineLane(lane, laneItems, duration) {
+  return `
+    <div class="timeline-lane">
+      <div class="timeline-lane-label">
+        <strong>${escapeHtml(lane.label || lane.id)}</strong>
+        <small>${escapeHtml(lane.subtitle || lane.trackKey || lane.type || '')}</small>
+      </div>
+      <div class="timeline-lane-track">
+        ${laneItems.map(item => renderTimelineBlock(item, duration)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderTimelineBlock(item, duration) {
+  const start = Number(item.startMs || 0);
+  const end = Number(item.endMs || item.startMs || start + 500);
+  const left = Math.min(99.5, Math.max(0, (start / duration) * 100));
+  const width = item.kind === 'roll20'
+    ? 1.2
+    : Math.max(.8, Math.min(100 - left, ((Math.max(400, end - start) / duration) * 100)));
+  const selected = item.id === state.timeline.selectedItemId;
+  const title = item.kind === 'roll20' ? eventTypeLabel(item.title) : item.title;
+  return `
+    <button class="timeline-block ${item.kind} ${selected ? 'selected' : ''}" style="left:${left}%;width:${width}%;" onclick="selectTimelineItem('${escapeHtml(item.id)}')" title="${escapeHtml(item.text || title)}">
+      <span>${escapeHtml(title || item.kind)}</span>
+    </button>
+  `;
+}
+
+function renderTimelineTranscript(items) {
+  const speechItems = items.filter(item => item.kind === 'speech');
+  return `
+    <section class="panel timeline-transcript">
+      <div class="panel-head">
+        <h2>Transcricao sincronizada</h2>
+        <small>${speechItems.length} frases estimadas sem nova IA</small>
+      </div>
+      <div class="timeline-table">
+        ${speechItems.map(item => `
+          <button class="${item.id === state.timeline.selectedItemId ? 'active' : ''}" onclick="selectTimelineItem('${escapeHtml(item.id)}')">
+            <span>${escapeHtml(fmtDuration(item.startMs))}</span>
+            <strong>${escapeHtml(item.title || '-')}</strong>
+            <p>${escapeHtml(item.text || '')}</p>
+          </button>
+        `).join('') || '<div class="empty">Nenhuma fala transcrita para esta sessao.</div>'}
       </div>
     </section>
   `;
 }
 
-function renderTimelineItem(item) {
-  const time = item.at === null || item.at === undefined ? 'sem hora' : fmtDuration(item.at);
-  const duration = item.end && item.at !== null && item.at !== undefined ? ' ate ' + fmtDuration(item.end) : '';
+function renderTimelineInspector(item) {
+  if (!item) {
+    return `
+      <aside class="panel timeline-inspector">
+        <div class="panel-head"><h2>Detalhe</h2></div>
+        <div class="panel-body"><div class="empty">Selecione um item na timeline.</div></div>
+      </aside>
+    `;
+  }
+  const canPlay = item.kind === 'speech' && item.trackKey;
   return `
-    <article class="timeline-item ${item.source}">
-      <div class="timeline-time"><strong>${escapeHtml(time)}</strong><small>${escapeHtml(duration || item.source)}</small></div>
-      <div class="timeline-body">
-        <div class="row between">
-          <div>
-            <span class="label">${escapeHtml(item.subtitle || item.source)}</span>
-            <h2>${escapeHtml(item.title || item.source)}</h2>
-          </div>
-          <div class="badges">${badge(item.source, item.source === 'roll20' ? 'green' : 'blue')}${badge(item.tone || 'blue', item.tone || 'blue')}</div>
+    <aside class="panel timeline-inspector">
+      <div class="panel-head">
+        <div>
+          <span class="label">${escapeHtml(item.kind)}</span>
+          <h2>${escapeHtml(item.title || item.kind)}</h2>
         </div>
-        <p>${escapeHtml(item.text || '-')}</p>
+        <div class="badges">${badge(item.kind, item.kind === 'roll20' ? 'green' : 'blue')}${item.timingMode ? badge('tempo estimado', 'orange') : ''}</div>
       </div>
-    </article>
+      <div class="panel-body detail-grid">
+        <div class="field-grid">
+          <div><span class="label">Inicio</span><strong>${escapeHtml(fmtDuration(item.startMs))}</strong></div>
+          <div><span class="label">Fim</span><strong>${escapeHtml(fmtDuration(item.endMs || item.startMs))}</strong></div>
+          <div><span class="label">Duracao</span><strong>${escapeHtml(fmtDuration(item.durationMs || 0))}</strong></div>
+          <div><span class="label">Lane</span><strong>${escapeHtml(item.laneId || '-')}</strong></div>
+        </div>
+        <div>
+          <span class="label">${item.kind === 'speech' ? 'Fala' : 'Evento'}</span>
+          <p>${escapeHtml(item.text || '-')}</p>
+        </div>
+        ${item.subtitle ? `<small>${escapeHtml(item.subtitle)}</small>` : ''}
+        ${canPlay ? timelineAudioPanel(item) : '<div class="audio-card"><span class="label">Audio</span><p>Item sem faixa de audio direta.</p></div>'}
+        <div class="actions">
+          ${canPlay ? `<button onclick="loadTimelineAudio('${escapeHtml(item.id)}')">Ouvir aqui</button>` : ''}
+          <button onclick="copyTimelineSelected()">Copiar texto</button>
+        </div>
+      </div>
+    </aside>
   `;
+}
+
+function timelineAudioPanel(item) {
+  const active = state.audio.segmentId === item.id;
+  if (!active) {
+    return `
+      <div class="audio-card">
+        <span class="label">Audio</span>
+        <p>Carregue a faixa ${escapeHtml(item.trackKey)} a partir de ${escapeHtml(fmtDuration(item.startMs))}.</p>
+      </div>
+    `;
+  }
+  if (state.audio.loading) {
+    return `<div class="audio-card"><span class="label">Audio</span><p>Gerando URL assinada da faixa...</p></div>`;
+  }
+  if (state.audio.error) {
+    return `<div class="audio-card error"><span class="label">Audio</span><p>${escapeHtml(state.audio.error)}</p></div>`;
+  }
+  if (!state.audio.url) return '';
+  const fragment = `${state.audio.url}#t=${Math.floor(state.audio.startSeconds)}`;
+  return `
+    <div class="audio-card">
+      <div class="row between">
+        <div>
+          <span class="label">Audio</span>
+          <strong>${escapeHtml(state.audio.trackKey || item.trackKey)}</strong>
+          <small>Inicio sugerido: ${escapeHtml(fmtDuration(item.startMs))}</small>
+        </div>
+        <div class="badges">${badge('R2 assinado', 'green')}${badge(`${Math.round((state.audio.file?.sizeBytes || 0) / 1024 / 1024)} MB`, 'blue')}</div>
+      </div>
+      <audio id="segmentAudio" controls preload="metadata" src="${escapeHtml(fragment)}"></audio>
+    </div>
+  `;
+}
+
+function selectTimelineItem(id) {
+  state.timeline.selectedItemId = id;
+  render();
+}
+
+function copyTimelineSelected() {
+  const item = timelineSelectedItem();
+  copyText(item?.text || '', 'Texto copiado.');
+}
+
+async function loadTimelineAudio(id) {
+  const item = (state.timeline.data?.items || []).find(entry => entry.id === id);
+  if (!item?.trackKey) return;
+  state.audio = {
+    segmentId: id,
+    loading: true,
+    error: null,
+    url: null,
+    trackKey: item.trackKey,
+    startSeconds: Number(item.startMs || 0) / 1000,
+    expiresAt: null,
+    file: null
+  };
+  render();
+  try {
+    const payload = await api(`/api/audio-url?sourceSessionId=${encodeURIComponent(state.selectedSourceSessionId)}&trackKey=${encodeURIComponent(item.trackKey)}&expires=900`);
+    state.audio = {
+      segmentId: id,
+      loading: false,
+      error: null,
+      url: payload.url,
+      trackKey: payload.trackKey || item.trackKey,
+      startSeconds: Number(item.startMs || 0) / 1000,
+      expiresAt: new Date(Date.now() + Number(payload.expiresSeconds || 900) * 1000).toISOString(),
+      file: payload.file || null
+    };
+    render();
+    window.setTimeout(() => {
+      const player = document.getElementById('segmentAudio');
+      if (!player) return;
+      const seekAndPlay = () => {
+        try {
+          player.currentTime = state.audio.startSeconds;
+        } catch (_error) {}
+        player.play().catch(() => {});
+      };
+      if (player.readyState >= 1) seekAndPlay();
+      else player.addEventListener('loadedmetadata', seekAndPlay, { once: true });
+    }, 120);
+  } catch (error) {
+    state.audio = { ...state.audio, loading: false, error: error.message };
+    render();
+  }
 }
 function renderReview() {
   const segments = filteredSegments();

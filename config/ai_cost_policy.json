@@ -48,6 +48,10 @@
     "skipSilentChunks": true,
     "minimumSpeechSecondsPerChunk": 5,
     "silenceDbfsThreshold": -45.0,
+    "speechSliceMergeGapSeconds": 2.5,
+    "speechSliceMinUnitSeconds": 12,
+    "speechSliceMaxUnitSeconds": 90,
+    "speechSlicePolicy": "trim_silence_before_ai_but_keep_context_units; split_words_and_phrases_after_transcription",
     "deduplicateChunksBySha256": true,
     "reuseTranscriptByAudioHash": true,
     "sampleFirstMinutesBeforeFullRun": 10

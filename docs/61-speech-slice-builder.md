@@ -15,8 +15,13 @@ Criado tambem o schema `audio_speech_slices` e a view `audio_transcription_work_
 A ferramenta usa `ffmpeg silencedetect` para detectar silencio dentro de cada chunk local e criar WAVs menores com fala:
 
 ```text
-chunk longo -> detectar silencio -> intervalos com fala -> slice_000.wav, slice_001.wav, ...
+chunk longo -> detectar silencio -> intervalos com fala -> agrupar contexto -> slice_000.wav, slice_001.wav, ...
 ```
+
+Os slices nao devem ser palavra/frase. Eles sao unidades de transcricao com
+contexto suficiente para preservar nomes, pontuacao e frases completas.
+Palavras/frases sao derivadas depois da transcricao, localmente, para a
+timeline.
 
 ## Uso seguro
 
@@ -50,6 +55,26 @@ python3 tools/build_speech_slices.py craig-AdabEqbzngmT-stage1-full --limit 50 -
 - `--min-silence-seconds 1.0`: silencio minimo para separar fala;
 - `--min-speech-seconds 2.0`: descarta ruidos curtos;
 - `--padding-ms 250`: adiciona margem antes/depois de cada trecho de fala.
+- `--merge-gap-seconds 2.5`: junta falas proximas para reduzir requests;
+- `--min-unit-seconds 12`: evita arquivos curtos demais para transcricao;
+- `--max-unit-seconds 90`: limita o tamanho maximo de cada unidade.
+
+## Politica de custo
+
+O caminho recomendado e:
+
+```text
+audio bruto -> remover silencio -> slices contextuais -> OpenAI -> frases/palavras locais
+```
+
+Evitar:
+
+```text
+audio bruto -> palavra/frase -> OpenAI
+```
+
+Fragmentar antes da OpenAI aumenta chamadas, overhead e risco de contexto ruim.
+Fragmentar depois da transcricao e praticamente custo zero de IA.
 
 ## Ordem recomendada
 
@@ -62,4 +87,6 @@ python3 tools/plan_transcription_job.py craig-AdabEqbzngmT-stage1-full
 
 ## Proximo passo
 
-Ajustar planner e executor para lerem `audio_transcription_work_units`, preferindo `speech_slice` quando existir e usando chunk inteiro apenas como fallback.
+Usar a timeline para validar se os segmentos contextuais estao gerando frases
+com tempo bom o suficiente. Se for preciso precisao por palavra, adicionar
+timestamps granulares como recurso opcional e aprovado pelo custo/beneficio.
