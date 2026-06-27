@@ -1,7 +1,8 @@
 (function () {
   const endpointByType = {
     cloud_ingest_craig: '/api/jobs/run-cloud-ingest',
-    cloud_extract_craig_tracks: '/api/jobs/run-cloud-extract'
+    cloud_extract_craig_tracks: '/api/jobs/run-cloud-extract',
+    cloud_plan_audio_chunks: '/api/jobs/run-cloud-plan-chunks'
   };
 
   function esc(value = '') {
@@ -43,7 +44,8 @@
   function actionLabel(type) {
     return {
       cloud_ingest_craig: 'Ler manifest',
-      cloud_extract_craig_tracks: 'Extrair faixa'
+      cloud_extract_craig_tracks: 'Extrair faixa',
+      cloud_plan_audio_chunks: 'Planejar chunks'
     }[type] || 'Executar';
   }
 
@@ -56,9 +58,13 @@
     const limit = job.type === 'cloud_extract_craig_tracks'
       ? `<label class="inline-job-limit"><span class="label">Faixas</span><input id="jobLimit_${esc(job.id)}" type="number" min="1" max="3" value="1" /></label>`
       : '';
+    const chunkSeconds = job.type === 'cloud_plan_audio_chunks'
+      ? `<label class="inline-job-limit"><span class="label">Chunk s</span><input id="jobChunkSeconds_${esc(job.id)}" type="number" min="60" max="1800" step="30" value="600" /></label>`
+      : '';
     return `
       <div class="job-actions">
         ${limit}
+        ${chunkSeconds}
         <button onclick="runCloudJob('${esc(job.id)}', '${esc(job.type)}', true)" ${canDryRun(job) ? '' : 'disabled'}>Simular</button>
         <button class="primary" onclick="runCloudJob('${esc(job.id)}', '${esc(job.type)}', false)" ${canExecute(job) ? '' : 'disabled'}>${esc(actionLabel(job.type))}</button>
       </div>
@@ -126,6 +132,10 @@
     if (type === 'cloud_extract_craig_tracks') {
       const limit = Number(document.getElementById(`jobLimit_${jobId}`)?.value || 1);
       body.maxTracks = Math.max(1, Math.min(3, Number.isFinite(limit) ? Math.floor(limit) : 1));
+    }
+    if (type === 'cloud_plan_audio_chunks') {
+      const seconds = Number(document.getElementById(`jobChunkSeconds_${jobId}`)?.value || 600);
+      body.chunkSeconds = Math.max(60, Math.min(1800, Number.isFinite(seconds) ? Math.floor(seconds) : 600));
     }
     if (!dryRun && !window.confirm('Executar este job em producao? Esta etapa nao usa OpenAI paga.')) return;
 
