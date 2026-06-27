@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { Readable } = require('node:stream');
 const zlib = require('node:zlib');
 const { Pool } = require('pg');
+const { notifyDiscord } = require('../../lib/discord');
 
 const ZIP_TAIL_BYTES = 128 * 1024;
 const MAX_TRACKS_PER_RUN = 3;
@@ -360,6 +361,19 @@ where id = $1::uuid;`,
   );
 }
 
+async function notifyJob(event) {
+  try {
+    return await notifyDiscord(event);
+  } catch (error) {
+    console.warn('discord_job_notify_failed', error.message || String(error));
+    return { sent: false, error: error.message || String(error) };
+  }
+}
+
+function errorDescription(error) {
+  return cleanText(error.message || error, 1800);
+}
+
 async function existingTrackFiles(db, sessionId, bucket, paths) {
   if (!paths.length) return new Map();
   const result = await db.query(
@@ -606,6 +620,19 @@ async function runCloudExtract(raw) {
 
     if (remaining > 0) {
       await requeueJob(db, job.id, progress);
+      await notifyJob({
+        target: 'recordings',
+        title: 'Craig tracks parcialmente extraidas',
+        status: 'partial',
+        sourceSessionId: job.source_session_id,
+        jobId: job.id,
+        description: 'Extracao de faixas Craig em andamento; o job foi reenfileirado para continuar.',
+        fields: [
+          { name: 'extraidas agora', value: String(extracted.length), inline: true },
+          { name: 'restantes', value: String(remaining), inline: true },
+          { name: 'total', value: String(plan.tracks.length), inline: true }
+        ]
+      });
     } else {
       const allFiles = await existingTrackFiles(db, job.session_id, r2Config().bucket || (plan.tracks[0]?.sourceBucket || ''), plan.tracks.map(item => item.targetPath));
       const finalFiles = plan.tracks.map(item => ({
@@ -632,6 +659,19 @@ where id = $1::uuid;`,
       );
       progress.nextJobId = nextJobId;
       progress.extractedFiles = finalFiles.length;
+      await notifyJob({
+        target: 'recordings',
+        title: 'Craig tracks extraidas',
+        status: 'ok',
+        sourceSessionId: job.source_session_id,
+        jobId: job.id,
+        description: 'Faixas Craig extraidas para R2 e proximo job de chunks preparado.',
+        fields: [
+          { name: 'arquivos', value: String(finalFiles.length), inline: true },
+          { name: 'proximo job', value: String(nextJobId || '-'), inline: false },
+          { name: 'custo IA', value: '$0.0000', inline: true }
+        ]
+      });
     }
 
     return {
@@ -648,6 +688,18 @@ where id = $1::uuid;`,
   } catch (error) {
     if (!dryRun) {
       await failJob(db, job.id, error, { workerStatus: 'extract_failed', paidAiCostUsd: 0 });
+      await notifyJob({
+        target: 'ops',
+        title: 'Falha ao extrair Craig tracks',
+        status: 'failed',
+        sourceSessionId: job.source_session_id,
+        jobId: job.id,
+        description: errorDescription(error),
+        fields: [
+          { name: 'worker', value: 'cloud_extract_craig_tracks', inline: true },
+          { name: 'custo IA', value: '$0.0000', inline: true }
+        ]
+      });
     }
     throw error;
   }

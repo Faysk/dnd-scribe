@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const { Pool } = require('pg');
+const { notifyDiscord } = require('../../lib/discord');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const MAX_INFO_ENTRY_BYTES = 1024 * 1024;
@@ -381,6 +382,19 @@ where id = $1::uuid;`,
   );
 }
 
+async function notifyJob(event) {
+  try {
+    return await notifyDiscord(event);
+  } catch (error) {
+    console.warn('discord_job_notify_failed', error.message || String(error));
+    return { sent: false, error: error.message || String(error) };
+  }
+}
+
+function errorDescription(error) {
+  return cleanText(error.message || error, 1800);
+}
+
 async function upsertParticipant(db, sessionId, participant) {
   const result = await db.query(
     `
@@ -610,6 +624,20 @@ async function runCloudIngest(raw) {
           nextJobId: persisted.nextJobId
         }
       });
+      await notifyJob({
+        target: 'recordings',
+        title: 'Craig manifest processado',
+        status: 'ok',
+        sourceSessionId: job.source_session_id,
+        jobId: job.id,
+        description: 'ZIP Craig lido, participantes/faixas registrados e proximo job de extracao preparado.',
+        fields: [
+          { name: 'faixas', value: String(manifest.tracks.length), inline: true },
+          { name: 'participantes', value: String(manifest.participants.length), inline: true },
+          { name: 'entradas ZIP', value: String(manifest.zipEntries.length), inline: true },
+          { name: 'proximo job', value: String(persisted.nextJobId || '-'), inline: false }
+        ]
+      });
     }
     return {
       ok: true,
@@ -631,6 +659,18 @@ async function runCloudIngest(raw) {
   } catch (error) {
     if (!dryRun) {
       await failJob(db, job.id, error, { workerStatus: 'manifest_failed', paidAiCostUsd: 0 });
+      await notifyJob({
+        target: 'ops',
+        title: 'Falha no Craig manifest',
+        status: 'failed',
+        sourceSessionId: job.source_session_id,
+        jobId: job.id,
+        description: errorDescription(error),
+        fields: [
+          { name: 'worker', value: 'cloud_ingest_craig', inline: true },
+          { name: 'custo IA', value: '$0.0000', inline: true }
+        ]
+      });
     }
     throw error;
   }
