@@ -68,3 +68,24 @@ npm run build
 ## Next step
 
 After deploy, smoke test `GET /api/discord/interactions` and ask the DM to run `/dnd custos` visually in Discord once.
+
+## Production deploy validation
+
+Commit deployed to production:
+
+- `8c674ab` - `feat(discord): add cost summary command`
+- Vercel deployment state: `READY`
+
+Production smoke checks:
+
+- `GET /api/discord/interactions`: 200, command list includes `/dnd custos`.
+- `GET /api/ai-cost?sourceSessionId=craig-AdabEqbzngmT-stage1-full`: 200.
+- Runtime logs: no `error` or `fatal` logs found after deploy.
+
+Current production cost snapshot:
+
+- Billable audio minutes: `54.752`
+- Work units: `603`
+- Cache hits: `0`
+- Missing hashes: `0`
+- Ledger entries: `0`
