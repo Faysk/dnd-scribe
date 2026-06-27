@@ -2,6 +2,11 @@ const crypto = require('crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { Pool } = require('pg');
+const {
+  parseRoll20ChatText,
+  normalizeRoll20Events,
+  summarizeRoll20Events
+} = require('../lib/roll20-commands');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
@@ -377,6 +382,39 @@ async function requireCampaignAccess(req, campaignSlug, allowedRoles = null) {
     throw httpError(403, 'Sem permissao para esta acao.');
   }
   return payload;
+}
+
+async function roll20IngestPreviewPayload(req, campaign, raw) {
+  const access = await requireCampaignAccess(req, campaign, ['owner', 'master']);
+  const prefix = cleanText(raw.prefix || process.env.ROLL20_COMMAND_PREFIX || '!dnd', 20) || '!dnd';
+  const source = cleanText(raw.source || 'copy-paste', 80) || 'copy-paste';
+  const sourceSessionId = cleanText(raw.sourceSessionId || raw.source_session_id, 180) || null;
+  const text = String(raw.text || raw.chatText || raw.chat_text || '').slice(0, 1024 * 1024);
+
+  if (!text.trim()) throw httpError(400, 'text obrigatorio com chat copiado/exportado do Roll20.');
+
+  const parsed = parseRoll20ChatText(text, { prefix });
+  const events = normalizeRoll20Events(parsed, {
+    campaignSlug: campaign,
+    receivedAt: raw.receivedAt || raw.received_at || undefined
+  });
+
+  return {
+    ok: true,
+    mode: 'dry_run_only',
+    dryRun: true,
+    campaignSlug: campaign,
+    sourceSessionId,
+    source,
+    prefix,
+    actor: {
+      profileId: access.profile?.id || null,
+      displayName: access.profile?.displayName || access.user?.displayName || null,
+      role: access.campaignRole || null
+    },
+    summary: summarizeRoll20Events(events),
+    events
+  };
 }
 
 function httpError(statusCode, message) {
@@ -2014,6 +2052,17 @@ async function handlePost(req, res, path) {
   const sourceSessionId = body.sourceSessionId || decisions.sourceSessionId || DEFAULT_SOURCE_SESSION;
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
+  if (path === '/api/roll20/ingest') {
+    const payload = await roll20IngestPreviewPayload(req, campaign, body);
+    if (body.dryRun === false) {
+      return sendJson(res, 409, {
+        ...payload,
+        ok: false,
+        error: 'Persistencia Roll20 ainda nao habilitada. Use dryRun para validar o parser primeiro.'
+      });
+    }
+    return sendJson(res, 200, payload);
+  }
   if (path === '/api/uploads/craig-url') {
     await requireCampaignAccess(req, campaign, ['owner', 'master']);
     const client = await getPool().connect();
