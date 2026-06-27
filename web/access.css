@@ -1,0 +1,78 @@
+.access-page {
+  display: grid;
+  gap: 12px;
+}
+
+.access-title {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px;
+}
+
+.access-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, .9fr) minmax(340px, 1.1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.access-card.wide {
+  grid-column: 1 / -1;
+}
+
+.access-profile-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.access-profile-summary strong,
+.access-profile-summary small {
+  display: block;
+}
+
+.access-form {
+  align-content: start;
+}
+
+.access-empty {
+  display: grid;
+  gap: 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 18px;
+}
+
+.access-claims,
+.access-directory {
+  display: grid;
+  gap: 8px;
+}
+
+.access-directory {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.access-claim.pending {
+  border-color: var(--orange);
+}
+
+.access-claim.approved {
+  border-color: var(--green);
+}
+
+.access-claim.rejected {
+  border-color: var(--red);
+}
+
+.access-player .badges {
+  margin-top: 6px;
+}
+
+@media (max-width: 980px) {
+  .access-grid,
+  .access-directory {
+    grid-template-columns: 1fr;
+  }
+}
