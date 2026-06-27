@@ -98,13 +98,19 @@ wants that, assign `former_dm_archive_reader` explicitly with an expiration.
 
 ## Next steps
 
+Done in step 105:
+
 1. Add an admin UI to view active role assignments.
-2. Add DM transfer workflow with reason and effective date.
-3. Move access-directory management to `campaign.access.manage`.
-4. Move Roll20 ingest to `narrative.roll20.ingest`.
-5. Move review/canon actions to `narrative.review.manage` and `narrative.canon.approve`.
-6. Move cloud workers to `project.jobs.run`.
-7. Add redaction rules for technical logs.
-8. Add audit rows for assignment create/end/revoke.
-9. Add eligible/temporary role activation.
-10. Phase out direct use of `campaign_members.role` in API authorization.
+2. Add DM transfer workflow with reason.
+
+Remaining:
+
+1. Add explicit effective-date scheduling for future DM transfer.
+2. Move access-directory management to `campaign.access.manage`.
+3. Move Roll20 ingest to `narrative.roll20.ingest`.
+4. Move review/canon actions to `narrative.review.manage` and `narrative.canon.approve`.
+5. Move cloud workers to `project.jobs.run`.
+6. Add redaction rules for technical logs.
+7. Add audit rows for assignment create/end/revoke.
+8. Add eligible/temporary role activation.
+9. Phase out direct use of `campaign_members.role` in API authorization.

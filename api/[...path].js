@@ -510,6 +510,463 @@ async function requirePermission(req, campaignSlug, options) {
   throw httpError(403, options.error || 'Sem permissao tecnica para esta acao.');
 }
 
+async function rbacAdminAccess(req, campaignSlug) {
+  const payload = await authMePayload(req, campaignSlug);
+  if (!payload.authenticated) throw httpError(401, 'Login Discord ou Google obrigatorio.');
+  const db = getPool();
+  const profileId = payload.profile?.id || null;
+  const [projectCheck, campaignCheck] = await Promise.all([
+    profileHasPermission(db, profileId, 'project.rbac.manage', 'project', PROJECT_SCOPE_ID),
+    profileHasPermission(db, profileId, 'campaign.access.manage', 'campaign', campaignSlug)
+  ]);
+  const legacyAdmin = !projectCheck.available && ['owner', 'master'].includes(payload.campaignRole || '');
+  const canManageTechnical = Boolean(projectCheck.allowed || legacyAdmin);
+  const canManageCampaignAccess = Boolean(projectCheck.allowed || campaignCheck.allowed || legacyAdmin);
+  if (!canManageTechnical && !canManageCampaignAccess) {
+    throw httpError(403, 'Administracao de funcoes exige project.rbac.manage ou campaign.access.manage.');
+  }
+  return {
+    payload,
+    profileId,
+    canManageTechnical,
+    canManageCampaignAccess,
+    rbacAvailable: projectCheck.available && campaignCheck.available
+  };
+}
+
+function legacyRoleForRoleSlug(roleSlug) {
+  return {
+    campaign_owner: 'owner',
+    campaign_reviewer: 'reviewer',
+    player: 'player',
+    viewer: 'viewer'
+  }[roleSlug] || null;
+}
+
+function normalizeRbacScope(raw, campaignSlug, role) {
+  const scopeType = cleanText(raw.scopeType || raw.scope_type || 'campaign', 30) || 'campaign';
+  if (!['project', 'campaign'].includes(scopeType)) {
+    throw httpError(400, 'scopeType precisa ser project ou campaign nesta etapa.');
+  }
+  const defaultScopeId = scopeType === 'project' ? PROJECT_SCOPE_ID : campaignSlug;
+  const scopeId = cleanText(raw.scopeId || raw.scope_id || defaultScopeId, 120) || defaultScopeId;
+  if (scopeType === 'project' && scopeId !== PROJECT_SCOPE_ID) {
+    throw httpError(400, `Projeto invalido para RBAC: ${scopeId}`);
+  }
+  if (scopeType === 'campaign' && scopeId !== campaignSlug) {
+    throw httpError(400, `Campanha fora do escopo atual: ${scopeId}`);
+  }
+  if (role?.plane === 'technical' && scopeType !== 'project') {
+    throw httpError(400, 'Funcoes tecnicas so podem ser atribuidas no escopo do projeto.');
+  }
+  if (role?.plane !== 'technical' && scopeType !== 'campaign') {
+    throw httpError(400, 'Funcoes narrativas/mistas desta etapa usam escopo da campanha.');
+  }
+  return { scopeType, scopeId };
+}
+
+async function campaignIdForSlug(db, campaignSlug) {
+  const row = await data('select id data from campaigns where slug = $1 limit 1;', [campaignSlug], db);
+  if (!row) throw httpError(404, `Campanha nao encontrada: ${campaignSlug}`);
+  return row;
+}
+
+async function roleDefinitionBySlug(db, roleSlug) {
+  const role = await data(
+    `
+select row_to_json(rd) data
+from role_definitions rd
+where rd.slug = $1
+limit 1;`,
+    [roleSlug],
+    db
+  );
+  if (!role) throw httpError(404, `Funcao nao encontrada: ${roleSlug}`);
+  return role;
+}
+
+async function profileExists(db, profileId) {
+  if (!profileId) return false;
+  return Boolean(await data('select exists(select 1 from profiles where id = $1::uuid) data;', [profileId], db));
+}
+
+async function syncLegacyCampaignMembership(db, campaignSlug, profileId, legacyRole) {
+  if (!legacyRole) return false;
+  const campaignId = await campaignIdForSlug(db, campaignSlug);
+  await db.query(
+    `
+insert into campaign_members (campaign_id, profile_id, role)
+values ($1::uuid, $2::uuid, $3)
+on conflict (campaign_id, profile_id)
+do update set role = excluded.role;`,
+    [campaignId, profileId, legacyRole]
+  );
+  return true;
+}
+
+async function rbacAdminPayload(db, access, campaignSlug) {
+  const roles = await data(
+    `
+select coalesce(json_agg(role_item order by role_item->>'plane', role_item->>'slug'), '[]'::json) data
+from (
+  select json_build_object(
+    'id', rd.id,
+    'slug', rd.slug,
+    'name', rd.name,
+    'plane', rd.plane,
+    'description', rd.description,
+    'isSystem', rd.is_system,
+    'permissions', coalesce((
+      select json_agg(json_build_object(
+        'action', pc.action,
+        'plane', pc.plane,
+        'description', pc.description
+      ) order by pc.action)
+      from role_permissions rp
+      join permission_catalog pc on pc.action = rp.permission_action
+      where rp.role_id = rd.id
+    ), '[]'::json)
+  ) role_item
+  from role_definitions rd
+  where ($1::boolean or rd.plane <> 'technical')
+) rows;`,
+    [access.canManageTechnical],
+    db
+  ) || [];
+  const profiles = await data(
+    `
+select coalesce(json_agg(profile_item order by lower(profile_item->>'displayName')), '[]'::json) data
+from (
+  select json_build_object(
+    'id', p.id,
+    'displayName', p.display_name,
+    'roll20Name', p.roll20_name,
+    'discordId', p.discord_id,
+    'discordHandle', p.discord_handle,
+    'email', p.email,
+    'avatarUrl', p.avatar_url,
+    'linked', p.auth_user_id is not null,
+    'legacyCampaignRole', cm.role
+  ) profile_item
+  from profiles p
+  left join campaigns c on c.slug = $1
+  left join campaign_members cm on cm.profile_id = p.id and cm.campaign_id = c.id
+) rows;`,
+    [campaignSlug],
+    db
+  ) || [];
+  const assignments = await data(
+    `
+select coalesce(json_agg(assignment_item order by assignment_item->>'scopeType', assignment_item->>'roleSlug', assignment_item->>'displayName'), '[]'::json) data
+from (
+  select json_build_object(
+    'id', ra.id,
+    'profileId', p.id,
+    'displayName', p.display_name,
+    'roll20Name', p.roll20_name,
+    'discordHandle', p.discord_handle,
+    'roleSlug', rd.slug,
+    'roleName', rd.name,
+    'plane', rd.plane,
+    'scopeType', ra.scope_type,
+    'scopeId', ra.scope_id,
+    'status', ra.status,
+    'startsAt', ra.starts_at,
+    'endsAt', ra.ends_at,
+    'reason', ra.reason,
+    'assignedBy', assigner.display_name,
+    'revokedBy', revoker.display_name,
+    'createdAt', ra.created_at,
+    'updatedAt', ra.updated_at
+  ) assignment_item
+  from role_assignments ra
+  join role_definitions rd on rd.id = ra.role_id
+  join profiles p on p.id = ra.profile_id
+  left join profiles assigner on assigner.id = ra.assigned_by
+  left join profiles revoker on revoker.id = ra.revoked_by
+  where (
+    $1::boolean
+    or (ra.scope_type = 'campaign' and ra.scope_id = $2 and rd.plane <> 'technical')
+  )
+) rows;`,
+    [access.canManageTechnical, campaignSlug],
+    db
+  ) || [];
+  const dmTenures = await data(
+    `
+select coalesce(json_agg(tenure_item order by tenure_item->>'startedAt' desc), '[]'::json) data
+from (
+  select json_build_object(
+    'id', dt.id,
+    'campaignSlug', c.slug,
+    'profileId', p.id,
+    'displayName', p.display_name,
+    'roll20Name', p.roll20_name,
+    'discordHandle', p.discord_handle,
+    'roleAssignmentId', dt.role_assignment_id,
+    'tenureType', dt.tenure_type,
+    'status', dt.status,
+    'startedAt', dt.started_at,
+    'endedAt', dt.ended_at,
+    'appointedBy', appointed.display_name,
+    'endedBy', ended.display_name,
+    'reason', dt.reason
+  ) tenure_item
+  from dm_tenures dt
+  join campaigns c on c.id = dt.campaign_id
+  join profiles p on p.id = dt.profile_id
+  left join profiles appointed on appointed.id = dt.appointed_by
+  left join profiles ended on ended.id = dt.ended_by
+  where c.slug = $1
+) rows;`,
+    [campaignSlug],
+    db
+  ) || [];
+  return {
+    ok: true,
+    campaignSlug,
+    projectScopeId: PROJECT_SCOPE_ID,
+    viewer: {
+      profileId: access.profileId,
+      canManageTechnical: access.canManageTechnical,
+      canManageCampaignAccess: access.canManageCampaignAccess
+    },
+    roles,
+    profiles,
+    assignments,
+    dmTenures
+  };
+}
+
+async function assignRbacRole(db, req, campaignSlug, raw) {
+  const access = await rbacAdminAccess(req, campaignSlug);
+  const profileId = cleanText(raw.profileId || raw.profile_id, 80);
+  const roleSlug = cleanText(raw.roleSlug || raw.role_slug, 80);
+  if (!profileId || !roleSlug) throw httpError(400, 'profileId e roleSlug sao obrigatorios.');
+  if (roleSlug === 'campaign_dm') throw httpError(400, 'Use a transferencia de DM para atribuir campaign_dm.');
+  if (!(await profileExists(db, profileId))) throw httpError(404, 'Perfil alvo nao encontrado.');
+  const role = await roleDefinitionBySlug(db, roleSlug);
+  const { scopeType, scopeId } = normalizeRbacScope(raw, campaignSlug, role);
+  const isTechnicalAssignment = role.plane === 'technical' || scopeType === 'project';
+  if (isTechnicalAssignment && !access.canManageTechnical) {
+    throw httpError(403, 'Funcoes tecnicas exigem project.rbac.manage.');
+  }
+  if (!isTechnicalAssignment && !access.canManageCampaignAccess) {
+    throw httpError(403, 'Funcoes da campanha exigem campaign.access.manage.');
+  }
+  const reason = cleanText(raw.reason, 1000) || 'Atribuicao feita pela administracao de funcoes.';
+  const result = await db.query(
+    `
+insert into role_assignments (
+  profile_id, role_id, scope_type, scope_id, status, starts_at, assigned_by, reason, metadata
+)
+values ($1::uuid, $2::uuid, $3, $4, 'active', now(), $5::uuid, $6, $7::jsonb)
+on conflict (profile_id, role_id, scope_type, scope_id)
+where status in ('active', 'eligible') and ends_at is null
+do update set
+  status = 'active',
+  starts_at = least(role_assignments.starts_at, excluded.starts_at),
+  assigned_by = excluded.assigned_by,
+  reason = excluded.reason,
+  metadata = coalesce(role_assignments.metadata, '{}'::jsonb) || excluded.metadata,
+  updated_at = now()
+returning id;`,
+    [
+      profileId,
+      role.id,
+      scopeType,
+      scopeId,
+      access.profileId,
+      reason,
+      JSON.stringify({ source: 'rbac_admin_ui', action: 'assign_role' })
+    ]
+  );
+  const legacyRole = scopeType === 'campaign' ? legacyRoleForRoleSlug(roleSlug) : null;
+  const legacyMembershipUpdated = await syncLegacyCampaignMembership(db, campaignSlug, profileId, legacyRole);
+  return {
+    ok: true,
+    assignmentId: result.rows[0].id,
+    legacyMembershipUpdated,
+    rbac: await rbacAdminPayload(db, access, campaignSlug)
+  };
+}
+
+async function revokeRbacAssignment(db, req, campaignSlug, raw) {
+  const access = await rbacAdminAccess(req, campaignSlug);
+  const assignmentId = cleanText(raw.assignmentId || raw.assignment_id || raw.id, 80);
+  if (!assignmentId) throw httpError(400, 'assignmentId obrigatorio.');
+  const assignment = await data(
+    `
+select row_to_json(assignment_row) data
+from (
+  select ra.*, rd.slug role_slug, rd.plane role_plane
+  from role_assignments ra
+  join role_definitions rd on rd.id = ra.role_id
+  where ra.id = $1::uuid
+  limit 1
+) assignment_row;`,
+    [assignmentId],
+    db
+  );
+  if (!assignment) throw httpError(404, 'Atribuicao nao encontrada.');
+  if (assignment.role_slug === 'campaign_dm') {
+    throw httpError(400, 'Use a transferencia de DM para encerrar campaign_dm ativo.');
+  }
+  const isTechnicalAssignment = assignment.role_plane === 'technical' || assignment.scope_type === 'project';
+  if (isTechnicalAssignment && !access.canManageTechnical) {
+    throw httpError(403, 'Revogar funcao tecnica exige project.rbac.manage.');
+  }
+  if (!isTechnicalAssignment && (assignment.scope_type !== 'campaign' || assignment.scope_id !== campaignSlug)) {
+    throw httpError(403, 'Atribuicao fora do escopo desta campanha.');
+  }
+  if (!isTechnicalAssignment && !access.canManageCampaignAccess) {
+    throw httpError(403, 'Revogar funcao da campanha exige campaign.access.manage.');
+  }
+  const reason = cleanText(raw.reason, 1000) || 'Revogacao feita pela administracao de funcoes.';
+  await db.query(
+    `
+update role_assignments
+set status = 'revoked',
+    ends_at = greatest(coalesce(ends_at, now()), starts_at + interval '1 second'),
+    revoked_by = $2::uuid,
+    reason = $3,
+    metadata = coalesce(metadata, '{}'::jsonb) || $4::jsonb,
+    updated_at = now()
+where id = $1::uuid;`,
+    [
+      assignmentId,
+      access.profileId,
+      reason,
+      JSON.stringify({ source: 'rbac_admin_ui', action: 'revoke_role' })
+    ]
+  );
+  return {
+    ok: true,
+    assignmentId,
+    rbac: await rbacAdminPayload(db, access, campaignSlug)
+  };
+}
+
+async function transferCampaignDm(db, req, campaignSlug, raw) {
+  const access = await rbacAdminAccess(req, campaignSlug);
+  if (!access.canManageCampaignAccess) {
+    throw httpError(403, 'Transferir DM exige campaign.access.manage ou project.rbac.manage.');
+  }
+  const newProfileId = cleanText(raw.newProfileId || raw.new_profile_id || raw.profileId || raw.profile_id, 80);
+  if (!newProfileId) throw httpError(400, 'newProfileId obrigatorio.');
+  if (!(await profileExists(db, newProfileId))) throw httpError(404, 'Novo DM nao encontrado.');
+  const reason = cleanText(raw.reason, 1000) || 'Transferencia de DM feita pela administracao de funcoes.';
+  const campaignId = await campaignIdForSlug(db, campaignSlug);
+  const role = await roleDefinitionBySlug(db, 'campaign_dm');
+
+  await db.query(
+    `
+update dm_tenures
+set status = 'ended',
+    ended_at = greatest(coalesce(ended_at, now()), started_at + interval '1 second'),
+    ended_by = $2::uuid,
+    reason = $3,
+    metadata = coalesce(metadata, '{}'::jsonb) || $4::jsonb,
+    updated_at = now()
+where campaign_id = $1::uuid
+  and tenure_type = 'primary'
+  and status = 'active'
+  and ended_at is null;`,
+    [
+      campaignId,
+      access.profileId,
+      reason,
+      JSON.stringify({ source: 'rbac_admin_ui', action: 'transfer_dm_end_previous' })
+    ]
+  );
+  await db.query(
+    `
+update role_assignments
+set status = 'ended',
+    ends_at = greatest(coalesce(ends_at, now()), starts_at + interval '1 second'),
+    revoked_by = $4::uuid,
+    reason = $5,
+    metadata = coalesce(metadata, '{}'::jsonb) || $6::jsonb,
+    updated_at = now()
+where role_id = $1::uuid
+  and scope_type = 'campaign'
+  and scope_id = $2
+  and profile_id <> $3::uuid
+  and status = 'active'
+  and ends_at is null;`,
+    [
+      role.id,
+      campaignSlug,
+      newProfileId,
+      access.profileId,
+      reason,
+      JSON.stringify({ source: 'rbac_admin_ui', action: 'transfer_dm_end_role' })
+    ]
+  );
+  const assignmentResult = await db.query(
+    `
+insert into role_assignments (
+  profile_id, role_id, scope_type, scope_id, status, starts_at, assigned_by, reason, metadata
+)
+values ($1::uuid, $2::uuid, 'campaign', $3, 'active', now(), $4::uuid, $5, $6::jsonb)
+on conflict (profile_id, role_id, scope_type, scope_id)
+where status in ('active', 'eligible') and ends_at is null
+do update set
+  status = 'active',
+  assigned_by = excluded.assigned_by,
+  reason = excluded.reason,
+  metadata = coalesce(role_assignments.metadata, '{}'::jsonb) || excluded.metadata,
+  updated_at = now()
+returning id;`,
+    [
+      newProfileId,
+      role.id,
+      campaignSlug,
+      access.profileId,
+      reason,
+      JSON.stringify({ source: 'rbac_admin_ui', action: 'transfer_dm_assign_role' })
+    ]
+  );
+  await db.query(
+    `
+insert into dm_tenures (
+  campaign_id, profile_id, role_assignment_id, tenure_type, status, started_at, appointed_by, reason, metadata
+)
+values ($1::uuid, $2::uuid, $3::uuid, 'primary', 'active', now(), $4::uuid, $5, $6::jsonb);`,
+    [
+      campaignId,
+      newProfileId,
+      assignmentResult.rows[0].id,
+      access.profileId,
+      reason,
+      JSON.stringify({ source: 'rbac_admin_ui', action: 'transfer_dm_start_tenure' })
+    ]
+  );
+  await db.query(
+    `
+update campaign_members
+set role = 'player'
+where campaign_id = $1::uuid
+  and profile_id <> $2::uuid
+  and role = 'master';`,
+    [campaignId, newProfileId]
+  );
+  await db.query(
+    `
+insert into campaign_members (campaign_id, profile_id, role)
+values ($1::uuid, $2::uuid, 'master')
+on conflict (campaign_id, profile_id)
+do update set role = 'master';`,
+    [campaignId, newProfileId]
+  );
+  return {
+    ok: true,
+    newProfileId,
+    roleAssignmentId: assignmentResult.rows[0].id,
+    rbac: await rbacAdminPayload(db, access, campaignSlug)
+  };
+}
+
 async function roll20IngestPreviewPayload(req, campaign, raw) {
   const access = await requireCampaignAccess(req, campaign, ['owner', 'master']);
   const prefix = cleanText(raw.prefix || process.env.ROLL20_COMMAND_PREFIX || '!dnd', 20) || '!dnd';
@@ -2420,6 +2877,10 @@ async function handleGet(req, res, path, query) {
       }
     }));
   }
+  if (path === '/api/rbac') {
+    const access = await rbacAdminAccess(req, campaign);
+    return sendJson(res, 200, await rbacAdminPayload(getPool(), access, campaign));
+  }
   if (path === '/api/craig-map') {
     await requireCampaignAccess(req, campaign);
     return sendJson(res, 200, {
@@ -2465,6 +2926,48 @@ async function handlePost(req, res, path) {
   const sourceSessionId = body.sourceSessionId || decisions.sourceSessionId || DEFAULT_SOURCE_SESSION;
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
+  if (path === '/api/rbac/assign') {
+    const client = await getPool().connect();
+    try {
+      await client.query('begin');
+      const payload = await assignRbacRole(client, req, campaign, body);
+      await client.query('commit');
+      return sendJson(res, 200, payload);
+    } catch (error) {
+      await client.query('rollback').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  if (path === '/api/rbac/revoke') {
+    const client = await getPool().connect();
+    try {
+      await client.query('begin');
+      const payload = await revokeRbacAssignment(client, req, campaign, body);
+      await client.query('commit');
+      return sendJson(res, 200, payload);
+    } catch (error) {
+      await client.query('rollback').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  if (path === '/api/rbac/transfer-dm') {
+    const client = await getPool().connect();
+    try {
+      await client.query('begin');
+      const payload = await transferCampaignDm(client, req, campaign, body);
+      await client.query('commit');
+      return sendJson(res, 200, payload);
+    } catch (error) {
+      await client.query('rollback').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
   if (path === '/api/roll20-event-note') {
     const client = await getPool().connect();
     try {

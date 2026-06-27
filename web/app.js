@@ -289,6 +289,8 @@ async function api(path, options = {}) {
   return payload;
 }
 
+window.api = api;
+
 function remember(message, payload = null) {
   state.log.unshift({
     at: new Date().toLocaleTimeString('pt-BR'),
