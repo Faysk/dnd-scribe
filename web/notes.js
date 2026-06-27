@@ -99,8 +99,8 @@
     if (!authUser()) {
       return shell('Notas da mesa', `
         <div class="notes-empty">
-          <p>Entre com Google para ver notas salvas pelo Discord.</p>
-          <button class="primary" onclick="signInGoogle()">Entrar Google</button>
+          <p>Entre com Discord para ver notas salvas pela mesa. Google fica como alternativa.</p>
+          <div class="auth-actions"><button class="primary" onclick="signInDiscord()">Entrar Discord</button><button onclick="signInGoogle()">Google</button></div>
         </div>
       `);
     }

@@ -52,9 +52,33 @@
     return window.state?.auth?.user || null;
   }
 
-  function googleName() {
+  function loginName() {
     const user = authUser();
-    return user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '';
+    return user?.user_metadata?.full_name
+      || user?.user_metadata?.name
+      || user?.user_metadata?.global_name
+      || user?.user_metadata?.preferred_username
+      || user?.user_metadata?.user_name
+      || user?.user_metadata?.username
+      || user?.email
+      || '';
+  }
+
+  function discordIdentity() {
+    const user = authUser();
+    const identity = (user?.identities || []).find(item => item.provider === 'discord');
+    const data = identity?.identity_data || {};
+    const metadata = user?.user_metadata || {};
+    return {
+      id: data.provider_id || data.sub || metadata.provider_id || metadata.sub || '',
+      handle: data.user_name || data.preferred_username || data.username || metadata.user_name || metadata.preferred_username || metadata.username || ''
+    };
+  }
+
+  function loginProviderLabel() {
+    const user = authUser();
+    const provider = user?.app_metadata?.provider || user?.identities?.[0]?.provider || 'oauth';
+    return { discord: 'Discord', google: 'Google' }[provider] || 'OAuth';
   }
 
   async function loadAccessDirectory(force = false) {
@@ -115,13 +139,13 @@
   function renderAccess() {
     const user = authUser();
     if (!window.state?.auth?.ready) {
-      return accessShell('Conectando login Google...', '<div class="loader-line"></div>');
+      return accessShell('Conectando login...', '<div class="loader-line"></div>');
     }
     if (!user) {
       return accessShell('Entrar na mesa', `
         <div class="access-empty">
-          <p>Entre com Google para vincular seu perfil da mesa, Discord e personagens.</p>
-          <button class="primary" onclick="signInGoogle()">Entrar Google</button>
+          <p>Entre com Discord para vincular seu perfil da mesa e personagens. Google fica como alternativa.</p>
+          <div class="auth-actions"><button class="primary" onclick="signInDiscord()">Entrar Discord</button><button onclick="signInGoogle()">Google</button></div>
         </div>
       `);
     }
@@ -149,16 +173,16 @@
           <div class="panel-head">
             <h2>Seu login</h2>
             <div class="badges">
-              ${chip('Google', 'green')}
+              ${chip(loginProviderLabel(), loginProviderLabel() === 'Discord' ? 'violet' : 'green')}
               ${chip(roleLabel(viewer.campaignRole), canManage ? 'gold' : viewer.campaignRole ? 'blue' : 'orange')}
             </div>
           </div>
           <div class="panel-body access-profile-summary">
-            <strong>${esc(viewer.displayName || googleName() || user.email)}</strong>
-            <small>${viewer.profileId ? 'Perfil da mesa vinculado.' : 'Google conectado; perfil da mesa ainda pendente.'}</small>
+            <strong>${esc(viewer.displayName || loginName() || user.email)}</strong>
+            <small>${viewer.profileId ? 'Perfil da mesa vinculado.' : 'Login conectado; perfil da mesa ainda pendente.'}</small>
             <div class="actions">
               <button onclick="loadAccessDirectory(true)">Atualizar</button>
-              <button onclick="signOutGoogle()">Sair</button>
+              <button onclick="signOutAuth()">Sair</button>
             </div>
           </div>
         </article>
@@ -200,15 +224,16 @@
   function claimForm() {
     const user = authUser();
     const existing = (accessState.directory?.claims || []).find(item => item.status === 'pending');
+    const discord = discordIdentity();
     return `
       <div class="detail-grid access-form">
         ${existing ? `<div class="empty">Voce ja tem uma solicitacao pendente. Enviar de novo atualiza a mesma solicitacao.</div>` : ''}
         <label><span class="label">Perfil alvo</span><select id="accessTargetProfile">${profileOptions()}</select></label>
         <div class="field-grid">
-          <label><span class="label">Nome na vida</span><input id="accessDisplayName" value="${esc(googleName())}" placeholder="Nome preferido" /></label>
+          <label><span class="label">Nome na vida</span><input id="accessDisplayName" value="${esc(loginName())}" placeholder="Nome preferido" /></label>
           <label><span class="label">Nick Roll20/Craig</span><input id="accessRoll20Name" placeholder="ex: faysk" /></label>
-          <label><span class="label">Discord ID</span><input id="accessDiscordId" placeholder="ID numerico, se souber" /></label>
-          <label><span class="label">Discord handle</span><input id="accessDiscordHandle" placeholder="ex: faysk" /></label>
+          <label><span class="label">Discord ID</span><input id="accessDiscordId" value="${esc(discord.id)}" placeholder="ID numerico" /></label>
+          <label><span class="label">Discord handle</span><input id="accessDiscordHandle" value="${esc(discord.handle)}" placeholder="ex: faysk" /></label>
         </div>
         <label><span class="label">Personagens</span><input id="accessCharacters" placeholder="Dandelion, outro personagem futuro" /></label>
         <label><span class="label">Nota para o DM</span><textarea id="accessPlayerNote" placeholder="Explique quem voce e, quais personagens interpreta e qualquer detalhe de Discord/Craig."></textarea></label>

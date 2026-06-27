@@ -133,6 +133,15 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   margin-top: 10px;
 }
 .auth-actions button { flex: 1 1 120px; }
+
+.auth-gate {
+  max-width: 620px;
+  align-items: start;
+}
+
+.auth-gate .auth-actions {
+  width: 100%;
+}
 .rail-title {
   display: flex;
   align-items: center;

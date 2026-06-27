@@ -70,7 +70,9 @@ const state = {
     profileLoading: false,
     profileError: null,
     error: null,
-    mode: 'open_test'
+    mode: 'auth_required',
+    primaryProvider: 'discord',
+    providers: ['discord', 'google']
   },
   music: {
     expanded: false,
@@ -153,11 +155,13 @@ function hasDraftChanges() {
 function updateActionButtons() {
   const hasReview = Boolean(state.review);
   const hasDraft = hasDraftChanges();
+  const canRead = canReadCampaign();
+  const canManage = canManageCampaign();
   const controls = {
-    applyDecisionsBtn: state.busy || !hasReview || !hasDraft,
-    downloadTemplateBtn: state.busy || !hasReview,
-    downloadDecisionsBtn: state.busy || !hasReview,
-    refreshSessionsBtn: state.busy
+    applyDecisionsBtn: state.busy || !hasReview || !hasDraft || !canManage,
+    downloadTemplateBtn: state.busy || !hasReview || !canRead,
+    downloadDecisionsBtn: state.busy || !hasReview || !canRead,
+    refreshSessionsBtn: state.busy || !canRead
   };
   Object.entries(controls).forEach(([id, disabled]) => {
     const el = document.getElementById(id);
@@ -259,15 +263,15 @@ async function boot() {
   initMusicDock();
   render();
   await initAuth();
-  await loadSessions();
-  await loadJobs();
-  await loadCraigMap();
+  if (canReadCampaign()) await loadCampaignData();
 }
 
 async function initAuth() {
   try {
     const config = await api('/api/auth-config');
-    state.auth.mode = config.mode || 'open_test';
+    state.auth.mode = config.mode || 'auth_required';
+    state.auth.primaryProvider = config.primaryProvider || 'discord';
+    state.auth.providers = config.providers || ['discord', 'google'];
     if (!config.supabaseUrl || !config.publishableKey) {
       state.auth.error = 'Config publica do Supabase ausente.';
       return;
@@ -286,11 +290,16 @@ async function initAuth() {
     const { data, error } = await state.auth.client.auth.getSession();
     if (error) throw error;
     state.auth.user = data?.session?.user || null;
-    state.auth.client.auth.onAuthStateChange((_event, session) => {
+    state.auth.client.auth.onAuthStateChange(async (_event, session) => {
       state.auth.user = session?.user || null;
       state.auth.ready = true;
       renderAuthPanel();
-      loadAuthProfile(session);
+      await loadAuthProfile(session);
+      if (canReadCampaign()) await loadCampaignData();
+      else {
+        resetCampaignData();
+        render();
+      }
     });
     state.auth.ready = true;
     renderAuthPanel();
@@ -300,6 +309,30 @@ async function initAuth() {
     state.auth.error = error.message;
     renderAuthPanel();
   }
+}
+
+function canReadCampaign() {
+  return Boolean(state.auth.capabilities?.canReadCampaign);
+}
+
+function canManageCampaign() {
+  return Boolean(state.auth.capabilities?.canManageCampaign);
+}
+
+function resetCampaignData() {
+  state.sessions = [];
+  state.selectedSourceSessionId = null;
+  state.review = null;
+  state.summary = null;
+  state.jobs = [];
+  state.craigMap = null;
+  state.craigMapEditable = false;
+}
+
+async function loadCampaignData() {
+  await loadSessions();
+  await loadJobs();
+  await loadCraigMap();
 }
 
 async function loadAuthProfile(session = null) {
@@ -344,8 +377,23 @@ function authDisplayName(user = state.auth.user) {
   if (!user) return '';
   return user.user_metadata?.full_name
     || user.user_metadata?.name
+    || user.user_metadata?.global_name
+    || user.user_metadata?.preferred_username
+    || user.user_metadata?.user_name
+    || user.user_metadata?.username
     || user.email
-    || 'Usuario Google';
+    || 'Usuario autenticado';
+}
+
+function authProviderName(user = state.auth.user) {
+  return user?.app_metadata?.provider || user?.identities?.[0]?.provider || 'oauth';
+}
+
+function authProviderLabel(provider = authProviderName()) {
+  return {
+    discord: 'Discord',
+    google: 'Google'
+  }[provider] || 'OAuth';
 }
 
 function roleLabel(role) {
@@ -392,14 +440,14 @@ function renderAuthPanel() {
     panel.innerHTML = `
       <span class="label">Acesso</span>
       <strong>Conectando</strong>
-      <small>Preparando login Google.</small>
+      <small>Preparando login da mesa.</small>
     `;
     return;
   }
   if (state.auth.error) {
     panel.innerHTML = `
       <span class="label">Acesso</span>
-      <strong>Modo aberto</strong>
+      <strong>Acesso fechado</strong>
       <small>${escapeHtml(state.auth.error)}</small>
       <div class="auth-actions">
         <button onclick="initAuth()">Tentar de novo</button>
@@ -410,11 +458,31 @@ function renderAuthPanel() {
   if (!user) {
     panel.innerHTML = `
       <span class="label">Acesso</span>
-      <strong>Modo aberto</strong>
-      <small>Login Google opcional durante os testes.</small>
-      <div class="badges">${badge('API aberta', 'orange')}</div>
+      <strong>Entrada da mesa</strong>
+      <small>Discord e o login principal. Google fica como alternativa.</small>
+      <div class="badges">${badge('RBAC ativo', 'green')}${badge('DM aprova', 'gold')}</div>
       <div class="auth-actions">
-        <button class="primary" onclick="signInGoogle()">Entrar Google</button>
+        <button class="primary" onclick="signInDiscord()">Entrar Discord</button>
+        <button onclick="signInGoogle()">Google</button>
+      </div>
+    `;
+    return;
+  }
+  const provider = authProviderName(user);
+  if (!state.auth.campaignRole) {
+    panel.innerHTML = `
+      <span class="label">Acesso</span>
+      <strong>${escapeHtml(profileName)}</strong>
+      <small>${escapeHtml(profile ? profileDetail : 'Login conectado; vinculo da mesa pendente.')}</small>
+      <div class="badges">
+        ${badge(authProviderLabel(provider), provider === 'discord' ? 'violet' : 'green')}
+        ${badge('Aguardando DM', 'orange')}
+      </div>
+      ${state.auth.profileLoading ? '<small>Atualizando perfil da mesa...</small>' : ''}
+      ${state.auth.profileError ? `<small>${escapeHtml(state.auth.profileError)}</small>` : ''}
+      <div class="auth-actions">
+        <button class="primary" onclick="state.tab='access'; render();">Solicitar acesso</button>
+        <button onclick="signOutAuth()">Sair</button>
       </div>
     `;
     return;
@@ -422,27 +490,27 @@ function renderAuthPanel() {
   panel.innerHTML = `
     <span class="label">Acesso</span>
     <strong>${escapeHtml(profileName)}</strong>
-    <small>${escapeHtml(profile ? profileDetail : 'Google conectado; perfil da mesa pendente.')}</small>
+    <small>${escapeHtml(profileDetail || 'Perfil da mesa aprovado.')}</small>
     <div class="badges">
-      ${badge('Google', 'green')}
-      ${profile ? badge(role, state.auth.campaignRole === 'master' ? 'gold' : 'blue') : badge('Nao vinculado', 'orange')}
-      ${badge('API aberta', 'orange')}
+      ${badge(authProviderLabel(provider), provider === 'discord' ? 'violet' : 'green')}
+      ${badge(role, state.auth.campaignRole === 'master' ? 'gold' : 'blue')}
+      ${badge('RBAC ativo', 'green')}
     </div>
     ${state.auth.profileLoading ? '<small>Atualizando perfil da mesa...</small>' : ''}
     ${state.auth.profileError ? `<small>${escapeHtml(state.auth.profileError)}</small>` : ''}
     <div class="auth-actions">
-      <button onclick="signOutGoogle()">Sair</button>
+      <button onclick="signOutAuth()">Sair</button>
     </div>
   `;
 }
 
-async function signInGoogle() {
+async function signInProvider(provider) {
   if (!state.auth.client) {
     toast('Login ainda nao esta pronto.');
     return;
   }
   const { error } = await state.auth.client.auth.signInWithOAuth({
-    provider: 'google',
+    provider,
     options: {
       redirectTo: window.location.origin
     }
@@ -450,11 +518,19 @@ async function signInGoogle() {
   if (error) toast(error.message);
 }
 
-async function signOutGoogle() {
+function signInDiscord() {
+  return signInProvider('discord');
+}
+
+function signInGoogle() {
+  return signInProvider('google');
+}
+
+async function signOutAuth() {
   if (!state.auth.client) return;
   const { error } = await state.auth.client.auth.signOut();
   if (error) toast(error.message);
-  else toast('Sessao Google encerrada.');
+  else toast('Sessao encerrada.');
 }
 
 function initMusicDock() {
@@ -691,6 +767,10 @@ function render() {
   renderHeader();
   renderStatusStrip();
   updateActionButtons();
+  if (state.auth.ready && !canReadCampaign() && state.tab !== 'access') {
+    $('#view').innerHTML = authGateView();
+    return;
+  }
   document.querySelectorAll('#tabs button').forEach(button => {
     button.classList.toggle('active', button.dataset.tab === state.tab);
   });
@@ -718,6 +798,31 @@ function loadingView(message = 'Carregando dados reais do Supabase...') {
       <div class="loader-line"></div>
       <h2>${escapeHtml(message)}</h2>
       <p>O backend esta buscando sessao, transcricao, candidatos, publicacoes e resumo operacional.</p>
+    </section>
+  `;
+}
+
+function authGateView() {
+  if (!state.auth.user) {
+    return `
+      <section class="loading-panel auth-gate">
+        <h2>Entrada da mesa</h2>
+        <p>Entre com Discord para acessar sessoes, notas, audio e revisoes. Google fica disponivel como alternativa.</p>
+        <div class="auth-actions">
+          <button class="primary" onclick="signInDiscord()">Entrar Discord</button>
+          <button onclick="signInGoogle()">Google</button>
+        </div>
+      </section>
+    `;
+  }
+  return `
+    <section class="loading-panel auth-gate">
+      <h2>Acesso aguardando aprovacao</h2>
+      <p>Seu login esta conectado, mas o perfil da mesa ainda precisa ser vinculado e aprovado pelo DM.</p>
+      <div class="auth-actions">
+        <button class="primary" onclick="state.tab='access'; render();">Abrir acesso</button>
+        <button onclick="signOutAuth()">Sair</button>
+      </div>
     </section>
   `;
 }
@@ -1763,8 +1868,11 @@ window.uploadCraigFromForm = uploadCraigFromForm;
 window.saveCraigTrack = saveCraigTrack;
 window.initAuth = initAuth;
 window.loadAuthProfile = loadAuthProfile;
+window.signInProvider = signInProvider;
+window.signInDiscord = signInDiscord;
 window.signInGoogle = signInGoogle;
-window.signOutGoogle = signOutGoogle;
+window.signOutAuth = signOutAuth;
+window.signOutGoogle = signOutAuth;
 window.confirmClearDraft = confirmClearDraft;
 
 boot();

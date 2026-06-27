@@ -171,18 +171,44 @@ function bearerToken(req) {
 function authName(user) {
   return user?.user_metadata?.full_name
     || user?.user_metadata?.name
+    || user?.user_metadata?.global_name
+    || user?.user_metadata?.preferred_username
+    || user?.user_metadata?.user_name
+    || user?.user_metadata?.username
     || user?.email
-    || 'Usuario Google';
+    || 'Usuario autenticado';
 }
 
 function authAvatar(user) {
   return user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
 }
 
+function authProvider(user) {
+  return user?.app_metadata?.provider
+    || user?.identities?.[0]?.provider
+    || 'oauth';
+}
+
+function discordIdentity(user) {
+  const identity = (user?.identities || []).find(item => item.provider === 'discord');
+  const data = identity?.identity_data || {};
+  const metadata = user?.user_metadata || {};
+  const discordId = data.provider_id || data.sub || metadata.provider_id || metadata.sub || '';
+  const handle = data.user_name
+    || data.preferred_username
+    || data.username
+    || metadata.user_name
+    || metadata.preferred_username
+    || metadata.username
+    || '';
+  if (!discordId && !handle) return null;
+  return { id: String(discordId || '').trim(), handle: String(handle || '').trim() };
+}
+
 function capabilitiesForRole(role) {
   const isDm = role === 'owner' || role === 'master';
   return {
-    openTestMode: true,
+    openTestMode: false,
     canReadCampaign: Boolean(role),
     canReviewOwnMaterial: Boolean(role),
     canReviewTableMaterial: ['owner', 'master', 'reviewer'].includes(role),
@@ -208,7 +234,7 @@ async function supabaseUserFromRequest(req) {
     }
   });
   if (response.status === 401 || response.status === 403) {
-    const error = new Error('Sessao Google invalida ou expirada.');
+    const error = new Error('Sessao invalida ou expirada.');
     error.statusCode = 401;
     throw error;
   }
@@ -222,14 +248,40 @@ async function supabaseUserFromRequest(req) {
 
 async function syncAuthProfile(db, user) {
   if (!user?.id) return;
+  const discord = discordIdentity(user);
+  if (discord?.id) {
+    await db.query(
+      `
+update profiles
+set auth_user_id = coalesce(auth_user_id, $1::uuid),
+    email = coalesce($2, email),
+    avatar_url = coalesce($3, avatar_url),
+    discord_handle = coalesce(nullif($5, ''), discord_handle),
+    last_sign_in_at = now()
+where discord_id = $4
+  and (auth_user_id is null or auth_user_id = $1::uuid);`,
+      [user.id, user.email || null, authAvatar(user), discord.id, discord.handle || null]
+    );
+  }
   await db.query(
     `
 update profiles
 set email = coalesce($2, email),
     avatar_url = coalesce($3, avatar_url),
+    discord_id = case
+      when $4::text is null or $4::text = '' then discord_id
+      when discord_id is not null then discord_id
+      when exists (
+        select 1 from profiles other
+        where other.discord_id = $4::text
+          and other.auth_user_id is distinct from $1::uuid
+      ) then discord_id
+      else $4::text
+    end,
+    discord_handle = coalesce(nullif($5, ''), discord_handle),
     last_sign_in_at = now()
 where auth_user_id = $1::uuid;`,
-    [user.id, user.email || null, authAvatar(user)]
+    [user.id, user.email || null, authAvatar(user), discord?.id || null, discord?.handle || null]
   );
 }
 
@@ -282,14 +334,14 @@ async function authMePayload(req, campaignSlug) {
   if (!user) {
     return {
       ok: true,
-      mode: 'open_test',
+      mode: 'auth_required',
       authenticated: false,
       user: null,
       profile: null,
       memberships: [],
       campaignRole: null,
       capabilities: capabilitiesForRole(null),
-      note: 'API aberta para testes; login Google e opcional nesta fase.'
+      note: 'Login Discord ou Google obrigatorio para acessar dados da mesa.'
     };
   }
   const db = getPool();
@@ -297,19 +349,34 @@ async function authMePayload(req, campaignSlug) {
   const linked = await linkedProfileForUser(db, user.id, campaignSlug);
   return {
     ok: true,
-    mode: 'open_test',
+    mode: 'auth_required',
     authenticated: true,
     user: {
       id: user.id,
       displayName: authName(user),
-      avatarUrl: authAvatar(user)
+      avatarUrl: authAvatar(user),
+      provider: authProvider(user),
+      discord: discordIdentity(user)
     },
     profile: linked.profile,
     memberships: linked.memberships || [],
     campaignRole: linked.campaignRole || null,
     capabilities: capabilitiesForRole(linked.campaignRole || null),
-    note: 'Perfil autenticado; as rotas continuam abertas temporariamente para teste.'
+    note: linked.campaignRole
+      ? 'Perfil autenticado e aprovado na campanha.'
+      : 'Perfil autenticado; vinculo com a campanha ainda depende de aprovacao do DM.'
   };
+}
+
+async function requireCampaignAccess(req, campaignSlug, allowedRoles = null) {
+  const payload = await authMePayload(req, campaignSlug);
+  if (!payload.authenticated) throw httpError(401, 'Login Discord ou Google obrigatorio.');
+  const role = payload.campaignRole || null;
+  if (!role) throw httpError(403, 'Perfil da mesa ainda nao aprovado pelo DM.');
+  if (allowedRoles && !allowedRoles.includes(role)) {
+    throw httpError(403, 'Sem permissao para esta acao.');
+  }
+  return payload;
 }
 
 function httpError(statusCode, message) {
@@ -562,7 +629,7 @@ select * from inserted;`,
       cleanText(raw.arc, 120) || null,
       cleanText(raw.summary || raw.summaryShort || raw.summary_short, 2000) || null,
       generatedSourceId,
-      JSON.stringify({ created_by: 'api/vercel', created_from: 'craig_direct_upload', open_test_mode: true })
+      JSON.stringify({ created_by: 'api/vercel', created_from: 'craig_direct_upload', auth_required: true })
     ]
   );
   if (!result.rows.length) throw httpError(404, `Campanha nao encontrada: ${campaign}`);
@@ -809,7 +876,7 @@ async function createSession(db, campaign, raw) {
   const metadata = {
     created_by: 'api/vercel',
     created_from: 'session_manager',
-    open_test_mode: true
+    auth_required: true
   };
   const result = await db.query(
     `
@@ -844,7 +911,7 @@ async function updateSession(db, campaign, sourceSessionId, raw) {
   const metadataPatch = {
     updated_by: 'api/vercel',
     updated_from: 'session_manager',
-    open_test_mode: true
+    auth_required: true
   };
   const result = await db.query(
     `
@@ -1874,7 +1941,9 @@ async function handleGet(req, res, path, query) {
     const config = authPublicConfig();
     return sendJson(res, 200, {
       ok: true,
-      mode: 'open_test',
+      mode: 'auth_required',
+      primaryProvider: 'discord',
+      providers: ['discord', 'google'],
       supabaseUrl: config.supabaseUrl,
       publishableKey: config.publishableKey
     });
@@ -1883,6 +1952,7 @@ async function handleGet(req, res, path, query) {
     return sendJson(res, 200, await authMePayload(req, campaign));
   }
   if (path === '/api/audio-url') {
+    await requireCampaignAccess(req, campaign);
     const trackKey = query.get('trackKey') || query.get('sourceFileRole') || '';
     const expires = query.get('expires') || '900';
     return sendJson(res, 200, await audioUrlPayload(campaign, sourceSessionId, trackKey, expires));
@@ -1891,6 +1961,7 @@ async function handleGet(req, res, path, query) {
     return sendJson(res, 200, { ok: true, app: 'dnd-scribe-vercel', campaignSlug: campaign });
   }
   if (path === '/api/jobs') {
+    await requireCampaignAccess(req, campaign);
     return sendJson(res, 200, {
       ok: true,
       jobs: await listJobs(campaign, query.get('sourceSessionId') || ''),
@@ -1899,6 +1970,7 @@ async function handleGet(req, res, path, query) {
     });
   }
   if (path === '/api/craig-map') {
+    await requireCampaignAccess(req, campaign);
     return sendJson(res, 200, {
       ok: true,
       mode: 'deploy_config_readonly',
@@ -1908,9 +1980,11 @@ async function handleGet(req, res, path, query) {
     });
   }
   if (path === '/api/sessions') {
+    await requireCampaignAccess(req, campaign);
     return sendJson(res, 200, { ok: true, sessions: await listSessions(campaign, runId) });
   }
   if (path === '/api/session') {
+    await requireCampaignAccess(req, campaign);
     const [review, summary] = await Promise.all([
       buildReviewPayload(campaign, sourceSessionId, runId),
       responseSummary(campaign, sourceSessionId, runId)
@@ -1918,6 +1992,7 @@ async function handleGet(req, res, path, query) {
     return sendJson(res, 200, { ok: true, review, summary });
   }
   if (path === '/api/review-template') {
+    await requireCampaignAccess(req, campaign);
     const actor = query.get('actorTrackKey') || DEFAULT_ACTOR;
     const includeAll = query.get('includeAllSegments') === 'true';
     const template = await buildDecisionTemplate(campaign, sourceSessionId, runId, actor, includeAll);
@@ -1940,6 +2015,7 @@ async function handlePost(req, res, path) {
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
   if (path === '/api/uploads/craig-url') {
+    await requireCampaignAccess(req, campaign, ['owner', 'master']);
     const client = await getPool().connect();
     try {
       await client.query('begin');
@@ -1954,6 +2030,7 @@ async function handlePost(req, res, path) {
     }
   }
   if (path === '/api/uploads/craig-complete') {
+    await requireCampaignAccess(req, campaign, ['owner', 'master']);
     const client = await getPool().connect();
     try {
       await client.query('begin');
@@ -1968,20 +2045,24 @@ async function handlePost(req, res, path) {
     }
   }
   if (path === '/api/craig-map/update') {
+    await requireCampaignAccess(req, campaign, ['owner', 'master']);
     return sendJson(res, 409, {
       ok: false,
       error: 'Edicao do mapa Craig em producao ainda esta bloqueada; leitura ja funciona pelo deploy.'
     });
   }
   if (path === '/api/sessions/create') {
+    await requireCampaignAccess(req, campaign, ['owner', 'master']);
     const session = await createSession(getPool(), campaign, body);
     return sendJson(res, 200, { ok: true, session, sessions: await listSessions(campaign, runId) });
   }
   if (path === '/api/sessions/update') {
+    await requireCampaignAccess(req, campaign, ['owner', 'master']);
     const session = await updateSession(getPool(), campaign, body.sourceSessionId || body.source_session_id || '', body);
     return sendJson(res, 200, { ok: true, session, sessions: await listSessions(campaign, runId) });
   }
   if (path === '/api/review-decisions/apply') {
+    await requireCampaignAccess(req, campaign, ['owner', 'master']);
     const client = await getPool().connect();
     let decisionSummary = null;
     let publicationResult = null;
@@ -2009,6 +2090,7 @@ async function handlePost(req, res, path) {
     return sendJson(res, 200, { ok: true, dryRun, decisionSummary, publicationResult, summary, review });
   }
   if (path === '/api/publications/rebuild') {
+    await requireCampaignAccess(req, campaign, ['owner', 'master']);
     const client = await getPool().connect();
     let publicationResult = null;
     try {
