@@ -88,6 +88,20 @@ function commands() {
         },
         {
           type: TYPE.SUB_COMMAND,
+          name: 'custos',
+          description: 'Mostra minutos cobraveis, cache e ledger de IA da sessao',
+          options: [
+            {
+              type: TYPE.STRING,
+              name: 'sessao',
+              description: 'Source ID da sessao, se quiser apontar uma sessao especifica',
+              required: false,
+              max_length: 180
+            }
+          ]
+        },
+        {
+          type: TYPE.SUB_COMMAND,
           name: 'nota',
           description: 'Salva uma nota da mesa para review do DM',
           options: [

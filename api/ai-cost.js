@@ -52,7 +52,7 @@ async function handleDiscordEndpoint(req, res) {
       app: 'dnd-scribe-discord-interactions',
       configured: Boolean(process.env.DISCORD_PUBLIC_KEY),
       routedVia: 'api/ai-cost',
-      commands: ['/dnd status', '/dnd nota', '/dnd vincular', 'Salvar no DnD Scribe']
+      commands: ['/dnd status', '/dnd custos', '/dnd nota', '/dnd vincular', 'Salvar no DnD Scribe']
     });
   }
   if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
