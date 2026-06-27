@@ -1,4 +1,8 @@
 const { Pool } = require('pg');
+const {
+  handleDiscordInteraction,
+  verifyDiscordSignature
+} = require('../lib/discord-interactions');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
@@ -25,6 +29,43 @@ function sendJson(res, status, value) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(value));
+}
+
+function readRawBody(req) {
+  if (Buffer.isBuffer(req.body)) return Promise.resolve(req.body);
+  if (typeof req.body === 'string') return Promise.resolve(Buffer.from(req.body, 'utf8'));
+  if (req.body && typeof req.body === 'object') {
+    return Promise.resolve(Buffer.from(JSON.stringify(req.body), 'utf8'));
+  }
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(Buffer.from(chunk)));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+async function handleDiscordEndpoint(req, res) {
+  if (req.method === 'GET') {
+    return sendJson(res, 200, {
+      ok: true,
+      app: 'dnd-scribe-discord-interactions',
+      configured: Boolean(process.env.DISCORD_PUBLIC_KEY),
+      routedVia: 'api/ai-cost',
+      commands: ['/dnd status', '/dnd nota', '/dnd vincular', 'Salvar no DnD Scribe']
+    });
+  }
+  if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+
+  const rawBody = await readRawBody(req);
+  const signature = req.headers['x-signature-ed25519'];
+  const timestamp = req.headers['x-signature-timestamp'];
+  const verified = verifyDiscordSignature({ signature, timestamp, rawBody });
+  if (!verified) return sendJson(res, 401, { ok: false, error: 'Invalid Discord signature' });
+
+  const payload = JSON.parse(rawBody.toString('utf8') || '{}');
+  const response = await handleDiscordInteraction(payload);
+  return sendJson(res, 200, response);
 }
 
 async function data(sql, params = [], db = getPool()) {
@@ -203,6 +244,13 @@ from ledger_rows;`,
 
 module.exports = async function handler(req, res) {
   const url = new URL(req.url, `https://${req.headers.host || 'localhost'}`);
+  if (url.searchParams.get('discordInteractions') === '1' || url.pathname === '/api/discord/interactions') {
+    try {
+      return await handleDiscordEndpoint(req, res);
+    } catch (error) {
+      return sendJson(res, error.statusCode || 500, { ok: false, error: error.message || String(error) });
+    }
+  }
   if (req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
   try {
     const campaign = url.searchParams.get('campaignSlug') || DEFAULT_CAMPAIGN;
