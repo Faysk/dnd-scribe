@@ -43,11 +43,11 @@ function warnings(summary) {
       message: 'Ha work units sem sha256; transcricao paga deve ficar bloqueada.'
     });
   }
-  if (Number(summary.chunkFallbacks || 0) > 0 && Number(summary.speechSlices || 0) === 0) {
+  if (Number(summary.chunkFallbacks || 0) > 0) {
     items.push({
       level: 'cost',
-      code: 'chunk_fallback_only',
-      message: 'A sessao ainda usa chunks inteiros; speech slices devem reduzir minutos cobraveis.'
+      code: 'chunk_fallback',
+      message: 'Ainda existem chunks inteiros nao silenciosos; gerar speech slices deve reduzir minutos cobraveis.'
     });
   }
   if (Number(summary.transcribeCandidates || 0) > 0) {
@@ -80,6 +80,14 @@ with target as (
    and tc.model = $3
    and tc.prompt_version = $4
    and tc.status = 'succeeded'
+), chunk_stats as (
+  select
+    count(*)::int raw_chunks,
+    count(*) filter (where coalesce(ac.probably_silent, false) is true)::int silent_chunks,
+    round((coalesce(sum(ac.duration_ms), 0) / 60000.0)::numeric, 3) raw_audio_minutes,
+    round((coalesce(sum(ac.duration_ms) filter (where coalesce(ac.probably_silent, false) is true), 0) / 60000.0)::numeric, 3) silent_audio_minutes
+  from audio_chunks ac
+  join target t on t.session_id = ac.session_id
 )
 select json_build_object(
   'campaignSlug', (select campaign_slug from target),
@@ -98,6 +106,10 @@ select json_build_object(
       and coalesce(probably_silent, false) is false
       and cache_id is null
   )::int,
+  'rawChunks', coalesce((select raw_chunks from chunk_stats), 0),
+  'silentChunks', coalesce((select silent_chunks from chunk_stats), 0),
+  'rawAudioMinutes', coalesce((select raw_audio_minutes from chunk_stats), 0),
+  'silentAudioMinutes', coalesce((select silent_audio_minutes from chunk_stats), 0),
   'totalAudioMinutes', round((coalesce(sum(duration_ms), 0) / 60000.0)::numeric, 3),
   'speechAudioMinutes', round((coalesce(sum(duration_ms) filter (where unit_type = 'speech_slice'), 0) / 60000.0)::numeric, 3),
   'fallbackAudioMinutes', round((coalesce(sum(duration_ms) filter (where unit_type = 'chunk'), 0) / 60000.0)::numeric, 3),
