@@ -1,6 +1,12 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/api/discord/interactions",
+      "destination": "/api/ai-cost?discordInteractions=1"
+    }
+  ],
   "functions": {
     "api/**/*.js": {
       "maxDuration": 60
