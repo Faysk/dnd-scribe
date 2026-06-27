@@ -10,6 +10,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from validate_ai_cost_pipeline import apply_env_cost_overrides
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_POLICY = ROOT / "config" / "ai_cost_policy.json"
@@ -318,6 +320,12 @@ def main() -> int:
         raise SystemExit(f"DATABASE_URL not found in {args.env_file}")
 
     policy = load_json(args.policy)
+    policy_issues: list[dict[str, Any]] = []
+    apply_env_cost_overrides(policy, env, policy_issues)
+    errors = [issue for issue in policy_issues if issue.get("level") == "error"]
+    if errors:
+        raise SystemExit("; ".join(f"{issue['code']}: {issue['message']}" for issue in errors))
+
     model = transcription_model(policy, args.model)
     session = find_session(database_url, args.campaign, args.source_session_id)
     units = fetch_work_units(database_url, session["id"], model, args.prompt_version)
