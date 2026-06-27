@@ -1,0 +1,34 @@
+.job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+
+.inline-job-limit {
+  display: grid;
+  gap: 4px;
+  width: 96px;
+}
+
+.inline-job-limit input {
+  min-height: 38px;
+  padding: 8px;
+}
+
+.job-actions button {
+  min-width: 118px;
+}
+
+@media (max-width: 760px) {
+  .job-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .inline-job-limit,
+  .job-actions button {
+    width: 100%;
+    min-width: 0;
+  }
+}
