@@ -1,0 +1,216 @@
+.roll20-tool {
+  width: min(1320px, calc(100vw - 28px));
+  margin: 0 auto;
+  padding: 18px 0 72px;
+}
+
+.roll20-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.roll20-header p code {
+  color: var(--gold);
+}
+
+.roll20-header-actions,
+.roll20-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.roll20-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, .8fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.roll20-input-panel,
+.roll20-summary,
+.roll20-results,
+.roll20-json-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.roll20-input-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.roll20-input-panel textarea {
+  min-height: 330px;
+  line-height: 1.4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.roll20-summary {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.roll20-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.roll20-metrics .metric {
+  min-height: 70px;
+}
+
+.roll20-summary-block {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.roll20-summary-block .badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.roll20-results,
+.roll20-json-panel {
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.roll20-results-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.roll20-events {
+  display: grid;
+  gap: 10px;
+}
+
+.roll20-event {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  padding: 12px;
+}
+
+.roll20-event.private {
+  border-color: #7c6230;
+  background: #19160e;
+}
+
+.roll20-event.invalid {
+  border-color: #8f4949;
+  background: #211315;
+}
+
+.roll20-event-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.roll20-event-main .badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.roll20-event dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.roll20-event dl div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 8px;
+}
+
+.roll20-event dt {
+  color: var(--faint);
+  font-size: .72rem;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.roll20-event dd {
+  margin: 4px 0 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.roll20-event code,
+.roll20-json-panel pre {
+  display: block;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #070a0f;
+  color: #dfe8f5;
+  padding: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .82rem;
+  line-height: 1.45;
+}
+
+.roll20-json-panel pre {
+  max-height: 460px;
+  margin: 0;
+}
+
+.roll20-error {
+  color: var(--red);
+}
+
+@media (max-width: 920px) {
+  .roll20-header,
+  .roll20-grid,
+  .roll20-event-main,
+  .roll20-event dl {
+    grid-template-columns: 1fr;
+  }
+
+  .roll20-header-actions,
+  .roll20-actions,
+  .roll20-event-main .badges {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .roll20-tool {
+    width: min(100vw - 18px, 1320px);
+    padding-top: 10px;
+  }
+
+  .roll20-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .roll20-actions button,
+  .roll20-header-actions button,
+  .roll20-header-actions a {
+    flex: 1 1 100%;
+  }
+}
