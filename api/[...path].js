@@ -7,6 +7,7 @@ const {
   normalizeRoll20Events,
   summarizeRoll20Events
 } = require('../lib/roll20-commands');
+const { buildMonitoringPayload } = require('../lib/monitoring');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
@@ -2273,6 +2274,20 @@ async function handleGet(req, res, path, query) {
       mode: 'supabase_prod_jobs',
       note: 'Jobs de producao sao persistidos no Supabase; execucao pesada ainda depende do worker cloud.'
     });
+  }
+  if (path === '/api/monitoring') {
+    const access = await requireCampaignAccess(req, campaign, ['owner', 'master']);
+    const deep = ['1', 'true', 'yes'].includes(String(query.get('deep') || '').toLowerCase());
+    return sendJson(res, 200, await buildMonitoringPayload(getPool(), {
+      campaignSlug: campaign,
+      runId,
+      deep,
+      actor: {
+        profileId: access.profile?.id || null,
+        displayName: access.profile?.displayName || access.user?.displayName || null,
+        role: access.campaignRole || null
+      }
+    }));
   }
   if (path === '/api/craig-map') {
     await requireCampaignAccess(req, campaign);
