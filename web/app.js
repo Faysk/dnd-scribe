@@ -154,6 +154,52 @@ function hasDraftChanges() {
   return counts.segments + counts.candidates > 0;
 }
 
+function setDocumentLocked(locked) {
+  document.body.classList.toggle('auth-locked', locked);
+  const shell = document.getElementById('appShell');
+  if (shell) shell.setAttribute('aria-hidden', locked ? 'true' : 'false');
+}
+
+function siteGateFrame(label, title, body, actions = '', footer = '') {
+  return [
+    '<div class="site-gate-card">',
+    '<div class="site-gate-brand">',
+    '<div class="brand-mark">d20</div>',
+    '<div><span class="label">' + escapeHtml(label) + '</span><h1>' + escapeHtml(title) + '</h1></div>',
+    '</div>',
+    '<p>' + escapeHtml(body) + '</p>',
+    actions,
+    footer ? '<small>' + escapeHtml(footer) + '</small>' : '',
+    '</div>'
+  ].join('');
+}
+
+function renderSiteGate() {
+  const gate = document.getElementById('siteGate');
+  if (!gate) return;
+  const locked = !state.auth.ready || !state.auth.user;
+  setDocumentLocked(locked);
+  if (!locked) {
+    gate.innerHTML = '';
+    return;
+  }
+  if (!state.auth.ready) {
+    gate.innerHTML = siteGateFrame('DnD Scribe', 'Entrada da mesa', 'Conectando Discord e Google com o Supabase Auth.', '<div class="loader-line"></div>');
+    return;
+  }
+  if (state.auth.error) {
+    gate.innerHTML = siteGateFrame('Acesso fechado', 'Login indisponivel', state.auth.error, '<div class="site-gate-actions"><button class="primary" onclick="initAuth()">Tentar de novo</button></div>');
+    return;
+  }
+  gate.innerHTML = siteGateFrame(
+    'Acesso fechado',
+    'Entrada da mesa',
+    'Entre para acessar sessoes, notas, Roll20, audio e revisoes. Discord e o login preferencial; Google fica como alternativa.',
+    '<div class="site-gate-actions"><button class="primary discord-login" onclick="signInDiscord()">Entrar com Discord</button><button onclick="signInGoogle()">Entrar com Google</button></div>',
+    'Depois do login, o DM controla o vinculo e as permissoes da campanha.'
+  );
+}
+
 function updateActionButtons() {
   const hasReview = Boolean(state.review);
   const hasDraft = hasDraftChanges();
@@ -275,11 +321,17 @@ async function initAuth() {
     state.auth.primaryProvider = config.primaryProvider || 'discord';
     state.auth.providers = config.providers || ['discord', 'google'];
     if (!config.supabaseUrl || !config.publishableKey) {
+      state.auth.ready = true;
       state.auth.error = 'Config publica do Supabase ausente.';
+      renderSiteGate();
+      renderAuthPanel();
       return;
     }
     if (!window.supabase?.createClient) {
+      state.auth.ready = true;
       state.auth.error = 'Cliente Supabase nao carregou no navegador.';
+      renderSiteGate();
+      renderAuthPanel();
       return;
     }
     state.auth.client = window.supabase.createClient(config.supabaseUrl, config.publishableKey, {
@@ -295,6 +347,7 @@ async function initAuth() {
     state.auth.client.auth.onAuthStateChange(async (_event, session) => {
       state.auth.user = session?.user || null;
       state.auth.ready = true;
+      renderSiteGate();
       renderAuthPanel();
       await loadAuthProfile(session);
       if (canReadCampaign()) await loadCampaignData();
@@ -304,11 +357,13 @@ async function initAuth() {
       }
     });
     state.auth.ready = true;
+    renderSiteGate();
     renderAuthPanel();
     await loadAuthProfile(data?.session || null);
   } catch (error) {
     state.auth.ready = true;
     state.auth.error = error.message;
+    renderSiteGate();
     renderAuthPanel();
   }
 }
@@ -349,6 +404,7 @@ async function loadAuthProfile(session = null) {
   state.auth.profileError = null;
   if (!state.auth.user || !state.auth.client) {
     state.auth.profileLoading = false;
+    renderSiteGate();
     renderAuthPanel();
     return;
   }
@@ -770,6 +826,7 @@ function renderSessions() {
 }
 
 function render() {
+  renderSiteGate();
   renderSessions();
   renderHeader();
   renderStatusStrip();

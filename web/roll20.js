@@ -490,6 +490,52 @@ function metric(value, label) {
   return `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`;
 }
 
+function setDocumentLocked(locked) {
+  document.body.classList.toggle('auth-locked', locked);
+  const shell = document.getElementById('roll20Shell');
+  if (shell) shell.setAttribute('aria-hidden', locked ? 'true' : 'false');
+}
+
+function siteGateFrame(label, title, body, actions = '', footer = '') {
+  return [
+    '<div class="site-gate-card">',
+    '<div class="site-gate-brand">',
+    '<div class="brand-mark">d20</div>',
+    '<div><span class="label">' + escapeHtml(label) + '</span><h1>' + escapeHtml(title) + '</h1></div>',
+    '</div>',
+    '<p>' + escapeHtml(body) + '</p>',
+    actions,
+    footer ? '<small>' + escapeHtml(footer) + '</small>' : '',
+    '</div>'
+  ].join('');
+}
+
+function renderSiteGate() {
+  const gate = document.getElementById('siteGate');
+  if (!gate) return;
+  const locked = !state.auth.ready || !state.auth.user;
+  setDocumentLocked(locked);
+  if (!locked) {
+    gate.innerHTML = '';
+    return;
+  }
+  if (!state.auth.ready) {
+    gate.innerHTML = siteGateFrame('Roll20', 'Entrada da mesa', 'Conectando Discord e Google antes de abrir a ferramenta.', '<div class="loader-line"></div>');
+    return;
+  }
+  if (state.auth.error) {
+    gate.innerHTML = siteGateFrame('Acesso fechado', 'Login indisponivel', state.auth.error, '<div class="site-gate-actions"><button class="primary" onclick="initAuth()">Tentar de novo</button></div>');
+    return;
+  }
+  gate.innerHTML = siteGateFrame(
+    'Acesso fechado',
+    'Entrada da mesa',
+    'Entre para usar o importador Roll20. Discord e o login preferencial; Google fica como alternativa.',
+    '<div class="site-gate-actions"><button class="primary discord-login" onclick="signInDiscord()">Entrar com Discord</button><button onclick="signInGoogle()">Entrar com Google</button></div>',
+    'Validacao e gravacao continuam exigindo permissao de DM ou Owner.'
+  );
+}
+
 function renderBackendStatus() {
   if (state.backend.loading) {
     return `
@@ -600,6 +646,8 @@ function renderJson() {
 }
 
 function render() {
+  renderSiteGate();
+  if (!state.auth.user) return;
   renderAuthPanel();
   renderBackendButton();
   renderSummary();

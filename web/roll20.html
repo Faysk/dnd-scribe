@@ -8,8 +8,22 @@
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/roll20.css" />
 </head>
-<body>
-  <main class="roll20-tool">
+<body class="auth-locked">
+  <section id="siteGate" class="site-gate" aria-live="polite">
+    <div class="site-gate-card">
+      <div class="site-gate-brand">
+        <div class="brand-mark">d20</div>
+        <div>
+          <span class="label">Roll20</span>
+          <h1>Entrada da mesa</h1>
+        </div>
+      </div>
+      <p>Conectando login seguro antes de abrir a ferramenta.</p>
+      <div class="loader-line"></div>
+    </div>
+  </section>
+
+  <main class="roll20-tool" id="roll20Shell" aria-hidden="true">
     <header class="roll20-header">
       <div>
         <span class="label">Roll20</span>

@@ -11,8 +11,22 @@
   <link rel="stylesheet" href="/access.css" />
   <link rel="stylesheet" href="/notes.css" />
 </head>
-<body>
-  <div class="app">
+<body class="auth-locked">
+  <section id="siteGate" class="site-gate" aria-live="polite">
+    <div class="site-gate-card">
+      <div class="site-gate-brand">
+        <div class="brand-mark">d20</div>
+        <div>
+          <span class="label">DnD Scribe</span>
+          <h1>Entrada da mesa</h1>
+        </div>
+      </div>
+      <p>Conectando login seguro da campanha.</p>
+      <div class="loader-line"></div>
+    </div>
+  </section>
+
+  <div class="app" id="appShell" aria-hidden="true">
     <aside class="rail">
       <div class="brand">
         <div class="brand-mark">d20</div>
