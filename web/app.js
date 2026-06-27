@@ -57,6 +57,7 @@ const state = {
   jobs: [],
   jobsPolling: false,
   craigMap: null,
+  craigMapEditable: false,
   craigMapError: null,
   auth: {
     ready: false,
@@ -603,7 +604,10 @@ async function loadJobs(scheduleNext = true) {
     const payload = await api('/api/jobs');
     state.jobs = payload.jobs || [];
     render();
-    const hasActive = state.jobs.some(job => ['queued', 'running'].includes(job.status));
+    const hasActive = state.jobs.some(job => (
+      ['queued', 'running'].includes(job.status)
+      && job.output?.workerStatus !== 'pending_worker_implementation'
+    ));
     if (scheduleNext && hasActive && !state.jobsPolling) {
       state.jobsPolling = true;
       window.setTimeout(async () => {
@@ -620,10 +624,12 @@ async function loadCraigMap() {
   try {
     const payload = await api('/api/craig-map');
     state.craigMap = payload.map || null;
+    state.craigMapEditable = Boolean(payload.editable);
     state.craigMapError = null;
     render();
   } catch (error) {
     state.craigMap = null;
+    state.craigMapEditable = false;
     state.craigMapError = error.message;
     render();
   }
@@ -711,14 +717,14 @@ function loadingView(message = 'Carregando dados reais do Supabase...') {
     <section class="loading-panel">
       <div class="loader-line"></div>
       <h2>${escapeHtml(message)}</h2>
-      <p>O backend local esta montando transcricao, candidatos, publicacoes e resumo operacional.</p>
+      <p>O backend esta buscando sessao, transcricao, candidatos, publicacoes e resumo operacional.</p>
     </section>
   `;
 }
 
 function renderHeader() {
   const review = state.review;
-  $('#eyebrow').textContent = review ? `${review.campaign.name} • ${review.session.status}` : 'Local app';
+  $('#eyebrow').textContent = review ? `${review.campaign.name} • ${review.session.status}` : 'Prod operator';
   $('#title').textContent = review ? review.session.title : 'DnD Scribe';
 }
 
@@ -784,7 +790,7 @@ function renderSessionsManager() {
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Ingestao Craig</h2>${badge('local', 'gold')}</div>
+        <div class="panel-head"><h2>Ingestao Craig</h2>${badge('prod upload', 'green')}</div>
         <div class="panel-body">
           ${renderCraigIngestPanel()}
         </div>
@@ -809,8 +815,9 @@ function renderCraigMapPanel() {
   const keys = Object.keys(tracks).sort();
   return `
     <div class="craig-map-list">
-      ${keys.map(key => craigTrackRow(key, tracks[key])).join('') || `<div class="empty">Nenhum mapeamento local.</div>`}
-      <div class="job-row">
+      ${!state.craigMapEditable ? `<div class="empty">Mapa carregado da producao em modo leitura. Edicao cloud entra na proxima etapa.</div>` : ''}
+      ${keys.map(key => craigTrackRow(key, tracks[key])).join('') || `<div class="empty">Nenhum mapeamento Craig encontrado.</div>`}
+      ${state.craigMapEditable ? `<div class="job-row">
         <span class="label">Nova faixa</span>
         ${craigTrackForm('new', {
           person_name: '',
@@ -819,7 +826,7 @@ function renderCraigMapPanel() {
           status: 'guest_or_unknown',
           character_aliases: []
         }, true)}
-      </div>
+      </div>` : ''}
     </div>
   `;
 }
@@ -852,7 +859,7 @@ function craigTrackForm(trackKey, item, editableKey) {
       </select></label>
     </div>
     <div class="actions">
-      <button onclick="saveCraigTrack('${escapeHtml(trackKey)}', ${editableKey ? 'true' : 'false'})">Salvar mapa</button>
+      <button onclick="saveCraigTrack('${escapeHtml(trackKey)}', ${editableKey ? 'true' : 'false'})" ${state.craigMapEditable ? '' : 'disabled'}>Salvar mapa</button>
     </div>
   `;
 }
@@ -862,7 +869,7 @@ function renderCraigIngestPanel() {
     <div class="detail-grid">
       <label><span class="label">Sessao alvo</span>
         <select id="ingestSessionId">
-          <option value="">Auto pelo Craig</option>
+          <option value="">Criar sessao pelo nome do ZIP</option>
           ${state.sessions.map(session => `<option value="${escapeHtml(session.sourceSessionId)}" ${session.sourceSessionId === state.selectedSourceSessionId ? 'selected' : ''}>${escapeHtml(session.title || session.sourceSessionId)}</option>`).join('')}
         </select>
       </label>
@@ -871,11 +878,11 @@ function renderCraigIngestPanel() {
         <label><span class="label">Chunk segundos</span><input id="ingestChunkSeconds" type="number" min="60" step="30" value="600" /></label>
         <label><span class="label">Amostra segundos</span><input id="ingestSampleSeconds" type="number" min="0" step="30" placeholder="vazio" /></label>
       </div>
-      <label class="check-row"><input id="ingestSkipChunks" type="checkbox" /> <span>Somente manifest</span></label>
+      <label class="check-row"><input id="ingestSkipChunks" type="checkbox" /> <span>Somente manifest quando o worker cloud estiver ativo</span></label>
       <div class="actions">
-        <button class="primary" onclick="uploadCraigFromForm()" ${state.ingest.busy ? 'disabled' : ''}>Processar ZIP</button>
+        <button class="primary" onclick="uploadCraigFromForm()" ${state.ingest.busy ? 'disabled' : ''}>Enviar ZIP para producao</button>
       </div>
-      ${state.ingest.busy ? `<div class="loading-panel"><div class="loader-line"></div><h2>Processando ZIP Craig...</h2></div>` : ''}
+      ${state.ingest.busy ? `<div class="loading-panel"><div class="loader-line"></div><h2>Enviando ZIP Craig para R2...</h2></div>` : ''}
       ${state.ingest.error ? `<div class="empty">${escapeHtml(state.ingest.error)}</div>` : ''}
       ${state.ingest.result ? renderIngestResult(state.ingest.result) : ''}
     </div>
@@ -889,6 +896,12 @@ function renderIngestResult(result) {
         <span class="label">Job</span>
         <strong>${escapeHtml(result.job.type)}</strong>
         <div class="badges">${badge(result.job.status, result.job.status === 'failed' ? 'red' : 'blue')}${badge(result.job.id.slice(0, 8), 'gold')}</div>
+        ${result.upload ? `<pre>${escapeHtml(JSON.stringify({
+          bucket: result.upload.storageBucket,
+          path: result.upload.storagePath,
+          file: result.upload.originalFilename,
+          cost: result.cost?.paidAiCostUsd ?? 0
+        }, null, 2))}</pre>` : ''}
       </div>
     `;
   }
@@ -1026,34 +1039,56 @@ async function uploadCraigFromForm() {
     toast('Selecione o ZIP Craig.');
     return;
   }
-  const form = new FormData();
-  form.append('zip', file);
-  form.append('sourceSessionId', $('#ingestSessionId')?.value || '');
-  form.append('chunkSeconds', $('#ingestChunkSeconds')?.value || '600');
-  form.append('sampleSeconds', $('#ingestSampleSeconds')?.value || '');
-  form.append('skipChunks', $('#ingestSkipChunks')?.checked ? 'true' : 'false');
-  form.append('async', 'true');
   state.ingest = { busy: true, error: null, result: null };
   setBusy(true);
   render();
   try {
-    const response = await fetch('/api/ingest/craig', {
+    const planned = await api('/api/uploads/craig-url', {
       method: 'POST',
-      body: form
+      body: JSON.stringify({
+        sourceSessionId: $('#ingestSessionId')?.value || '',
+        fileName: file.name,
+        sizeBytes: file.size,
+        contentType: file.type || 'application/zip',
+        chunkSeconds: $('#ingestChunkSeconds')?.value || '600',
+        sampleSeconds: $('#ingestSampleSeconds')?.value || '',
+        skipChunks: $('#ingestSkipChunks')?.checked || false,
+        runId: DEFAULT_RUN
+      })
     });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.ok === false) {
-      throw new Error(payload.error || `Falha HTTP ${response.status}`);
+    remember(`URL R2 criada: ${planned.upload?.storagePath || file.name}`);
+    const uploadResponse = await fetch(planned.upload.signedUrl, {
+      method: 'PUT',
+      body: file,
+      headers: {
+        'Content-Type': planned.upload.contentType || file.type || 'application/zip'
+      }
+    });
+    if (!uploadResponse.ok) {
+      throw new Error(`Upload R2 falhou (${uploadResponse.status}). Verifique CORS do bucket e tente novamente.`);
     }
+    const payload = await api('/api/uploads/craig-complete', {
+      method: 'POST',
+      body: JSON.stringify({
+        sourceSessionId: planned.session.sourceSessionId,
+        recordingFileId: planned.upload.recordingFileId,
+        jobId: planned.job.id,
+        sizeBytes: file.size,
+        runId: DEFAULT_RUN
+      })
+    });
     state.ingest = { busy: false, error: null, result: payload };
+    if (payload.sessions) state.sessions = payload.sessions;
+    if (payload.jobs) state.jobs = payload.jobs;
+    state.selectedSourceSessionId = planned.session.sourceSessionId || state.selectedSourceSessionId;
     if (payload.job) {
       state.jobs = [payload.job, ...state.jobs.filter(job => job.id !== payload.job.id)];
-      remember(`Job Craig criado: ${payload.job.id}`);
-      toast('Ingestao enviada para fila local.');
+      remember(`Upload Craig confirmado: ${payload.upload?.storagePath || file.name}`);
+      toast('ZIP salvo no R2. Job de ingestao cloud criado.');
       await loadJobs(true);
     } else {
-      remember(`Ingestao Craig: ${payload.ingest?.sessionDir || file.name}`);
-      toast('ZIP Craig processado.');
+      remember(`Upload Craig: ${file.name}`);
+      toast('ZIP Craig enviado.');
     }
   } catch (error) {
     state.ingest = { busy: false, error: error.message, result: null };
@@ -1560,13 +1595,13 @@ function renderOps() {
       </article>
       <article class="ops-card">
         <div class="row between">
-          <h2>Jobs locais</h2>
+          <h2>Jobs de producao</h2>
           <button onclick="loadJobs(false)">Atualizar</button>
         </div>
         ${renderJobsList()}
       </article>
       <article class="ops-card">
-        <h2>Log local</h2>
+        <h2>Log da tela</h2>
         <pre>${escapeHtml(state.log.map(item => `[${item.at}] ${item.message}`).join('\n') || 'Sem eventos ainda.')}</pre>
       </article>
     </section>
@@ -1593,7 +1628,7 @@ function renderRoll20Events() {
 }
 
 function renderJobsList() {
-  if (!state.jobs.length) return `<div class="empty">Nenhum job local registrado.</div>`;
+  if (!state.jobs.length) return `<div class="empty">Nenhum job de producao registrado.</div>`;
   return `
     <div class="job-list">
       ${state.jobs.slice(0, 8).map(job => `

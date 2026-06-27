@@ -1,10 +1,14 @@
 const crypto = require('crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const { Pool } = require('pg');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
 const DEFAULT_RUN = 'classify_candidates_v2_gpt-4o';
 const DEFAULT_ACTOR = 'renanyuhara';
+const CRAIG_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
 
 const SESSION_STATUSES = new Set([
   'planned',
@@ -347,7 +351,7 @@ function canonicalQuery(params) {
   return Object.keys(params).sort().map(key => `${encodeRfc3986(key)}=${encodeRfc3986(params[key])}`).join('&');
 }
 
-function createR2SignedUrl(key, expiresSeconds, bucketOverride = '') {
+function createR2SignedUrl(key, expiresSeconds, bucketOverride = '', method = 'GET') {
   const config = r2Config();
   if (!config.endpoint || !config.bucket || !config.accessKey || !config.secretKey) {
     throw httpError(500, 'R2 config ausente no ambiente.');
@@ -368,7 +372,7 @@ function createR2SignedUrl(key, expiresSeconds, bucketOverride = '') {
   };
   const query = canonicalQuery(params);
   const canonicalRequest = [
-    'GET',
+    method,
     canonicalUri,
     query,
     `host:${endpoint.host}\n`,
@@ -425,6 +429,353 @@ select row_to_json(file_row) data from (
       durationMs: file.duration_ms
     },
     url: createR2SignedUrl(file.storage_path, expiresSeconds, file.storage_bucket)
+  };
+}
+
+function safeUploadFilename(value) {
+  const fallback = 'craig-session.zip';
+  const raw = cleanText(value || fallback, 240).replace(/[\\/]+/g, '-');
+  const safe = raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._ -]+/g, '-')
+    .replace(/\s+/g, '_')
+    .replace(/-+/g, '-')
+    .replace(/^[-_.]+|[-_.]+$/g, '')
+    .slice(0, 180);
+  return safe || fallback;
+}
+
+function normalizeUploadSize(value) {
+  const size = Number(value || 0);
+  if (!Number.isFinite(size) || size <= 0) throw httpError(400, 'sizeBytes obrigatorio para upload Craig.');
+  if (size > CRAIG_UPLOAD_MAX_BYTES) {
+    throw httpError(400, `ZIP Craig muito grande para esta etapa (${Math.round(size / 1024 / 1024)} MiB).`);
+  }
+  return Math.round(size);
+}
+
+function normalizeUploadOptions(raw) {
+  const chunkSeconds = Math.max(60, Math.min(1800, Number(raw.chunkSeconds || raw.chunk_seconds || 600)));
+  const sampleRaw = raw.sampleSeconds || raw.sample_seconds || '';
+  const sampleSeconds = sampleRaw === '' || sampleRaw === null || sampleRaw === undefined
+    ? null
+    : Math.max(0, Math.min(24 * 60 * 60, Number(sampleRaw || 0)));
+  return {
+    chunkSeconds,
+    sampleSeconds,
+    skipChunks: Boolean(raw.skipChunks || raw.skip_chunks)
+  };
+}
+
+function jobResponse(row) {
+  return {
+    id: row.id,
+    type: row.job_type,
+    status: row.status,
+    attempts: row.attempts,
+    input: row.input || null,
+    output: row.output || null,
+    error: row.error || null,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    createdAt: row.created_at,
+    session: row.source_session_id ? {
+      sourceSessionId: row.source_session_id,
+      title: row.session_title || null,
+      status: row.session_status || null
+    } : null
+  };
+}
+
+async function listJobs(campaign, sourceSessionId = '') {
+  const params = [campaign];
+  const sourceFilter = sourceSessionId ? 'and s.source_session_id = $2' : '';
+  if (sourceSessionId) params.push(sourceSessionId);
+  const result = await getPool().query(
+    `
+select pj.id, pj.job_type, pj.status, pj.attempts, pj.input, pj.output, pj.error,
+       pj.started_at, pj.finished_at, pj.created_at,
+       s.source_session_id, s.title session_title, s.status session_status
+from processing_jobs pj
+left join sessions s on s.id = pj.session_id
+left join campaigns c on c.id = s.campaign_id
+where c.slug = $1 ${sourceFilter}
+order by pj.created_at desc
+limit 50;`,
+    params
+  );
+  return result.rows.map(jobResponse);
+}
+
+function loadCraigMapConfig() {
+  const mapPath = path.join(process.cwd(), 'config', 'craig_user_map.json');
+  try {
+    return JSON.parse(fs.readFileSync(mapPath, 'utf8'));
+  } catch (error) {
+    throw httpError(500, `Mapa Craig nao encontrado no deploy: ${error.message}`);
+  }
+}
+
+async function ensureCraigUploadSession(db, campaign, raw) {
+  const sourceSessionId = cleanText(raw.sourceSessionId || raw.source_session_id, 180);
+  if (sourceSessionId) {
+    const existing = await data(
+      `
+select row_to_json(s) data
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1 and s.source_session_id = $2
+limit 1;`,
+      [campaign, sourceSessionId],
+      db
+    );
+    if (!existing) throw httpError(404, `Sessao nao encontrada para upload Craig: ${sourceSessionId}`);
+    return sessionResponse(existing);
+  }
+
+  const fileName = safeUploadFilename(raw.fileName || raw.file_name || 'craig-session.zip');
+  const inferredTitle = cleanText(raw.title, 180) || fileName.replace(/(\.flac)?\.zip$/i, '');
+  const sessionDate = normalizeDate(raw.sessionDate || raw.session_date);
+  const generatedSourceId = generatedSourceSessionId(inferredTitle, sessionDate);
+  const slug = slugify(`${sessionDate || 'sem-data'}-${inferredTitle}`);
+  const result = await db.query(
+    `
+with campaign_row as (
+  select id from campaigns where slug = $1
+), inserted as (
+  insert into sessions (
+    id, campaign_id, title, slug, session_date, arc, status, summary_short,
+    source_system, source_session_id, metadata, created_at, updated_at
+  )
+  select gen_random_uuid(), campaign_row.id, $2, $3, $4::date, $5, 'uploaded', $6,
+         'craig', $7, $8::jsonb, now(), now()
+  from campaign_row
+  returning *
+)
+select * from inserted;`,
+    [
+      campaign,
+      inferredTitle,
+      slug,
+      sessionDate,
+      cleanText(raw.arc, 120) || null,
+      cleanText(raw.summary || raw.summaryShort || raw.summary_short, 2000) || null,
+      generatedSourceId,
+      JSON.stringify({ created_by: 'api/vercel', created_from: 'craig_direct_upload', open_test_mode: true })
+    ]
+  );
+  if (!result.rows.length) throw httpError(404, `Campanha nao encontrada: ${campaign}`);
+  return sessionResponse(result.rows[0]);
+}
+
+async function createCraigUpload(db, campaign, raw) {
+  const fileName = safeUploadFilename(raw.fileName || raw.file_name);
+  const sizeBytes = normalizeUploadSize(raw.sizeBytes || raw.size_bytes);
+  const contentType = cleanText(raw.contentType || raw.content_type || 'application/zip', 120) || 'application/zip';
+  const options = normalizeUploadOptions(raw);
+  const session = await ensureCraigUploadSession(db, campaign, raw);
+  const random = crypto.randomBytes(6).toString('hex');
+  const objectKey = [
+    'campaigns',
+    campaign,
+    'sessions',
+    session.sourceSessionId,
+    'uploads',
+    'craig',
+    `${Date.now()}-${random}-${fileName}`
+  ].join('/');
+  const bucket = r2Config().bucket;
+  if (!bucket) throw httpError(500, 'R2_BUCKET ausente no ambiente.');
+
+  const recordingResult = await db.query(
+    `
+insert into recording_files (
+  id, session_id, file_type, storage_bucket, storage_path, original_filename,
+  mime_type, size_bytes, source_system, source_file_role, metadata, created_at
+)
+values (
+  gen_random_uuid(), $1::uuid, 'other', $2, $3, $4,
+  $5, $6::bigint, 'craig', 'craig_zip_upload', $7::jsonb, now()
+)
+returning *;`,
+    [
+      session.id,
+      bucket,
+      objectKey,
+      fileName,
+      contentType,
+      sizeBytes,
+      JSON.stringify({
+        upload_state: 'awaiting_direct_upload',
+        upload_strategy: 'r2_presigned_put',
+        upload_expires_seconds: CRAIG_UPLOAD_EXPIRES_SECONDS,
+        processing_options: options
+      })
+    ]
+  );
+  const recordingFile = recordingResult.rows[0];
+  const jobResult = await db.query(
+    `
+insert into processing_jobs (id, session_id, job_type, status, attempts, input, output, created_at)
+values (gen_random_uuid(), $1::uuid, 'craig_direct_upload', 'queued', 0, $2::jsonb, $3::jsonb, now())
+returning *;`,
+    [
+      session.id,
+      JSON.stringify({
+        recordingFileId: recordingFile.id,
+        storageBucket: bucket,
+        storagePath: objectKey,
+        originalFilename: fileName,
+        sizeBytes,
+        contentType,
+        processingOptions: options
+      }),
+      JSON.stringify({
+        uploadStatus: 'awaiting_direct_upload',
+        nextAction: 'PUT file to signedUrl, then call /api/uploads/craig-complete',
+        paidAiCostUsd: 0
+      })
+    ]
+  );
+
+  return {
+    ok: true,
+    mode: 'prod_direct_r2_upload',
+    session,
+    upload: {
+      recordingFileId: recordingFile.id,
+      storageBucket: bucket,
+      storagePath: objectKey,
+      originalFilename: fileName,
+      sizeBytes,
+      contentType,
+      expiresSeconds: CRAIG_UPLOAD_EXPIRES_SECONDS,
+      signedUrl: createR2SignedUrl(objectKey, CRAIG_UPLOAD_EXPIRES_SECONDS, bucket, 'PUT')
+    },
+    job: jobResponse(jobResult.rows[0]),
+    cost: {
+      paidAiCostUsd: 0,
+      note: 'Esta etapa so grava o ZIP no R2 e cria jobs. Transcricao paga exige aprovacao separada.'
+    }
+  };
+}
+
+async function completeCraigUpload(db, campaign, raw) {
+  const jobId = cleanText(raw.jobId || raw.job_id, 80);
+  const recordingFileId = cleanText(raw.recordingFileId || raw.recording_file_id, 80);
+  const sourceSessionId = cleanText(raw.sourceSessionId || raw.source_session_id, 180);
+  if (!jobId || !recordingFileId || !sourceSessionId) {
+    throw httpError(400, 'jobId, recordingFileId e sourceSessionId sao obrigatorios.');
+  }
+
+  const context = await data(
+    `
+select row_to_json(context_row) data
+from (
+  select c.id campaign_id, s.id session_id, s.source_session_id, s.title session_title,
+         rf.storage_bucket, rf.storage_path, rf.original_filename, rf.size_bytes, rf.mime_type
+  from campaigns c
+  join sessions s on s.campaign_id = c.id
+  join recording_files rf on rf.session_id = s.id
+  where c.slug = $1
+    and s.source_session_id = $2
+    and rf.id = $3::uuid
+  limit 1
+) context_row;`,
+    [campaign, sourceSessionId, recordingFileId],
+    db
+  );
+  if (!context) throw httpError(404, 'Upload Craig nao encontrado para confirmar.');
+
+  await db.query(
+    `
+update recording_files
+set metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb
+where id = $1::uuid;`,
+    [
+      recordingFileId,
+      JSON.stringify({
+        upload_state: 'uploaded',
+        uploaded_at: new Date().toISOString(),
+        confirmed_by: 'api/vercel',
+        confirmed_size_bytes: raw.sizeBytes || context.size_bytes || null
+      })
+    ]
+  );
+  await db.query(
+    `
+update processing_jobs
+set status = 'succeeded',
+    output = coalesce(output, '{}'::jsonb) || $3::jsonb,
+    finished_at = now()
+where id = $1::uuid and session_id = $2::uuid;`,
+    [
+      jobId,
+      context.session_id,
+      JSON.stringify({
+        uploadStatus: 'uploaded',
+        completedAt: new Date().toISOString(),
+        paidAiCostUsd: 0
+      })
+    ]
+  );
+  const ingestJobResult = await db.query(
+    `
+insert into processing_jobs (id, session_id, job_type, status, attempts, input, output, created_at)
+values (gen_random_uuid(), $1::uuid, 'cloud_ingest_craig', 'queued', 0, $2::jsonb, $3::jsonb, now())
+returning *;`,
+    [
+      context.session_id,
+      JSON.stringify({
+        recordingFileId,
+        storageBucket: context.storage_bucket,
+        storagePath: context.storage_path,
+        originalFilename: context.original_filename,
+        contentType: context.mime_type,
+        source: 'r2_direct_upload'
+      }),
+      JSON.stringify({
+        workerStatus: 'pending_worker_implementation',
+        nextAction: 'Implementar executor cloud para extrair ZIP, gerar chunks/slices e atualizar Supabase.',
+        paidAiCostUsd: 0
+      })
+    ]
+  );
+  await db.query(
+    `
+update sessions
+set status = 'uploaded',
+    metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb,
+    updated_at = now()
+where id = $1::uuid;`,
+    [
+      context.session_id,
+      JSON.stringify({
+        last_craig_upload: {
+          recordingFileId,
+          storageBucket: context.storage_bucket,
+          storagePath: context.storage_path,
+          confirmedAt: new Date().toISOString()
+        }
+      })
+    ]
+  );
+
+  return {
+    ok: true,
+    mode: 'prod_upload_confirmed',
+    upload: {
+      recordingFileId,
+      storageBucket: context.storage_bucket,
+      storagePath: context.storage_path,
+      originalFilename: context.original_filename
+    },
+    job: jobResponse(ingestJobResult.rows[0]),
+    cost: {
+      paidAiCostUsd: 0,
+      note: 'Upload confirmado. O job cloud_ingest_craig ainda nao executa IA paga.'
+    }
   };
 }
 
@@ -1542,15 +1893,18 @@ async function handleGet(req, res, path, query) {
   if (path === '/api/jobs') {
     return sendJson(res, 200, {
       ok: true,
-      jobs: [],
-      mode: 'vercel_readonly',
-      note: 'Jobs locais rodam em tools/serve_frontend.py.'
+      jobs: await listJobs(campaign, query.get('sourceSessionId') || ''),
+      mode: 'supabase_prod_jobs',
+      note: 'Jobs de producao sao persistidos no Supabase; execucao pesada ainda depende do worker cloud.'
     });
   }
   if (path === '/api/craig-map') {
-    return sendJson(res, 501, {
-      ok: false,
-      error: 'Mapa Craig e editavel apenas no backend local.'
+    return sendJson(res, 200, {
+      ok: true,
+      mode: 'deploy_config_readonly',
+      map: loadCraigMapConfig(),
+      editable: false,
+      note: 'Mapa Craig carregado do deploy. Edicao em producao entra em etapa propria.'
     });
   }
   if (path === '/api/sessions') {
@@ -1574,15 +1928,9 @@ async function handleGet(req, res, path, query) {
 
 async function handlePost(req, res, path) {
   if (path === '/api/ingest/craig') {
-    return sendJson(res, 501, {
+    return sendJson(res, 409, {
       ok: false,
-      error: 'Ingestao Craig roda no backend local. Use python3 tools/serve_frontend.py para processar ZIPs.'
-    });
-  }
-  if (path === '/api/craig-map/update') {
-    return sendJson(res, 501, {
-      ok: false,
-      error: 'Mapa Craig e editavel apenas no backend local.'
+      error: 'Upload Craig em producao usa /api/uploads/craig-url para enviar direto ao R2 sem passar o ZIP pela Vercel.'
     });
   }
   const body = await readBody(req);
@@ -1591,6 +1939,40 @@ async function handlePost(req, res, path) {
   const sourceSessionId = body.sourceSessionId || decisions.sourceSessionId || DEFAULT_SOURCE_SESSION;
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
+  if (path === '/api/uploads/craig-url') {
+    const client = await getPool().connect();
+    try {
+      await client.query('begin');
+      const payload = await createCraigUpload(client, campaign, body);
+      await client.query('commit');
+      return sendJson(res, 200, { ...payload, sessions: await listSessions(campaign, runId) });
+    } catch (error) {
+      await client.query('rollback').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  if (path === '/api/uploads/craig-complete') {
+    const client = await getPool().connect();
+    try {
+      await client.query('begin');
+      const payload = await completeCraigUpload(client, campaign, body);
+      await client.query('commit');
+      return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
+    } catch (error) {
+      await client.query('rollback').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  if (path === '/api/craig-map/update') {
+    return sendJson(res, 409, {
+      ok: false,
+      error: 'Edicao do mapa Craig em producao ainda esta bloqueada; leitura ja funciona pelo deploy.'
+    });
+  }
   if (path === '/api/sessions/create') {
     const session = await createSession(getPool(), campaign, body);
     return sendJson(res, 200, { ok: true, session, sessions: await listSessions(campaign, runId) });

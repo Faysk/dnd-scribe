@@ -2,7 +2,7 @@
   "name": "dnd-scribe",
   "version": "0.1.0",
   "private": true,
-  "description": "DnD Scribe local and Vercel operator app.",
+  "description": "DnD Scribe production and local operator app.",
   "scripts": {
     "build": "node scripts/sync-public.js",
     "check:web": "node --check web/app.js",
