@@ -5,6 +5,18 @@
     {
       "source": "/api/discord/interactions",
       "destination": "/api/ai-cost?discordInteractions=1"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/linked-role",
+      "destination": "/linked-role.html"
     }
   ],
   "functions": {
