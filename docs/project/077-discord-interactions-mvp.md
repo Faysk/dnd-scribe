@@ -6,11 +6,12 @@ Data: 2026-06-27
 
 Primeira integracao funcional do Discord sem Gateway e sem leitura passiva do chat.
 
-Arquivos adicionados:
+Arquivos adicionados/alterados:
 
-- `api/discord/interactions.js`
 - `lib/discord-interactions.js`
 - `scripts/register-discord-commands.js`
+- `api/ai-cost.js` com roteamento interno para Discord
+- `vercel.json` com rewrite de `/api/discord/interactions`
 
 Banco Supabase:
 
@@ -30,6 +31,8 @@ Usar essa URL no Discord Developer Portal em:
 ```txt
 Application > General Information > Interactions Endpoint URL
 ```
+
+Observacao de deploy: por causa do limite de 12 Serverless Functions no Vercel Hobby, a URL publica e reescrita internamente para `api/ai-cost.js?discordInteractions=1`. Isso evita criar uma 13a Function e nao muda a URL que o Discord usa.
 
 O endpoint suporta:
 
