@@ -103,6 +103,8 @@ def run_validator(args: argparse.Namespace, execute_mode: bool) -> None:
         args.model,
         "--prompt-version",
         args.prompt_version,
+        "--planned-limit",
+        str(args.limit),
     ]
     if execute_mode:
         cmd.extend(["--require-openai-key", "--require-prices"])
@@ -231,6 +233,36 @@ def estimate_cost(unit: dict[str, Any], policy: dict[str, Any]) -> float | None:
         return None
     minutes = (int(unit.get("duration_ms") or 0) / 60000.0)
     return round(minutes * per_minute, 6)
+
+
+def estimate_units(units: list[dict[str, Any]], policy: dict[str, Any]) -> dict[str, Any]:
+    duration_ms = sum(int(unit.get("duration_ms") or 0) for unit in units)
+    minutes_exact = duration_ms / 60000.0
+    per_minute = unit_cost(policy, "transcriptionAudioMinute")
+    return {
+        "plannedAudioMinutes": round(minutes_exact, 3),
+        "plannedEstimatedCostUsd": round(minutes_exact * per_minute, 6) if per_minute is not None else None,
+    }
+
+
+def enforce_cost_guards(args: argparse.Namespace, policy: dict[str, Any], estimate: dict[str, Any]) -> None:
+    estimated = estimate.get("plannedEstimatedCostUsd")
+    if args.execute and estimated is None:
+        raise SystemExit("DND_COST_TRANSCRIPTION_AUDIO_MINUTE_USD precisa estar configurado para --execute.")
+    if estimated is None:
+        return
+    if args.max_estimated_cost_usd is not None and estimated > args.max_estimated_cost_usd:
+        raise SystemExit(
+            f"Custo estimado do lote ({estimated}) passa --max-estimated-cost-usd={args.max_estimated_cost_usd}."
+        )
+    threshold = float(((policy.get("guards") or {}).get("requireExplicitApprovalAboveUsd") or 0) or 0)
+    if args.execute and threshold and estimated > threshold:
+        approved = args.approve_cost_usd
+        if approved is None or approved < estimated:
+            raise SystemExit(
+                f"Custo estimado {estimated} passa o limite de aprovacao {threshold}. "
+                f"Reexecute com --approve-cost-usd {estimated} se quiser confirmar."
+            )
 
 
 def write_ledger(
@@ -619,6 +651,8 @@ def main() -> int:
     parser.add_argument("--prompt", default=DEFAULT_PROMPT)
     parser.add_argument("--no-prompt", action="store_true")
     parser.add_argument("--max-file-mib", type=int, default=DEFAULT_MAX_FILE_MIB)
+    parser.add_argument("--max-estimated-cost-usd", type=float, help="Abort if the selected limited run is estimated above this amount.")
+    parser.add_argument("--approve-cost-usd", type=float, help="Explicit approval value for runs above the policy approval threshold.")
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--execute", action="store_true", help="Actually call OpenAI. Default is dry-run.")
     parser.add_argument("--skip-validation", action="store_true")
@@ -649,6 +683,9 @@ def main() -> int:
         raise SystemExit(f"Session not found: {args.campaign}/{args.source_session_id}")
 
     units = work.get("chunks") or []
+    planned = estimate_units(units, policy)
+    enforce_cost_guards(args, policy, planned)
+
     job_id = ""
     if args.execute:
         job_id = create_job(
@@ -661,6 +698,10 @@ def main() -> int:
                 "limit": args.limit,
                 "language": args.language,
                 "maxFileMiB": args.max_file_mib,
+                "maxEstimatedCostUsd": args.max_estimated_cost_usd,
+                "approvedCostUsd": args.approve_cost_usd,
+                "plannedAudioMinutes": planned["plannedAudioMinutes"],
+                "plannedEstimatedCostUsd": planned["plannedEstimatedCostUsd"],
                 "workUnitMode": "audio_transcription_work_units",
             },
         )
@@ -697,6 +738,8 @@ def main() -> int:
         "session": session,
         "stats": work.get("stats") or {},
         "limit": args.limit,
+        "plannedAudioMinutes": planned["plannedAudioMinutes"],
+        "plannedEstimatedCostUsd": planned["plannedEstimatedCostUsd"],
         "processed": len(results),
         "results": results,
     }
@@ -714,6 +757,11 @@ def main() -> int:
         print(f"speech_slice_candidates={stats.get('speech_slice_candidates') or 0}")
         print(f"chunk_fallback_candidates={stats.get('chunk_fallback_candidates') or 0}")
         print(f"candidate_audio_minutes={stats.get('candidate_audio_minutes') or 0}")
+        print(f"planned_audio_minutes={planned['plannedAudioMinutes']}")
+        if planned["plannedEstimatedCostUsd"] is None:
+            print("planned_estimated_cost_usd=pending_price_config")
+        else:
+            print(f"planned_estimated_cost_usd={planned['plannedEstimatedCostUsd']}")
         print(f"processed={len(results)}")
         if job_id:
             print(f"processing_job_id={job_id}")
