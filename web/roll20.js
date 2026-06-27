@@ -509,10 +509,14 @@ function renderBackendStatus() {
   }
   if (state.backend.result) {
     const summary = state.backend.result.summary || {};
+    const persisted = state.backend.result.persisted || null;
+    const detail = persisted
+      ? `${persisted.persisted || 0} gravados, ${persisted.skippedInvalid || 0} invalidos ignorados.`
+      : `Dry-run autenticado aceito. ${escapeHtml(summary.total || 0)} eventos, ${escapeHtml(summary.valid || 0)} validos.`;
     return `
       <div class="roll20-summary-block roll20-api-state success">
         <span class="label">Backend</span>
-        <p>Dry-run autenticado aceito. ${escapeHtml(summary.total || 0)} eventos, ${escapeHtml(summary.valid || 0)} validos.</p>
+        <p>${escapeHtml(detail)}</p>
         <div class="badges">
           ${badge(state.backend.result.actor?.role || 'role', 'gold')}
           ${badge(state.backend.result.mode || 'dry_run', 'green')}
@@ -604,10 +608,16 @@ function render() {
 }
 
 function renderBackendButton() {
-  const button = $('#backendPreviewBtn');
-  if (!button) return;
-  button.disabled = state.backend.loading;
-  button.textContent = state.backend.loading ? 'Validando...' : 'Validar API';
+  const preview = $('#backendPreviewBtn');
+  const save = $('#saveBackendBtn');
+  if (preview) {
+    preview.disabled = state.backend.loading;
+    preview.textContent = state.backend.loading ? 'Validando...' : 'Validar API';
+  }
+  if (save) {
+    save.disabled = state.backend.loading;
+    save.textContent = state.backend.loading ? 'Aguarde...' : 'Gravar eventos';
+  }
 }
 
 function copyJson() {
@@ -619,33 +629,36 @@ function copyJson() {
   toast('Clipboard indisponivel neste navegador.');
 }
 
-function backendPayload() {
+function backendPayload(persist = false) {
   return {
     campaignSlug: selectedCampaignSlug(),
     sourceSessionId: cleanText($('#sourceSessionId')?.value, 180) || null,
     source: 'roll20-copy-paste',
     prefix: cleanText($('#commandPrefix')?.value, 20) || DEFAULT_PREFIX,
-    dryRun: true,
+    dryRun: !persist,
     text: String($('#chatInput')?.value || '')
   };
 }
 
-async function validateBackendPreview() {
+async function submitBackend(persist = false) {
   parseForm();
   state.backend.loading = true;
   state.backend.error = null;
   state.backend.result = null;
   render();
   try {
-    if (!backendPayload().text.trim()) throw new Error('Cole o chat do Roll20 antes de validar.');
+    const payload = backendPayload(persist);
+    if (!payload.text.trim()) throw new Error('Cole o chat do Roll20 antes de validar.');
     if (!state.auth.user) throw new Error('Login Discord ou Google obrigatorio para validar na API.');
     if (!canValidateRoll20()) throw new Error('Somente DM ou Owner pode validar ingestao Roll20 no backend.');
+    if (persist && !payload.sourceSessionId) throw new Error('Informe a Sessao antes de gravar eventos.');
+    if (persist && !window.confirm('Gravar estes eventos Roll20 na sessao selecionada?')) return;
     const result = await apiJson('/api/roll20-ingest', {
       method: 'POST',
-      body: JSON.stringify(backendPayload())
+      body: JSON.stringify(payload)
     });
     state.backend.result = result;
-    toast('Backend validou o dry-run.');
+    toast(persist ? 'Eventos Roll20 gravados.' : 'Backend validou o dry-run.');
   } catch (error) {
     state.backend.error = error.message || String(error);
     toast(state.backend.error);
@@ -653,6 +666,14 @@ async function validateBackendPreview() {
     state.backend.loading = false;
     render();
   }
+}
+
+function validateBackendPreview() {
+  return submitBackend(false);
+}
+
+function persistBackendEvents() {
+  return submitBackend(true);
 }
 
 function downloadJson() {
@@ -681,6 +702,7 @@ function boot() {
   });
   $('#parseBtn').addEventListener('click', parseForm);
   $('#backendPreviewBtn').addEventListener('click', validateBackendPreview);
+  $('#saveBackendBtn').addEventListener('click', persistBackendEvents);
   $('#copyJsonBtn').addEventListener('click', copyJson);
   $('#downloadJsonBtn').addEventListener('click', downloadJson);
   $('#clearBtn').addEventListener('click', clearForm);

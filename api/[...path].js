@@ -417,6 +417,132 @@ async function roll20IngestPreviewPayload(req, campaign, raw) {
   };
 }
 
+function roll20SourceEventId(event) {
+  const raw = [event.lineNo || 'na', event.rawLine || event.rawCommand || '', event.command || ''].join('|');
+  const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 16);
+  return `roll20-line-${event.lineNo || 'na'}-${hash}`;
+}
+
+function roll20EventText(event) {
+  return cleanText(
+    event.text
+      || event.args?.motivo
+      || event.args?.titulo
+      || event.args?.descricao
+      || event.positional?.join(' ')
+      || event.rawCommand,
+    3000
+  ) || null;
+}
+
+async function persistRoll20Events(db, campaign, payload, raw) {
+  const sourceSessionId = cleanText(payload.sourceSessionId || raw.sourceSessionId || raw.source_session_id, 180);
+  if (!sourceSessionId) throw httpError(400, 'sourceSessionId obrigatorio para persistir eventos Roll20.');
+
+  const session = await data(
+    `
+select row_to_json(s) data
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1 and s.source_session_id = $2
+limit 1;`,
+    [campaign, sourceSessionId],
+    db
+  );
+  if (!session) throw httpError(404, `Sessao nao encontrada para Roll20: ${sourceSessionId}`);
+
+  const includeInvalid = Boolean(raw.includeInvalid || raw.include_invalid);
+  const persistable = payload.events.filter(event => includeInvalid || event.status !== 'invalid');
+  const skippedInvalid = payload.events.length - persistable.length;
+  const importedAt = new Date().toISOString();
+  const rows = [];
+
+  for (const event of persistable) {
+    const sourceEventId = cleanText(event.sourceEventId || event.source_event_id || roll20SourceEventId(event), 180);
+    const eventPayload = {
+      ...event,
+      import: {
+        source: payload.source,
+        sourceSessionId,
+        importedAt,
+        dryRun: false,
+        actor: payload.actor
+      }
+    };
+    const result = await db.query(
+      `
+insert into roll20_events (
+  id, session_id, event_type, roll20_who, character_name, approx_start_ms,
+  text, payload, raw_line, source_system, source_event_id, created_at_roll20, created_at
+)
+values (
+  gen_random_uuid(), $1::uuid, $2, $3, $4, null,
+  $5, $6::jsonb, $7, 'roll20', $8, $9::timestamptz, now()
+)
+on conflict (session_id, source_system, source_event_id)
+where source_system is not null and source_event_id is not null
+do update set
+  event_type = excluded.event_type,
+  roll20_who = excluded.roll20_who,
+  character_name = excluded.character_name,
+  text = excluded.text,
+  payload = excluded.payload,
+  raw_line = excluded.raw_line,
+  created_at_roll20 = excluded.created_at_roll20
+returning id, source_event_id, event_type, roll20_who, character_name, text;`,
+      [
+        session.id,
+        event.eventType || 'raw_roll20_note',
+        event.speaker || null,
+        event.targetCharacter || null,
+        roll20EventText(event),
+        JSON.stringify(eventPayload),
+        event.rawLine || null,
+        sourceEventId,
+        raw.receivedAt || raw.received_at || null
+      ]
+    );
+    rows.push(result.rows[0]);
+  }
+
+  await db.query(
+    `
+insert into processing_jobs (id, session_id, job_type, status, attempts, input, output, created_at, started_at, finished_at)
+values (gen_random_uuid(), $1::uuid, 'roll20_chat_import', 'succeeded', 1, $2::jsonb, $3::jsonb, now(), now(), now());`,
+    [
+      session.id,
+      JSON.stringify({
+        source: payload.source,
+        sourceSessionId,
+        prefix: payload.prefix,
+        actor: payload.actor,
+        totalEvents: payload.events.length,
+        includeInvalid
+      }),
+      JSON.stringify({
+        persisted: rows.length,
+        skippedInvalid,
+        dryRun: false,
+        paidAiCostUsd: 0
+      })
+    ]
+  );
+
+  return {
+    session: sessionResponse(session),
+    persisted: rows.length,
+    skippedInvalid,
+    eventIds: rows.map(row => ({
+      id: row.id,
+      sourceEventId: row.source_event_id,
+      eventType: row.event_type,
+      speaker: row.roll20_who,
+      characterName: row.character_name,
+      text: row.text
+    }))
+  };
+}
+
 function httpError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -2055,11 +2181,23 @@ async function handlePost(req, res, path) {
   if (path === '/api/roll20/ingest' || path === '/api/roll20-ingest') {
     const payload = await roll20IngestPreviewPayload(req, campaign, body);
     if (body.dryRun === false) {
-      return sendJson(res, 409, {
-        ...payload,
-        ok: false,
-        error: 'Persistencia Roll20 ainda nao habilitada. Use dryRun para validar o parser primeiro.'
-      });
+      const client = await getPool().connect();
+      try {
+        await client.query('begin');
+        const persisted = await persistRoll20Events(client, campaign, payload, body);
+        await client.query('commit');
+        return sendJson(res, 200, {
+          ...payload,
+          mode: 'persisted',
+          dryRun: false,
+          persisted
+        });
+      } catch (error) {
+        await client.query('rollback').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
     }
     return sendJson(res, 200, payload);
   }
