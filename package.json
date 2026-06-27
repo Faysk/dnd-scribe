@@ -5,7 +5,7 @@
   "description": "DnD Scribe production and local operator app.",
   "scripts": {
     "build": "node scripts/sync-public.js",
-    "check:web": "node --check web/app.js && node --check web/jobs.js && node --check web/costs.js && node --check web/ui-bridge.js && node --check web/access.js",
+    "check:web": "node --check web/app.js && node --check web/jobs.js && node --check web/costs.js && node --check web/ui-bridge.js && node --check web/auth-fetch.js && node --check web/access.js",
     "check:api": "node --check lib/discord.js && node --check api/[...path].js && node --check api/ai-cost.js",
     "check:workers": "node --check api/jobs/run-cloud-ingest.js && node --check api/jobs/run-cloud-extract.js",
     "sync:public": "node scripts/sync-public.js"
