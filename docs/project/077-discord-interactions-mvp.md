@@ -122,6 +122,15 @@ npm run discord:register
 
 O script registra comandos de guild, que atualizam rapido para testes.
 
+O script tambem tenta ler automaticamente `.env.local` e `.env` na raiz do projeto. Ele ignora textos soltos/comentarios e usa apenas linhas no formato `CHAVE=valor`, entao o arquivo local pode continuar tendo observacoes humanas desde que os secrets estejam em linhas proprias.
+
+Fluxo local sugerido depois de puxar a versao mais recente:
+
+```bash
+git pull origin main
+npm run discord:register
+```
+
 ## Configuracao no Discord Developer Portal
 
 1. Criar ou abrir a application do DnD Scribe.
