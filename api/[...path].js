@@ -1430,9 +1430,20 @@ select coalesce(json_agg(item order by coalesce((item->>'approx_start_ms')::int,
     'source_event_id', re.source_event_id,
     'created_at_roll20', re.created_at_roll20,
     'created_at', re.created_at,
-    'payload', re.payload
+    'payload', re.payload,
+    'note', case when tn.id is null then null else json_build_object(
+      'id', tn.id,
+      'note_type', tn.note_type,
+      'visibility', tn.visibility,
+      'review_status', tn.review_status,
+      'created_at', tn.created_at
+    ) end
   ) item
-  from roll20_events re join target t on t.session_id = re.session_id
+  from roll20_events re
+  join target t on t.session_id = re.session_id
+  left join table_notes tn
+    on tn.source_system = 'roll20'
+   and tn.source_id = 'roll20-note:' || re.id::text
 ) rows;`,
       baseParams,
       db

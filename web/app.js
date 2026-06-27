@@ -1779,6 +1779,7 @@ function roll20EventCard(event) {
   const text = roll20EventText(event);
   const command = roll20EventCommand(event);
   const raw = event.payload?.rawLine || event.raw_line || '';
+  const note = event.note || null;
   return `
     <article class="roll20-review-card ${event.event_type === 'dm_backstage_note' ? 'private' : ''}">
       <div class="row between">
@@ -1789,16 +1790,19 @@ function roll20EventCard(event) {
         <div class="badges">
           ${badge(eventTypeLabel(event.event_type), eventTypeTone(event.event_type))}
           ${command ? badge(command, 'blue') : ''}
+          ${note?.id ? badge('nota ' + (note.review_status || 'pending'), 'green') : ''}
         </div>
       </div>
       <div class="roll20-review-meta">
         <div><span class="label">Speaker</span><strong>${escapeHtml(event.roll20_who || '-')}</strong></div>
         <div><span class="label">Personagem</span><strong>${escapeHtml(event.character_name || event.payload?.targetCharacter || '-')}</strong></div>
         <div><span class="label">Criado</span><strong>${escapeHtml(event.created_at_roll20 || event.created_at || '-')}</strong></div>
+        ${note?.id ? `<div><span class="label">Nota</span><strong>${escapeHtml(note.review_status || note.note_type || note.id)}</strong></div>` : ''}
       </div>
       ${raw ? `<code>${escapeHtml(raw)}</code>` : ''}
       <div class="actions">
-        <button ${canReviewRoll20Events() ? '' : 'disabled'} onclick="convertRoll20EventToNote('${escapeHtml(event.id)}')">Criar nota</button>
+        <button ${canReviewRoll20Events() && !note?.id ? '' : 'disabled'} onclick="convertRoll20EventToNote('${escapeHtml(event.id)}')">${note?.id ? 'Nota criada' : 'Criar nota'}</button>
+        ${note?.id ? `<button onclick="copyText('${escapeHtml(note.id)}', 'ID da nota copiado.')">Copiar nota</button>` : ''}
         <button onclick="copyText('${escapeHtml(event.source_event_id || event.id || '')}', 'ID Roll20 copiado.')">Copiar ID</button>
       </div>
     </article>
