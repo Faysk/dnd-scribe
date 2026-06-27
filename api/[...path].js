@@ -16,6 +16,8 @@ const DEFAULT_ACTOR = 'renanyuhara';
 const PROJECT_SCOPE_ID = 'dnd-scribe';
 const CRAIG_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
+const DISCORD_API = 'https://discord.com/api/v10';
+const DISCORD_SYNC_MAX_MESSAGES = 100;
 
 const SESSION_STATUSES = new Set([
   'planned',
@@ -1255,6 +1257,210 @@ returning id, note_type, visibility, review_status, content;`,
   };
 }
 
+function discordBotToken() {
+  return cleanText(process.env.DISCORD_BOT_TOKEN || '', 500);
+}
+
+function discordChannelIdForTarget(target = 'dnd') {
+  const normalized = cleanText(target, 40).toLowerCase();
+  if (normalized === 'recording' || normalized === 'recordings' || normalized === 'gravacoes') {
+    return cleanText(process.env.DISCORD_RECORDINGS_CHANNEL_ID || '', 80);
+  }
+  if (normalized === 'ops' || normalized === 'logs' || normalized === 'admin') {
+    return cleanText(process.env.DISCORD_OPS_CHANNEL_ID || '', 80);
+  }
+  return cleanText(process.env.DISCORD_DND_CHANNEL_ID || '', 80);
+}
+
+function limitedInteger(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(number)));
+}
+
+function dateMs(value) {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function discordAttachmentSummary(message = {}) {
+  return (message.attachments || [])
+    .map(item => [item.filename || item.id || 'anexo', item.url || item.proxy_url || ''].filter(Boolean).join(' '))
+    .filter(Boolean)
+    .join('\n');
+}
+
+function normalizedDiscordMessage(message = {}, { sessionStartedAt = null } = {}) {
+  const id = cleanText(message.id, 80);
+  const createdAt = cleanText(message.timestamp || message.created_at || message.createdAt, 80);
+  const author = message.author || {};
+  const authorName = cleanText(author.global_name || author.username || author.name || message.author_name || message.authorName, 180);
+  const authorId = cleanText(author.id || message.author_discord_id || message.authorDiscordId, 80);
+  const text = cleanText(message.content || message.text || '', 1800);
+  const attachmentText = discordAttachmentSummary(message);
+  const content = cleanText([text, attachmentText].filter(Boolean).join('\n'), 1800);
+  if (!id || !createdAt || !content) return null;
+
+  const createdMs = dateMs(createdAt);
+  const startMs = createdMs !== null && sessionStartedAt !== null
+    ? Math.max(0, Math.round(createdMs - sessionStartedAt))
+    : null;
+
+  return {
+    id,
+    sourceId: `discord-message:${id}`,
+    createdAt,
+    authorId,
+    authorName,
+    content,
+    startMs,
+    metadata: {
+      discord: {
+        messageId: id,
+        channelId: cleanText(message.channel_id || message.channelId, 80),
+        guildId: cleanText(message.guild_id || message.guildId, 80),
+        authorId,
+        authorName,
+        createdAt,
+        editedAt: cleanText(message.edited_timestamp || message.editedAt, 80) || null,
+        attachments: (message.attachments || []).map(item => ({
+          id: item.id || null,
+          filename: item.filename || null,
+          contentType: item.content_type || item.contentType || null,
+          size: item.size || null,
+          url: item.url || null
+        }))
+      },
+      timeline: {
+        startMs,
+        timingMode: startMs === null ? 'discord_timestamp_unsynced' : 'discord_timestamp_from_session_start'
+      },
+      source: 'discord_channel_sync'
+    }
+  };
+}
+
+async function fetchDiscordChannelMessages(channelId, options = {}) {
+  const token = discordBotToken();
+  if (!token) throw httpError(409, 'DISCORD_BOT_TOKEN ausente no ambiente de producao.');
+  if (!channelId) throw httpError(400, 'Canal Discord nao configurado.');
+
+  const query = new URLSearchParams({ limit: String(options.limit || 50) });
+  for (const key of ['before', 'after', 'around']) {
+    const value = cleanText(options[key] || '', 80);
+    if (value) query.set(key, value);
+  }
+
+  const response = await fetch(`${DISCORD_API}/channels/${channelId}/messages?${query.toString()}`, {
+    headers: {
+      Authorization: `Bot ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  const body = await response.text().catch(() => '');
+  if (!response.ok) {
+    const detail = cleanText(body, 260);
+    if (response.status === 401) throw httpError(401, 'Token do bot Discord recusado pela API.');
+    if (response.status === 403) throw httpError(403, 'Bot sem permissao para ler historico deste canal Discord.');
+    throw httpError(response.status, `Falha ao buscar mensagens do Discord: ${detail || response.status}`);
+  }
+  let parsed;
+  try {
+    parsed = body ? JSON.parse(body) : [];
+  } catch (_error) {
+    throw httpError(502, 'Resposta invalida da API do Discord.');
+  }
+  if (!Array.isArray(parsed)) throw httpError(502, 'Resposta inesperada da API do Discord.');
+  return parsed;
+}
+
+async function persistDiscordMessages(db, campaign, sourceSessionId, body, access) {
+  const channelId = cleanText(body.channelId || body.channel_id || discordChannelIdForTarget(body.channel || body.target || 'dnd'), 80);
+  const limit = limitedInteger(body.limit, 50, 1, DISCORD_SYNC_MAX_MESSAGES);
+  const session = await data(`${targetCte()} select row_to_json(target) data from target;`, [campaign, sourceSessionId], db);
+  if (!session) throw httpError(404, `Sessao nao encontrada: ${sourceSessionId}`);
+
+  const suppliedMessages = Array.isArray(body.messages) ? body.messages : null;
+  const rawMessages = suppliedMessages || await fetchDiscordChannelMessages(channelId, {
+    limit,
+    before: body.before,
+    after: body.after,
+    around: body.around
+  });
+
+  const sessionStartedAt = dateMs(body.sessionStartedAt || body.session_started_at || session.started_at);
+  const messages = rawMessages
+    .map(message => normalizedDiscordMessage({ ...message, channel_id: message.channel_id || channelId }, { sessionStartedAt }))
+    .filter(Boolean)
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+
+  const dryRun = body.dryRun === true;
+  const visibility = cleanText(body.visibility || 'dm_review', 40) || 'dm_review';
+  const noteType = cleanText(body.noteType || body.note_type || 'discord_message', 40) || 'discord_message';
+  const result = {
+    ok: true,
+    mode: dryRun ? 'discord_sync_preview' : 'discord_sync_persisted',
+    dryRun,
+    campaignSlug: campaign,
+    sourceSessionId,
+    channelId,
+    fetched: rawMessages.length,
+    accepted: messages.length,
+    skipped: rawMessages.length - messages.length,
+    persisted: 0,
+    updated: 0,
+    sessionStartedAt: session.started_at || null,
+    timing: sessionStartedAt === null ? 'unsynced' : 'synced_from_session_started_at'
+  };
+  if (dryRun || !messages.length) return { ...result, messages: messages.slice(0, 10) };
+
+  for (const message of messages) {
+    const metadata = {
+      ...message.metadata,
+      sync: {
+        syncedByProfileId: access.profile?.id || null,
+        syncedByDisplayName: access.profile?.displayName || access.user?.displayName || null,
+        syncedAt: new Date().toISOString()
+      }
+    };
+    const upsert = await db.query(
+      `
+insert into table_notes (
+  campaign_id, session_id, source_system, source_id, note_type, visibility,
+  author_profile_id, author_discord_id, author_name, content, tags, metadata
+)
+select $1::uuid, $2::uuid, 'discord', $3, $4, $5,
+       p.id, nullif($6, ''), nullif($7, ''), $8, $9::text[], $10::jsonb
+from (select 1) seed
+left join profiles p on p.discord_id = nullif($6, '')
+on conflict (source_system, source_id)
+do update set
+  session_id = excluded.session_id,
+  note_type = excluded.note_type,
+  content = excluded.content,
+  tags = excluded.tags,
+  metadata = excluded.metadata
+returning (xmax = 0) inserted;`,
+      [
+        session.campaign_id,
+        session.session_id,
+        message.sourceId,
+        noteType,
+        visibility,
+        message.authorId,
+        message.authorName,
+        message.content,
+        ['discord', 'channel-sync', noteType],
+        JSON.stringify(metadata)
+      ]
+    );
+    if (upsert.rows[0]?.inserted) result.persisted += 1;
+    else result.updated += 1;
+  }
+  return result;
+}
+
 function httpError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -2308,16 +2514,23 @@ function phraseTimelineItems(segment) {
   });
 }
 
-async function buildTimelinePayload(campaign, sourceSessionId, db = getPool()) {
+async function buildTimelinePayload(campaign, sourceSessionId, access = null, db = getPool()) {
   const common = targetCte();
   const params = [campaign, sourceSessionId];
+  const noteParams = [
+    campaign,
+    sourceSessionId,
+    access?.profile?.id || null,
+    ['owner', 'master', 'reviewer'].includes(access?.campaignRole || '')
+  ];
   const session = await data(`${common} select row_to_json(target) data from target;`, params, db);
   if (!session) throw httpError(404, `Sessao nao encontrada: ${sourceSessionId}`);
   const [
     participants,
     segments,
     recordingFiles,
-    roll20Events
+    roll20Events,
+    discordEvents
   ] = await Promise.all([
     data(
       `${common}
@@ -2408,6 +2621,39 @@ select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483
 ) rows;`,
       params,
       db
+    ),
+    data(
+      `${common}
+select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483647), item->>'createdAt'), '[]'::json) data from (
+  select json_build_object(
+    'id', tn.id,
+    'noteType', tn.note_type,
+    'visibility', tn.visibility,
+    'reviewStatus', tn.review_status,
+    'authorProfileId', tn.author_profile_id,
+    'authorDiscordId', tn.author_discord_id,
+    'authorName', tn.author_name,
+    'startMs', case
+      when (tn.metadata #>> '{timeline,startMs}') ~ '^\\d+$' then (tn.metadata #>> '{timeline,startMs}')::int
+      else null
+    end,
+    'text', tn.content,
+    'sourceSystem', tn.source_system,
+    'sourceId', tn.source_id,
+    'createdAt', tn.created_at,
+    'metadata', tn.metadata
+  ) item
+  from table_notes tn
+  join target t on t.session_id = tn.session_id
+  where tn.source_system = 'discord'
+    and (
+      $4::boolean
+      or tn.author_profile_id = $3::uuid
+      or tn.visibility in ('player_visible', 'public_candidate')
+    )
+) rows;`,
+      noteParams,
+      db
     )
   ]);
 
@@ -2441,6 +2687,18 @@ select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483
       durationMs: 0,
       text: event.text || event.payload?.rawCommand || event.sourceEventId || 'Evento Roll20',
       raw: event
+    })),
+    ...(discordEvents || []).map(event => ({
+      id: event.id,
+      kind: 'discord',
+      laneId: 'event:discord',
+      title: event.authorName || event.authorDiscordId || 'Discord',
+      subtitle: [event.noteType, event.reviewStatus].filter(Boolean).join(' / ') || 'mensagem',
+      startMs: event.startMs,
+      endMs: event.startMs,
+      durationMs: 0,
+      text: event.text || event.sourceId || 'Mensagem Discord',
+      raw: event
     }))
   ].sort((a, b) => {
     const aAt = a.startMs === null || a.startMs === undefined ? Number.MAX_SAFE_INTEGER : Number(a.startMs);
@@ -2463,7 +2721,7 @@ select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483
       participantId: participant.id
     })),
     { id: 'event:roll20', type: 'event', label: 'Roll20', subtitle: 'chat, dados e notas' },
-    { id: 'event:discord', type: 'event', label: 'Discord', subtitle: 'pendente captura prod' },
+    { id: 'event:discord', type: 'event', label: 'Discord', subtitle: 'mensagens e notas sincronizadas' },
     { id: 'event:media', type: 'event', label: 'Midia', subtitle: 'imagens e anexos futuros' },
     { id: 'event:ai', type: 'event', label: 'IA', subtitle: 'canon, quote e bastidores futuros' }
   ];
@@ -2486,6 +2744,7 @@ select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483
       transcriptSegments: (segments || []).length,
       phraseItems: phraseItems.length,
       roll20Events: (roll20Events || []).length,
+      discordEvents: (discordEvents || []).length,
       recordingFiles: (recordingFiles || []).length,
       syncedItems: timelineItems.filter(item => item.startMs !== null && item.startMs !== undefined).length,
       totalItems: timelineItems.length,
@@ -2497,6 +2756,7 @@ select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483
     transcriptSegments: segments || [],
     phrases: phraseItems,
     roll20Events: roll20Events || [],
+    discordEvents: discordEvents || [],
     items: timelineItems
   };
 }
@@ -3167,8 +3427,8 @@ async function handleGet(req, res, path, query) {
     return sendJson(res, 200, { ok: true, review, summary });
   }
   if (path === '/api/timeline') {
-    await requireCampaignAccess(req, campaign);
-    return sendJson(res, 200, await buildTimelinePayload(campaign, sourceSessionId));
+    const access = await requireCampaignAccess(req, campaign);
+    return sendJson(res, 200, await buildTimelinePayload(campaign, sourceSessionId, access));
   }
   if (path === '/api/review-template') {
     await requireCampaignAccess(req, campaign);
@@ -3271,6 +3531,21 @@ async function handlePost(req, res, path) {
       }
     }
     return sendJson(res, 200, payload);
+  }
+  if (path === '/api/discord/sync-channel' || path === '/api/discord-sync-channel') {
+    const access = await requireCampaignAccess(req, campaign, ['owner', 'master', 'reviewer']);
+    const client = await getPool().connect();
+    try {
+      await client.query('begin');
+      const payload = await persistDiscordMessages(client, campaign, sourceSessionId, body, access);
+      await client.query('commit');
+      return sendJson(res, 200, payload);
+    } catch (error) {
+      await client.query('rollback').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   }
   if (path === '/api/uploads/craig-url') {
     await requireCampaignAccess(req, campaign, ['owner', 'master']);
