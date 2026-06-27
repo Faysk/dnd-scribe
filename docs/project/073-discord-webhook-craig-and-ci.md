@@ -22,8 +22,9 @@ Variaveis documentadas:
 
 - `DISCORD_WEBHOOK_URL`
 - `DND_DISCORD_WEBHOOK_URL`
+- `DND_DISCORD_WEBHOOK_NAME`
 
-Podemos aceitar uma ou ambas; a preferencia futura deve ser `DND_DISCORD_WEBHOOK_URL` para deixar claro que e do projeto.
+Podemos aceitar `DISCORD_WEBHOOK_URL` ou `DND_DISCORD_WEBHOOK_URL`; a preferencia futura deve ser `DND_DISCORD_WEBHOOK_URL` para deixar claro que e do projeto.
 
 ## Limite importante
 
@@ -64,6 +65,20 @@ Para automatizar start/stop de gravacao, as opcoes reais sao:
 
 Nao devemos usar user token/self-bot para acionar slash commands. Alem de fragil, isso tende a violar regras da plataforma.
 
+## Helper de notificacao
+
+Arquivo criado:
+
+- `lib/discord.js`
+
+O helper envia mensagens para Discord em modo best effort:
+
+- Se o webhook nao existir, ele retorna `missing_webhook`.
+- Se o Discord falhar, ele registra `console.warn` e nao derruba o job principal.
+- Ele fica fora de `api/` para nao criar uma nova Serverless Function e nao estourar o limite do plano Hobby.
+
+O acoplamento nos workers `run-cloud-ingest` e `run-cloud-extract` ficou como proxima edicao segura, porque o conector atual so permite substituir arquivos inteiros grandes. A regra para essa ligacao e simples: notificar sucesso/falha depois do commit no banco, sem bloquear o processamento se o Discord estiver indisponivel.
+
 ## CI criado
 
 Arquivo criado:
@@ -95,4 +110,9 @@ Por isso, um CI customizado e menor, mais direto e mais barato de manter.
 
 ## Proximo passo
 
-Quando quisermos usar o webhook em runtime, adicionar um helper interno de notificacao em uma function ja existente, sem criar nova Serverless Function. Isso evita bater de novo no limite de 12 functions do Vercel Hobby.
+Quando a edicao local por shell estiver disponivel, aplicar patch pequeno nos workers para chamar `notifyDiscord` em:
+
+- Upload confirmado.
+- Manifest Craig concluido/falhou.
+- Extracao Craig parcial/concluida/falhou.
+- Estimativa antes de uma rodada paga de OpenAI.
