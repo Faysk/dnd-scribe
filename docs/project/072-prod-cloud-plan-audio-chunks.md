@@ -1,59 +1,69 @@
 # 072 - Prod cloud audio chunk planner
 
 Data: 2026-06-27
+Status: planejado/prototipado, pausado no deploy ativo por limite de functions do Vercel Hobby.
 
 ## Objetivo
 
-Adicionar a etapa `cloud_plan_audio_chunks` para producao. Depois que as faixas Craig foram extraidas para objetos individuais no R2, esta etapa le metadados FLAC e cria um plano deterministico de chunks no Supabase.
+Adicionar a etapa `cloud_plan_audio_chunks` para producao. Depois que as faixas Craig forem extraidas para objetos individuais no R2, esta etapa deve ler metadados FLAC e criar um plano deterministico de chunks no Supabase.
 
-Esta etapa ainda nao corta audio fisicamente, nao detecta fala e nao transcreve. O objetivo e preparar o banco para as proximas etapas sem custo de IA.
+Esta etapa nao corta audio fisicamente, nao detecta fala e nao transcreve. O objetivo e preparar o banco para as proximas etapas sem custo de IA.
 
-## Endpoint criado
+## Resultado da tentativa
 
-`POST /api/jobs/run-cloud-plan-chunks`
+O endpoint foi prototipado como `api/jobs/run-cloud-plan-chunks.js`, mas ao adicionar mais uma Serverless Function o deploy bateu no limite do plano Vercel Hobby:
 
-`GET /api/jobs/run-cloud-plan-chunks` retorna metadados operacionais, incluindo `defaultChunkSeconds: 600` e `paidAiCostUsd: 0`.
+`exceeded_serverless_functions_per_deployment`
 
-## Comportamento
+A producao foi corrigida removendo a function nova do deploy ativo e restaurando os wrappers de upload Craig, que sao necessarios porque o catch-all atual nao atende rotas profundas como `/api/uploads/craig-url`.
 
-- Busca job `cloud_plan_audio_chunks` com status `queued` ou `retrying`.
-- Le `trackFiles` do input do job ou, como fallback, busca `recording_files.file_type = 'craig_track'` da sessao.
-- Le somente o inicio de cada FLAC no R2 por range request.
-- Parseia `STREAMINFO` do FLAC para descobrir duracao, sample rate, canais e bits por sample.
-- Gera chunks de 600 segundos por padrao, ajustavel entre 60 e 1800 segundos.
-- Faz upsert em `audio_chunks` usando o indice existente `(session_id, track_key, chunk_index)`.
-- Marca os chunks como `transcription_status = 'planned_cloud_chunk'`.
-- Mantem `sha256` nulo e `metadata.planned_only = true`, bloqueando transcricao paga ate uma etapa posterior renderizar audio real e preencher hash.
-- Cria o proximo job `cloud_detect_speech_slices` ao concluir.
+## Comportamento planejado
 
-## Por que planejar sem renderizar audio agora
+- Buscar job `cloud_plan_audio_chunks` com status `queued` ou `retrying`.
+- Ler `trackFiles` do input do job ou, como fallback, buscar `recording_files.file_type = 'craig_track'` da sessao.
+- Ler somente o inicio de cada FLAC no R2 por range request.
+- Parsear `STREAMINFO` do FLAC para descobrir duracao, sample rate, canais e bits por sample.
+- Gerar chunks de 600 segundos por padrao, ajustavel entre 60 e 1800 segundos.
+- Fazer upsert em `audio_chunks` usando o indice existente `(session_id, track_key, chunk_index)`.
+- Marcar chunks como `transcription_status = 'planned_cloud_chunk'`.
+- Manter `sha256` nulo e `metadata.planned_only = true`, bloqueando transcricao paga ate uma etapa posterior renderizar audio real e preencher hash.
+- Criar o proximo job `cloud_detect_speech_slices` ao concluir.
 
-Este passo e barato e seguro. Ele permite estimar duracao e quantidade de chunks no banco, mas ainda evita colocar qualquer unidade como pronta para OpenAI. No dashboard de custos, chunks sem `sha256` aparecem como bloqueados por `missing_hash`, o que e exatamente a trava desejada.
+## Por que planejar sem renderizar audio
 
-## Frontend
+Este passo e barato e seguro. Ele permite estimar duracao e quantidade de chunks no banco, mas ainda evita colocar qualquer unidade como pronta para OpenAI. No dashboard de custos, chunks sem `sha256` aparecem como bloqueados por `missing_hash`, que e a trava desejada.
 
-O painel `Operacao` agora conhece tres workers cloud:
+## Decisao tomada
 
-- `cloud_ingest_craig` -> `/api/jobs/run-cloud-ingest`
-- `cloud_extract_craig_tracks` -> `/api/jobs/run-cloud-extract`
-- `cloud_plan_audio_chunks` -> `/api/jobs/run-cloud-plan-chunks`
+Nao vamos subir Vercel Pro so para resolver contagem de functions neste momento. O melhor caminho e consolidar runners cloud em menos endpoints, por exemplo um unico `/api/jobs/run-cloud` que despacha por `job_type`:
 
-Cada job elegivel mostra botoes de simulacao e execucao. A execucao confirma antes de rodar e exibe que a etapa nao usa OpenAI paga.
+- `cloud_ingest_craig`
+- `cloud_extract_craig_tracks`
+- `cloud_plan_audio_chunks`
+- futuros jobs de audio
+
+Isso preserva o plano Hobby, reduz superficie de deploy e evita custo fixo antes de termos volume real.
+
+## Estado ativo em producao
+
+Ativos em producao agora:
+
+- Upload Craig direto para R2.
+- Confirmacao de upload.
+- `cloud_ingest_craig`.
+- `cloud_extract_craig_tracks`.
+- Controles de Operacao para ingest/extract.
+
+Pausado:
+
+- Endpoint ativo de `cloud_plan_audio_chunks`.
 
 ## Custo
 
 - OpenAI: USD 0.
-- R2: leituras pequenas por faixa para header FLAC.
-- Supabase: inserts/upserts proporcionais ao numero de chunks.
-- Vercel: compute curto, sem processamento pesado de audio.
-
-## Riscos conhecidos
-
-- FLAC sem `STREAMINFO` nos primeiros 64 KiB falha explicitamente.
-- Chunks planejados ainda nao sao arquivos fisicos no R2.
-- A proxima etapa precisa decidir se renderiza chunks com ffmpeg em Vercel, Cloudflare, ou worker dedicado.
-- RLS segue aberta em modo teste e precisa ser fechada antes de acesso amplo.
+- R2/Supabase/Vercel: apenas operacoes pequenas nas etapas ativas.
+- Nenhum upgrade de Vercel foi feito.
 
 ## Proximo passo
 
-Implementar `cloud_render_audio_chunks` ou redesenhar a etapa de speech slices para processar diretamente da faixa original. A decisao tecnica principal agora e onde rodar ffmpeg/corte de audio com menor custo e maior previsibilidade.
+Consolidar os workers cloud para caber no limite Hobby e entao reativar o planner de chunks sem criar uma function extra.
