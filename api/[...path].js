@@ -2052,7 +2052,7 @@ async function handlePost(req, res, path) {
   const sourceSessionId = body.sourceSessionId || decisions.sourceSessionId || DEFAULT_SOURCE_SESSION;
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
-  if (path === '/api/roll20/ingest') {
+  if (path === '/api/roll20/ingest' || path === '/api/roll20-ingest') {
     const payload = await roll20IngestPreviewPayload(req, campaign, body);
     if (body.dryRun === false) {
       return sendJson(res, 409, {
