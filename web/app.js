@@ -321,6 +321,10 @@ function canManageCampaign() {
   return Boolean(state.auth.capabilities?.canManageCampaign);
 }
 
+function canReviewRoll20Events() {
+  return ['owner', 'master', 'reviewer'].includes(state.auth.campaignRole || '');
+}
+
 function resetCampaignData() {
   state.sessions = [];
   state.selectedSourceSessionId = null;
@@ -1793,8 +1797,41 @@ function roll20EventCard(event) {
         <div><span class="label">Criado</span><strong>${escapeHtml(event.created_at_roll20 || event.created_at || '-')}</strong></div>
       </div>
       ${raw ? `<code>${escapeHtml(raw)}</code>` : ''}
+      <div class="actions">
+        <button ${canReviewRoll20Events() ? '' : 'disabled'} onclick="convertRoll20EventToNote('${escapeHtml(event.id)}')">Criar nota</button>
+        <button onclick="copyText('${escapeHtml(event.source_event_id || event.id || '')}', 'ID Roll20 copiado.')">Copiar ID</button>
+      </div>
     </article>
   `;
+}
+
+async function convertRoll20EventToNote(eventId) {
+  if (!eventId) return;
+  if (!canReviewRoll20Events()) {
+    toast('Apenas DM, owner ou reviewer pode criar nota Roll20.');
+    return;
+  }
+  try {
+    setBusy(true);
+    const payload = await api('/api/roll20-event-note', {
+      method: 'POST',
+      body: JSON.stringify({
+        campaignSlug: state.review?.campaign?.slug || 'yuhara-main',
+        sourceSessionId: state.review?.session?.sourceSessionId || state.selectedSourceSessionId,
+        eventId
+      })
+    });
+    toast('Nota criada a partir do evento Roll20.');
+    remember('Nota Roll20 criada: ' + (payload.note?.id || eventId));
+    if (state.selectedSourceSessionId) await loadSession(state.selectedSourceSessionId);
+    if (window.notesState) window.notesState.loaded = false;
+    if (window.loadNotesDirectory) await window.loadNotesDirectory(true);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(false);
+    render();
+  }
 }
 
 function renderPublications() {
@@ -2013,6 +2050,7 @@ window.uploadCraigFromForm = uploadCraigFromForm;
 window.saveCraigTrack = saveCraigTrack;
 window.initAuth = initAuth;
 window.loadAuthProfile = loadAuthProfile;
+window.convertRoll20EventToNote = convertRoll20EventToNote;
 window.signInProvider = signInProvider;
 window.signInDiscord = signInDiscord;
 window.signInGoogle = signInGoogle;

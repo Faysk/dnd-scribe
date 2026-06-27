@@ -543,6 +543,124 @@ values (gen_random_uuid(), $1::uuid, 'roll20_chat_import', 'succeeded', 1, $2::j
   };
 }
 
+function roll20NoteDefaults(event) {
+  const type = event.event_type || '';
+  if (type === 'canon_candidate') return { noteType: 'canon', visibility: 'dm_review' };
+  if (type === 'dm_backstage_note') return { noteType: 'backstage', visibility: 'dm_review' };
+  if (type === 'character_action_candidate') return { noteType: 'note', visibility: 'table_private' };
+  if (type === 'audio_processing_hint') return { noteType: 'note', visibility: 'dm_review' };
+  return { noteType: 'note', visibility: 'dm_review' };
+}
+
+function roll20NoteContent(event, raw) {
+  return cleanText(
+    raw.content
+      || event.text
+      || event.payload?.text
+      || event.payload?.args?.motivo
+      || event.payload?.args?.titulo
+      || event.payload?.rawCommand
+      || event.raw_line,
+    5000
+  );
+}
+
+async function convertRoll20EventToNote(db, req, campaign, raw) {
+  const access = await requireCampaignAccess(req, campaign, ['owner', 'master', 'reviewer']);
+  const eventId = cleanText(raw.eventId || raw.event_id || raw.id, 120);
+  if (!eventId) throw httpError(400, 'eventId obrigatorio.');
+
+  const event = await data(
+    `
+select row_to_json(event_row) data from (
+  select re.*, s.source_session_id, c.slug campaign_slug
+  from roll20_events re
+  join sessions s on s.id = re.session_id
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1 and re.id = $2::uuid
+  limit 1
+) event_row;`,
+    [campaign, eventId],
+    db
+  );
+  if (!event) throw httpError(404, 'Evento Roll20 nao encontrado nesta campanha.');
+
+  const defaults = roll20NoteDefaults(event);
+  const noteType = cleanText(raw.noteType || raw.note_type || defaults.noteType, 40) || defaults.noteType;
+  const visibility = cleanText(raw.visibility || defaults.visibility, 40) || defaults.visibility;
+  const content = roll20NoteContent(event, raw);
+  if (!content) throw httpError(400, 'Evento Roll20 sem conteudo para nota.');
+
+  const sourceId = `roll20-note:${event.id}`;
+  const tags = Array.from(new Set([
+    'roll20',
+    noteType,
+    event.event_type || '',
+    ...(Array.isArray(raw.tags) ? raw.tags : [])
+  ].map(item => cleanText(item, 40)).filter(Boolean)));
+  const result = await db.query(
+    `
+insert into table_notes (
+  campaign_id, session_id, source_system, source_id, note_type, visibility,
+  author_profile_id, author_discord_id, author_name, content, tags, metadata
+)
+select c.id, re.session_id, 'roll20', $3, $4, $5,
+       $6::uuid, $7, $8, $9, $10::text[], $11::jsonb
+from roll20_events re
+join sessions s on s.id = re.session_id
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1 and re.id = $2::uuid
+on conflict (source_system, source_id)
+do update set
+  note_type = excluded.note_type,
+  visibility = excluded.visibility,
+  content = excluded.content,
+  tags = excluded.tags,
+  metadata = excluded.metadata
+returning id, note_type, visibility, review_status, content;`,
+    [
+      campaign,
+      event.id,
+      sourceId,
+      noteType,
+      visibility,
+      access.profile?.id || null,
+      access.user?.discord?.id || null,
+      access.profile?.displayName || access.user?.displayName || null,
+      content,
+      tags,
+      JSON.stringify({
+        source: 'roll20_event_conversion',
+        roll20EventId: event.id,
+        sourceEventId: event.source_event_id,
+        eventType: event.event_type,
+        sourceSessionId: event.source_session_id,
+        convertedBy: {
+          profileId: access.profile?.id || null,
+          displayName: access.profile?.displayName || access.user?.displayName || null,
+          role: access.campaignRole || null
+        },
+        raw: raw || null
+      })
+    ]
+  );
+
+  return {
+    ok: true,
+    mode: 'roll20_event_note',
+    campaignSlug: campaign,
+    sourceSessionId: event.source_session_id,
+    event: {
+      id: event.id,
+      sourceEventId: event.source_event_id,
+      eventType: event.event_type,
+      speaker: event.roll20_who,
+      characterName: event.character_name
+    },
+    note: result.rows[0]
+  };
+}
+
 function httpError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -2179,6 +2297,20 @@ async function handlePost(req, res, path) {
   const sourceSessionId = body.sourceSessionId || decisions.sourceSessionId || DEFAULT_SOURCE_SESSION;
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
+  if (path === '/api/roll20-event-note') {
+    const client = await getPool().connect();
+    try {
+      await client.query('begin');
+      const payload = await convertRoll20EventToNote(client, req, campaign, body);
+      await client.query('commit');
+      return sendJson(res, 200, payload);
+    } catch (error) {
+      await client.query('rollback').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
   if (path === '/api/roll20/ingest' || path === '/api/roll20-ingest') {
     const payload = await roll20IngestPreviewPayload(req, campaign, body);
     if (body.dryRun === false) {
