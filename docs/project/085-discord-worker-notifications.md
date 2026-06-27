@@ -74,3 +74,21 @@ npm run build
 1. Redeploy through Git push so Vercel functions pick up `DISCORD_BOT_TOKEN`.
 2. Smoke test production endpoints.
 3. Run the next real cloud ingest/extract job and verify Discord messages arrive in the expected channels.
+
+## Production deploy validation
+
+Commit deployed to production:
+
+- `30d1384` - `feat(discord): route worker notifications to channels`
+- Vercel deployment state: `READY`
+
+Production smoke checks:
+
+- `GET /api/jobs/run-cloud-ingest`: 200
+- `GET /api/jobs/run-cloud-extract`: 200
+- `GET /api/discord/interactions`: 200, `configured:true`
+- `GET /api/health`: 200
+
+Runtime logs:
+
+- No `error` or `fatal` logs found in the production scan after deploy.
