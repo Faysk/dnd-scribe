@@ -22,36 +22,66 @@ The local `.env.local` has the required Discord values present:
 
 The bot token is valid. A Discord API diagnostic returned bot identity `DND-SCRIBE`.
 
-Command registration is currently blocked by Discord API access:
+Command registration was initially blocked because the app had not been added to the target guild yet:
 
 ```text
 Discord command registration failed (403): {"message":"Missing Access","code":50001}
-```
-
-Additional diagnostic:
-
-```text
 guild_access_status 404 Unknown Guild
 commands_access_status 403 Missing Access
 ```
 
-This means the bot cannot see the configured guild. The likely causes are:
+After installing the app in the guild, registration succeeded:
 
-1. The bot was not added to the target Discord server yet.
-2. `DISCORD_GUILD_ID` points to a different server than the one where the bot was installed.
+```json
+{
+  "ok": true,
+  "registered": 2,
+  "commands": ["dnd", "Salvar no DnD Scribe"]
+}
+```
 
-## Required user action
+Registered command IDs:
 
-Open the OAuth2 install URL, choose the DnD server, and authorize the application with:
+- `dnd`: `1520465687531884605`
+- `Salvar no DnD Scribe`: `1520465687531884606`
 
-- `bot`
-- `applications.commands`
+## Channel diagnostics
 
-Then confirm that `DISCORD_GUILD_ID` is the copied server ID from that same Discord server.
+Guild:
 
-## Next check
+- `1347175398647267358` (`Gaming Den`)
 
-After the bot can see the guild, run:
+Known channels:
+
+- `DISCORD_DND_CHANNEL_ID=1387538428903690290`
+  - Name: `DnD Private Channel`
+  - Type: voice channel
+  - Bot access: OK
+- `DISCORD_RECORDINGS_CHANNEL_ID=1389718366880792761`
+  - Bot access: 403
+  - Meaning: the bot needs channel/category permission to view this channel before it can use it for recording automation or notifications.
+
+## Recommended channel layout
+
+Use three Discord surfaces:
+
+- DnD voice/channel: live table voice and player-facing commands.
+- Recordings channel: Craig recording links, session upload links, and audio-processing status.
+- Ops/logs channel: private bot logs, job failures, cost warnings, and admin-only operational notes.
+
+Recommended env names:
+
+```env
+DISCORD_DND_CHANNEL_ID=""
+DISCORD_RECORDINGS_CHANNEL_ID=""
+DISCORD_OPS_CHANNEL_ID=""
+```
+
+`DISCORD_OPS_CHANNEL_ID` can point to a private text channel such as `#dnd-scribe-logs`.
+
+## Verification command
+
+To re-register or update commands:
 
 ```bash
 npm run discord:register
