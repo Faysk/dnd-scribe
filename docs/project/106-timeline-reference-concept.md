@@ -91,8 +91,9 @@ linked_audio_file/chunk/slice
 ```
 
 Roll20 already has `approx_start_ms`. Audio/transcript already has segment
-timing. Discord ingestion still needs a production capture path and time sync
-strategy.
+timing. Discord ingestion now has a production REST sync path through
+`/api/discord-sync-channel`; messages are stored in `table_notes` and receive
+`metadata.timeline.startMs` when the session has a reliable `started_at`.
 
 ## Suggested implementation stages
 

@@ -63,7 +63,13 @@ const state = {
     data: null,
     selectedItemId: null,
     filter: 'all',
-    zoom: 1
+    zoom: 1,
+    discord: {
+      busy: false,
+      error: null,
+      result: null,
+      limit: 50
+    }
   },
   jobs: [],
   jobsPolling: false,
@@ -400,6 +406,10 @@ function canReviewRoll20Events() {
   return ['owner', 'master', 'reviewer'].includes(state.auth.campaignRole || '');
 }
 
+function canSyncDiscordTimeline() {
+  return ['owner', 'master', 'reviewer'].includes(state.auth.campaignRole || '');
+}
+
 function resetCampaignData() {
   state.sessions = [];
   state.selectedSourceSessionId = null;
@@ -412,7 +422,13 @@ function resetCampaignData() {
     data: null,
     selectedItemId: null,
     filter: 'all',
-    zoom: 1
+    zoom: 1,
+    discord: {
+      busy: false,
+      error: null,
+      result: null,
+      limit: 50
+    }
   };
   state.jobs = [];
   state.craigMap = null;
@@ -834,7 +850,13 @@ async function loadSession(sourceSessionId) {
       data: null,
       selectedItemId: null,
       filter: 'all',
-      zoom: 1
+      zoom: 1,
+      discord: {
+        busy: false,
+        error: null,
+        result: null,
+        limit: 50
+      }
     };
     state.audio = {
       segmentId: null,
@@ -1479,15 +1501,17 @@ function renderTimeline() {
             ${badge(`${stats.syncedItems || 0}/${stats.totalItems || 0} sincronizados`, 'green')}
             ${badge(`${stats.phraseItems || 0} frases`, 'blue')}
             ${badge(`${stats.roll20Events || 0} Roll20`, 'violet')}
+            ${badge(`${stats.discordEvents || 0} Discord`, 'green')}
           </div>
         </div>
         <div class="timeline-toolbar">
           <select onchange="state.timeline.filter=this.value; render();">
-            ${['all', 'speech', 'roll20'].map(value => `<option value="${value}" ${state.timeline.filter === value ? 'selected' : ''}>${escapeHtml(timelineFilterLabel(value))}</option>`).join('')}
+            ${['all', 'speech', 'roll20', 'discord'].map(value => `<option value="${value}" ${state.timeline.filter === value ? 'selected' : ''}>${escapeHtml(timelineFilterLabel(value))}</option>`).join('')}
           </select>
           <label><span class="label">Zoom</span><input type="range" min="1" max="6" step="1" value="${Number(state.timeline.zoom || 1)}" oninput="state.timeline.zoom=Number(this.value); render();" /></label>
           <button onclick="loadTimelineData(true)">Atualizar</button>
         </div>
+        ${renderDiscordSyncControls()}
       </div>
 
       <section class="timeline-layout">
@@ -1495,6 +1519,7 @@ function renderTimeline() {
           ${renderTimelineScale(data, items)}
           ${renderTimelineLanes(data, items)}
           ${renderTimelineTranscript(items)}
+          ${renderTimelineEvents(items)}
         </div>
         ${renderTimelineInspector(selected)}
       </section>
@@ -1503,7 +1528,32 @@ function renderTimeline() {
 }
 
 function timelineFilterLabel(value) {
-  return { all: 'Tudo', speech: 'Falas', roll20: 'Roll20' }[value] || value;
+  return { all: 'Tudo', speech: 'Falas', roll20: 'Roll20', discord: 'Discord' }[value] || value;
+}
+
+function renderDiscordSyncControls() {
+  const discord = state.timeline.discord || {};
+  if (!canSyncDiscordTimeline()) {
+    return '<div class="timeline-discord-sync muted"><span class="label">Discord</span><small>Sincronizacao do canal exige papel owner, master ou reviewer.</small></div>';
+  }
+  const result = discord.result;
+  const summary = result
+    ? (result.warning || `${result.persisted || 0} novas, ${result.updated || 0} atualizadas, ${result.skipped || 0} ignoradas`)
+    : 'Puxa as ultimas mensagens do canal DnD configurado e salva como notas da sessao.';
+  return `
+    <div class="timeline-discord-sync">
+      <div>
+        <span class="label">Discord</span>
+        <strong>Sincronizar canal da mesa</strong>
+        <small>${escapeHtml(discord.error || summary)}</small>
+      </div>
+      <label>
+        <span class="label">Mensagens</span>
+        <input type="number" min="1" max="100" value="${Number(discord.limit || 50)}" oninput="state.timeline.discord.limit=Number(this.value || 50)" />
+      </label>
+      <button ${discord.busy ? 'disabled' : ''} onclick="syncDiscordTimeline()">${discord.busy ? 'Sincronizando...' : 'Sincronizar Discord'}</button>
+    </div>
+  `;
 }
 
 function filteredTimelineItems() {
@@ -1564,7 +1614,7 @@ function renderTimelineBlock(item, duration) {
   const start = Number(item.startMs || 0);
   const end = Number(item.endMs || item.startMs || start + 500);
   const left = Math.min(99.5, Math.max(0, (start / duration) * 100));
-  const width = item.kind === 'roll20'
+  const width = item.kind === 'roll20' || item.kind === 'discord'
     ? 1.2
     : Math.max(.8, Math.min(100 - left, ((Math.max(400, end - start) / duration) * 100)));
   const selected = item.id === state.timeline.selectedItemId;
@@ -1597,6 +1647,27 @@ function renderTimelineTranscript(items) {
   `;
 }
 
+function renderTimelineEvents(items) {
+  const eventItems = items.filter(item => item.kind !== 'speech');
+  return `
+    <section class="panel timeline-events">
+      <div class="panel-head">
+        <h2>Eventos sincronizados</h2>
+        <small>${eventItems.length} itens de Roll20, Discord e outras fontes</small>
+      </div>
+      <div class="timeline-table event-table">
+        ${eventItems.map(item => `
+          <button class="${item.id === state.timeline.selectedItemId ? 'active' : ''}" onclick="selectTimelineItem('${escapeHtml(item.id)}')">
+            <span>${escapeHtml(item.startMs === null || item.startMs === undefined ? '--:--:--' : fmtDuration(item.startMs))}</span>
+            <strong>${escapeHtml(item.kind === 'roll20' ? eventTypeLabel(item.title) : item.title || item.kind)}</strong>
+            <p>${escapeHtml(item.text || '')}</p>
+          </button>
+        `).join('') || '<div class="empty">Nenhum evento externo sincronizado ainda.</div>'}
+      </div>
+    </section>
+  `;
+}
+
 function renderTimelineInspector(item) {
   if (!item) {
     return `
@@ -1614,7 +1685,7 @@ function renderTimelineInspector(item) {
           <span class="label">${escapeHtml(item.kind)}</span>
           <h2>${escapeHtml(item.title || item.kind)}</h2>
         </div>
-        <div class="badges">${badge(item.kind, item.kind === 'roll20' ? 'green' : 'blue')}${item.timingMode ? badge('tempo estimado', 'orange') : ''}</div>
+        <div class="badges">${badge(item.kind, item.kind === 'roll20' ? 'green' : item.kind === 'discord' ? 'violet' : 'blue')}${item.timingMode ? badge('tempo estimado', 'orange') : ''}</div>
       </div>
       <div class="panel-body detail-grid">
         <div class="field-grid">
@@ -1679,6 +1750,44 @@ function selectTimelineItem(id) {
 function copyTimelineSelected() {
   const item = timelineSelectedItem();
   copyText(item?.text || '', 'Texto copiado.');
+}
+
+async function syncDiscordTimeline() {
+  if (!state.selectedSourceSessionId || !canSyncDiscordTimeline()) return;
+  state.timeline.discord = {
+    ...(state.timeline.discord || {}),
+    busy: true,
+    error: null,
+    result: null
+  };
+  render();
+  try {
+    const payload = await api('/api/discord-sync-channel', {
+      method: 'POST',
+      body: JSON.stringify({
+        sourceSessionId: state.selectedSourceSessionId,
+        limit: Math.min(100, Math.max(1, Number(state.timeline.discord.limit || 50))),
+        channel: 'dnd'
+      })
+    });
+    state.timeline.discord = {
+      ...(state.timeline.discord || {}),
+      busy: false,
+      error: null,
+      result: payload
+    };
+    remember('Discord sincronizado na timeline.', payload);
+    await loadTimelineData(true);
+  } catch (error) {
+    state.timeline.discord = {
+      ...(state.timeline.discord || {}),
+      busy: false,
+      error: error.message,
+      result: null
+    };
+    toast(error.message);
+    render();
+  }
 }
 
 async function loadTimelineAudio(id) {
