@@ -58,8 +58,11 @@ Known channels:
   - Type: voice channel
   - Bot access: OK
 - `DISCORD_RECORDINGS_CHANNEL_ID=1389718366880792761`
-  - Bot access: 403
-  - Meaning: the bot needs channel/category permission to view this channel before it can use it for recording automation or notifications.
+  - Name: `rec`
+  - Type: text channel
+  - Bot access: still blocked with 403 `Missing Access`
+  - Permission detail: `@everyone` has `View Channel` denied on the channel, and the managed role `DND-SCRIBE` does not have an explicit channel allow yet.
+  - Required fix: allow `DND-SCRIBE` on this channel or its category with `View Channel`, `Send Messages`, `Embed Links`, `Attach Files`, and `Read Message History`.
 
 ## Recommended channel layout
 
@@ -77,7 +80,7 @@ DISCORD_RECORDINGS_CHANNEL_ID=""
 DISCORD_OPS_CHANNEL_ID=""
 ```
 
-`DISCORD_OPS_CHANNEL_ID` can point to a private text channel such as `#dnd-scribe-logs`.
+`DISCORD_OPS_CHANNEL_ID` was detected locally as `1520467378608144464` (`dnd-scribe-logs`). A bot message test returned HTTP 200.
 
 ## Verification command
 
@@ -96,3 +99,24 @@ Expected result:
   "commands": ["dnd", "Salvar no DnD Scribe"]
 }
 ```
+
+## Validation on 2026-06-27
+
+Validated with Discord API:
+
+- Bot identity: `DND-SCRIBE`
+- Guild access: OK
+- Guild commands: OK
+- DnD voice channel: visible to bot
+- Ops/logs channel: visible and writable
+- Recordings channel `rec`: visible in guild channel list, but direct channel access and message send are blocked by channel overwrite.
+
+## Vercel environment sync
+
+Vercel env sync: OK for all environments.
+
+Synced variables:
+
+- `DISCORD_DND_CHANNEL_ID`
+- `DISCORD_RECORDINGS_CHANNEL_ID`
+- `DISCORD_OPS_CHANNEL_ID`
