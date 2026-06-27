@@ -687,3 +687,51 @@ body.auth-locked .music-dock { display: none; }
   .site-gate-card { padding: 16px; }
   .site-gate-actions { grid-template-columns: 1fr; }
 }
+
+.timeline-list {
+  display: grid;
+  gap: 10px;
+}
+.timeline-item {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.timeline-time {
+  position: sticky;
+  top: 10px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 9px;
+}
+.timeline-time strong,
+.timeline-time small {
+  display: block;
+}
+.timeline-body {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  padding: 12px;
+}
+.timeline-item.roll20 .timeline-body {
+  border-color: #315941;
+  background: #101b16;
+}
+.timeline-body p {
+  color: var(--text);
+}
+@media (max-width: 760px) {
+  .timeline-item {
+    grid-template-columns: 1fr;
+  }
+  .timeline-time {
+    position: static;
+  }
+}

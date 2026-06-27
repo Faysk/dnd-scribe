@@ -6,6 +6,7 @@ const SAMPLE_CHAT = `
 [21:31] GM: !dnd canon tipo:npc texto:"O ferreiro reconhece o selo antigo"
 [22:02] GM: !dnd dm tipo:gancho texto:"A testemunha sabe mais do que contou"
 [22:40] Dandelion: conversa comum sem comando
+[22:46] Astel: rolagem 1d20 + 4 = 17
 [23:05] Feh: !dnd audio prioridade:alta motivo:"Cena importante"
 `.trim();
 
@@ -278,23 +279,70 @@ function renderAuthPanel() {
   `;
 }
 
+function parseClockSeconds(value) {
+  const text = cleanText(value, 40);
+  const match = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3] || 0);
+  if (hours > 23 || minutes > 59 || seconds > 59) return null;
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function parseOffsetMs(value) {
+  const text = cleanText(value, 80).toLowerCase();
+  if (!text) return null;
+  const clock = parseClockSeconds(text);
+  if (clock !== null) return clock * 1000;
+  const match = text.match(/^(\d+(?:[.,]\d+)?)(ms|s|m|h)?$/);
+  if (!match) return null;
+  const amount = Number(match[1].replace(',', '.'));
+  const unit = match[2] || 's';
+  if (!Number.isFinite(amount)) return null;
+  if (unit === 'ms') return Math.round(amount);
+  if (unit === 's') return Math.round(amount * 1000);
+  if (unit === 'm') return Math.round(amount * 60 * 1000);
+  if (unit === 'h') return Math.round(amount * 60 * 60 * 1000);
+  return null;
+}
+
+function parseLeadingClock(rawLine) {
+  const raw = String(rawLine || '');
+  const match = raw.match(/^\s*\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s+/);
+  if (!match) return { lineClock: null, lineClockSeconds: null, lineWithoutClock: raw.trimStart() };
+  const lineClock = match[1];
+  return { lineClock, lineClockSeconds: parseClockSeconds(lineClock), lineWithoutClock: raw.slice(match[0].length) };
+}
+
+function clockDeltaMs(lineClockSeconds, syncStartClock) {
+  const startSeconds = parseClockSeconds(syncStartClock);
+  if (lineClockSeconds === null || startSeconds === null) return null;
+  let delta = lineClockSeconds - startSeconds;
+  if (delta < 0) delta += 24 * 60 * 60;
+  return delta * 1000;
+}
+
 function splitRoll20Speaker(line, prefix = DEFAULT_PREFIX) {
   const rawLine = String(line || '').trimEnd();
-  const prefixIndex = rawLine.indexOf(prefix);
-  if (prefixIndex < 0) return { speaker: null, message: rawLine };
-
-  const beforePrefix = rawLine.slice(0, prefixIndex).trim();
-  const message = rawLine.slice(prefixIndex).trim();
-  const speaker = beforePrefix
-    .replace(/^\[[^\]]+\]\s*/, '')
-    .replace(/:\s*$/, '')
-    .trim();
-
+  const clock = parseLeadingClock(rawLine);
+  const body = clock.lineWithoutClock;
+  const prefixIndex = body.indexOf(prefix);
+  const beforePrefix = prefixIndex >= 0 ? body.slice(0, prefixIndex).trim() : body;
+  const colon = beforePrefix.indexOf(':');
+  const speakerSource = colon >= 0 && colon <= 120 ? beforePrefix.slice(0, colon) : beforePrefix;
+  const message = prefixIndex >= 0
+    ? body.slice(prefixIndex).trim()
+    : (colon >= 0 && colon <= 120 ? body.slice(colon + 1).trim() : body.trim());
+  const speaker = speakerSource.replace(/:s*$/, '').trim();
   return {
     speaker: speaker && speaker.length <= 80 ? speaker : null,
-    message
+    message,
+    lineClock: clock.lineClock,
+    lineClockSeconds: clock.lineClockSeconds
   };
 }
+
 
 function tokenizeCommand(value) {
   const input = String(value || '');
@@ -369,43 +417,48 @@ function parseCommandArgs(tokens) {
   return { args, positional: positional.filter(Boolean) };
 }
 
-function parseRoll20CommandLine(line, lineNo, prefix = DEFAULT_PREFIX) {
+function parseRoll20CommandLine(line, lineNo, options = {}) {
+  const prefix = options.prefix || DEFAULT_PREFIX;
   const rawLine = String(line || '').replace(/\r?\n$/, '');
   if (!rawLine.includes(prefix)) return null;
-
-  const { speaker, message } = splitRoll20Speaker(rawLine, prefix);
+  const { speaker, message, lineClock, lineClockSeconds } = splitRoll20Speaker(rawLine, prefix);
   const rawCommand = message.slice(message.indexOf(prefix) + prefix.length).trim();
   if (!rawCommand) {
-    return { lineNo, speaker, command: '', args: {}, positional: [], rawCommand, rawLine, valid: false, error: 'missing command after prefix' };
+    return { lineNo, sourceKind: 'chat_command', speaker, command: '', args: {}, positional: [], rawCommand, rawLine, lineClock, lineClockSeconds, approxStartMs: clockDeltaMs(lineClockSeconds, options.syncStartClock), valid: false, error: 'missing command after prefix' };
   }
-
   try {
     const tokens = tokenizeCommand(rawCommand);
     if (!tokens.length) throw new Error('empty command');
     const { args, positional } = parseCommandArgs(tokens.slice(1));
-    return {
-      lineNo,
-      speaker,
-      command: cleanText(tokens[0], 80).toLowerCase(),
-      args,
-      positional,
-      rawCommand,
-      rawLine,
-      valid: true,
-      error: null
-    };
+    const explicitOffset = parseOffsetMs(args.t || args.time || args.tempo || args.offset || args.timestamp);
+    return { lineNo, sourceKind: 'chat_command', speaker, command: cleanText(tokens[0], 80).toLowerCase(), args, positional, rawCommand, rawLine, lineClock, lineClockSeconds, approxStartMs: explicitOffset ?? clockDeltaMs(lineClockSeconds, options.syncStartClock), valid: true, error: null };
   } catch (error) {
-    return { lineNo, speaker, command: '', args: {}, positional: [], rawCommand, rawLine, valid: false, error: error.message };
+    return { lineNo, sourceKind: 'chat_command', speaker, command: '', args: {}, positional: [], rawCommand, rawLine, lineClock, lineClockSeconds, approxStartMs: clockDeltaMs(lineClockSeconds, options.syncStartClock), valid: false, error: error.message };
   }
 }
 
-function parseRoll20ChatText(text, prefix = DEFAULT_PREFIX) {
-  return String(text || '')
-    .split(/\r?\n/)
-    .map((line, index) => parseRoll20CommandLine(line, index + 1, prefix))
-    .filter(Boolean);
+function looksLikeRoll20Roll(message) {
+  const text = String(message || '').toLowerCase();
+  return /\b\d+d\d+\b/.test(text)
+    || text.includes('[[')
+    || /\b(roll|rolling|rolled|rolagem|rola|dado|dados|dice|resultado)\b/.test(text);
 }
 
+
+function parseRoll20PlainLine(line, lineNo, options = {}) {
+  const rawLine = String(line || '').replace(/\r?\n$/, '');
+  if (!rawLine.trim()) return null;
+  const { speaker, message, lineClock, lineClockSeconds } = splitRoll20Speaker(rawLine, options.prefix || DEFAULT_PREFIX);
+  const isRoll = looksLikeRoll20Roll(message);
+  if (!options.includePlain && !(options.includeRolls && isRoll)) return null;
+  return { lineNo, sourceKind: isRoll ? 'dice_roll' : 'chat_message', speaker, command: isRoll ? 'roll' : 'chat', args: {}, positional: [], rawCommand: '', rawLine, rawMessage: message, lineClock, lineClockSeconds, approxStartMs: clockDeltaMs(lineClockSeconds, options.syncStartClock), valid: true, error: null };
+}
+function parseRoll20ChatText(text, options = {}) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map((line, index) => parseRoll20CommandLine(line, index + 1, options) || parseRoll20PlainLine(line, index + 1, options))
+    .filter(Boolean);
+}
 function eventTypeForCommand(command) {
   if (command === 'sessao') return 'session_marker';
   if (command === 'acao') return 'character_action_candidate';
@@ -419,37 +472,47 @@ function visibilityForCommand(command) {
   if (command === 'dm') return 'dm_only';
   if (command === 'canon') return 'dm_review';
   if (command === 'audio') return 'dm_review';
+  if (command === 'chat' || command === 'roll') return 'table_private';
   return 'table_review';
 }
+
 
 function normalizeRoll20Event(parsed, campaignSlug) {
   const command = cleanText(parsed?.command, 80).toLowerCase();
   const valid = Boolean(parsed?.valid);
+  const sourceKind = parsed?.sourceKind || 'chat_command';
+  const eventType = sourceKind === 'chat_message'
+    ? 'roll20_chat_message'
+    : (sourceKind === 'dice_roll' ? 'roll20_dice_roll' : (valid ? eventTypeForCommand(command) : 'invalid_roll20_command'));
 
   return {
     source: 'roll20',
-    sourceKind: 'chat_command',
+    sourceKind,
     campaignSlug,
-    eventType: valid ? eventTypeForCommand(command) : 'invalid_roll20_command',
+    eventType,
     command,
     knownCommand: KNOWN_COMMANDS.has(command),
     status: valid ? 'pending_review' : 'invalid',
     visibility: valid ? visibilityForCommand(command) : 'dm_review',
-    needsDmReview: true,
+    needsDmReview: sourceKind !== 'chat_message',
     lineNo: parsed?.lineNo || null,
     speaker: cleanText(parsed?.speaker, 120) || null,
     args: parsed?.args || {},
     positional: Array.isArray(parsed?.positional) ? parsed.positional : [],
-    text: cleanText(parsed?.args?.texto || parsed?.args?.text || parsed?.args?.descricao || '', 2000),
+    text: cleanText(parsed?.args?.texto || parsed?.args?.text || parsed?.args?.descricao || parsed?.rawMessage || '', 2000),
     targetCharacter: cleanText(parsed?.args?.personagem || parsed?.args?.character || '', 180) || null,
     noteType: cleanText(parsed?.args?.tipo || parsed?.args?.type || '', 80) || null,
     markerState: cleanText(parsed?.args?.estado || parsed?.args?.state || '', 80) || null,
     priority: cleanText(parsed?.args?.prioridade || parsed?.args?.priority || '', 40) || null,
+    lineClock: parsed?.lineClock || null,
+    lineClockSeconds: parsed?.lineClockSeconds ?? null,
+    approxStartMs: parsed?.approxStartMs ?? null,
     rawCommand: cleanText(parsed?.rawCommand, 2000),
     rawLine: cleanText(parsed?.rawLine, 3000),
     error: parsed?.error || null
   };
 }
+
 
 function summarizeEvents(events) {
   const summary = { total: events.length, valid: 0, invalid: 0, byCommand: {}, byEventType: {}, byVisibility: {} };
@@ -465,11 +528,20 @@ function summarizeEvents(events) {
   return summary;
 }
 
+function roll20CaptureOptions() {
+  return {
+    includePlain: Boolean($('#includePlainChat')?.checked),
+    includeRolls: Boolean($('#includeDiceRolls')?.checked),
+    syncStartClock: cleanText($('#syncStartClock')?.value, 40)
+  };
+}
+
 function parseForm() {
   const campaignSlug = cleanText($('#campaignSlug').value, 120) || 'yuhara-main';
   const sourceSessionId = cleanText($('#sourceSessionId').value, 180);
   const prefix = cleanText($('#commandPrefix').value, 20) || DEFAULT_PREFIX;
-  const parsed = parseRoll20ChatText($('#chatInput').value, prefix);
+  const capture = roll20CaptureOptions();
+  const parsed = parseRoll20ChatText($('#chatInput').value, { prefix, ...capture });
   const events = parsed.map(event => normalizeRoll20Event(event, campaignSlug));
   state.backend.result = null;
   state.backend.error = null;
@@ -478,6 +550,9 @@ function parseForm() {
     sourceSessionId: sourceSessionId || null,
     source: 'roll20-copy-paste',
     prefix,
+    includePlain: capture.includePlain,
+    includeRolls: capture.includeRolls,
+    syncStartClock: capture.syncStartClock || null,
     dryRun: true,
     generatedAt: new Date().toISOString(),
     summary: summarizeEvents(events),
@@ -485,6 +560,7 @@ function parseForm() {
   };
   render();
 }
+
 
 function metric(value, label) {
   return `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`;
@@ -581,11 +657,20 @@ function renderBackendStatus() {
   `;
 }
 
+function formatOffset(ms) {
+  if (ms === null || ms === undefined || Number.isNaN(Number(ms))) return '-';
+  const total = Math.max(0, Math.floor(Number(ms) / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
+}
+
 function renderSummary() {
   const summary = state.payload.summary;
   const commands = Object.entries(summary.byCommand || {})
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([name, count]) => badge(`${name}: ${count}`, name === 'dm' ? 'gold' : 'blue'))
+    .map(([name, count]) => badge(name + ': ' + count, name === 'dm' ? 'gold' : 'blue'))
     .join('');
 
   $('#summaryPanel').innerHTML = `
@@ -599,12 +684,21 @@ function renderSummary() {
       <div class="badges">${commands || badge('nenhum', 'orange')}</div>
     </div>
     <div class="roll20-summary-block">
+      <span class="label">Sincronizacao</span>
+      <p>Inicio usado: ${escapeHtml(state.payload.syncStartClock || 'nao informado')}. Eventos com horario viram offsets da timeline.</p>
+      <div class="badges">
+        ${badge(state.payload.includePlain ? 'chat comum' : 'somente comandos', state.payload.includePlain ? 'green' : 'orange')}
+        ${badge(state.payload.includeRolls ? 'rolagens' : 'sem rolagens', state.payload.includeRolls ? 'green' : 'orange')}
+      </div>
+    </div>
+    <div class="roll20-summary-block">
       <span class="label">Regra</span>
       <p>O preview no navegador nao grava nada. Validar API e Gravar eventos usam a API de producao.</p>
     </div>
     ${renderBackendStatus()}
   `;
 }
+
 
 function renderEvent(event) {
   const title = event.text || event.args?.motivo || event.args?.titulo || event.rawCommand || event.command || 'Comando Roll20';
@@ -616,7 +710,7 @@ function renderEvent(event) {
     <article class="${classes.join(' ')}">
       <div class="roll20-event-main">
         <div>
-          <span class="label">Linha ${escapeHtml(event.lineNo || '-')}</span>
+          <span class="label">Linha ${escapeHtml(event.lineNo || '-')} • ${escapeHtml(event.lineClock || formatOffset(event.approxStartMs))}</span>
           <h3>${escapeHtml(title)}</h3>
         </div>
         <div class="badges">
@@ -629,12 +723,14 @@ function renderEvent(event) {
         <div><dt>Speaker</dt><dd>${escapeHtml(event.speaker || '-')}</dd></div>
         <div><dt>Personagem</dt><dd>${escapeHtml(event.targetCharacter || '-')}</dd></div>
         <div><dt>Tipo</dt><dd>${escapeHtml(event.noteType || event.markerState || event.priority || '-')}</dd></div>
+        <div><dt>Timeline</dt><dd>${escapeHtml(formatOffset(event.approxStartMs))}</dd></div>
       </dl>
       ${event.error ? `<p class="roll20-error">${escapeHtml(event.error)}</p>` : ''}
       <code>${escapeHtml(event.rawLine)}</code>
     </article>
   `;
 }
+
 
 function renderEvents() {
   $('#resultCount').textContent = `${state.payload.events.length} eventos`;
@@ -678,15 +774,20 @@ function copyJson() {
 }
 
 function backendPayload(persist = false) {
+  const capture = roll20CaptureOptions();
   return {
     campaignSlug: selectedCampaignSlug(),
     sourceSessionId: cleanText($('#sourceSessionId')?.value, 180) || null,
     source: 'roll20-copy-paste',
     prefix: cleanText($('#commandPrefix')?.value, 20) || DEFAULT_PREFIX,
+    includePlain: capture.includePlain,
+    includeRolls: capture.includeRolls,
+    syncStartClock: capture.syncStartClock || null,
     dryRun: !persist,
     text: String($('#chatInput')?.value || '')
   };
 }
+
 
 async function submitBackend(persist = false) {
   parseForm();

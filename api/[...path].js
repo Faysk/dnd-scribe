@@ -390,10 +390,13 @@ async function roll20IngestPreviewPayload(req, campaign, raw) {
   const source = cleanText(raw.source || 'copy-paste', 80) || 'copy-paste';
   const sourceSessionId = cleanText(raw.sourceSessionId || raw.source_session_id, 180) || null;
   const text = String(raw.text || raw.chatText || raw.chat_text || '').slice(0, 1024 * 1024);
+  const includePlain = Boolean(raw.includePlain || raw.include_plain || raw.capturePlain || raw.capture_plain);
+  const includeRolls = Boolean(raw.includeRolls || raw.include_rolls || raw.captureRolls || raw.capture_rolls);
+  const syncStartClock = cleanText(raw.syncStartClock || raw.sync_start_clock || raw.sessionStartClock || raw.session_start_clock, 40);
 
   if (!text.trim()) throw httpError(400, 'text obrigatorio com chat copiado/exportado do Roll20.');
 
-  const parsed = parseRoll20ChatText(text, { prefix });
+  const parsed = parseRoll20ChatText(text, { prefix, includePlain, includeRolls, syncStartClock });
   const events = normalizeRoll20Events(parsed, {
     campaignSlug: campaign,
     receivedAt: raw.receivedAt || raw.received_at || undefined
@@ -407,6 +410,9 @@ async function roll20IngestPreviewPayload(req, campaign, raw) {
     sourceSessionId,
     source,
     prefix,
+    includePlain,
+    includeRolls,
+    syncStartClock: syncStartClock || null,
     actor: {
       profileId: access.profile?.id || null,
       displayName: access.profile?.displayName || access.user?.displayName || null,
@@ -476,7 +482,7 @@ insert into roll20_events (
   text, payload, raw_line, source_system, source_event_id, created_at_roll20, created_at
 )
 values (
-  gen_random_uuid(), $1::uuid, $2, $3, $4, null,
+  gen_random_uuid(), $1::uuid, $2, $3, $4, $10::integer,
   $5, $6::jsonb, $7, 'roll20', $8, $9::timestamptz, now()
 )
 on conflict (session_id, source_system, source_event_id)
@@ -488,6 +494,7 @@ do update set
   text = excluded.text,
   payload = excluded.payload,
   raw_line = excluded.raw_line,
+  approx_start_ms = excluded.approx_start_ms,
   created_at_roll20 = excluded.created_at_roll20
 returning id, source_event_id, event_type, roll20_who, character_name, text;`,
       [
@@ -499,7 +506,8 @@ returning id, source_event_id, event_type, roll20_who, character_name, text;`,
         JSON.stringify(eventPayload),
         event.rawLine || null,
         sourceEventId,
-        raw.receivedAt || raw.received_at || null
+        raw.receivedAt || raw.received_at || null,
+        event.approxStartMs ?? event.approx_start_ms ?? null
       ]
     );
     rows.push(result.rows[0]);
@@ -517,7 +525,10 @@ values (gen_random_uuid(), $1::uuid, 'roll20_chat_import', 'succeeded', 1, $2::j
         prefix: payload.prefix,
         actor: payload.actor,
         totalEvents: payload.events.length,
-        includeInvalid
+        includeInvalid,
+        includePlain: Boolean(payload.includePlain),
+        includeRolls: Boolean(payload.includeRolls),
+        syncStartClock: payload.syncStartClock || null
       }),
       JSON.stringify({
         persisted: rows.length,

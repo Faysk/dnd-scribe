@@ -849,6 +849,7 @@ function render() {
   const routes = {
     sessions: renderSessionsManager,
     review: renderReview,
+    timeline: renderTimeline,
     candidates: renderCandidates,
     roll20: renderRoll20Review,
     publications: renderPublications,
@@ -1359,6 +1360,78 @@ function filteredSegments() {
   });
 }
 
+function timelineTextFromRoll20(event) {
+  return roll20EventText(event) || event.payload?.rawCommand || event.raw_line || event.source_event_id || 'Evento Roll20';
+}
+
+function timelineItems() {
+  const segments = (state.review?.segments || []).map(segment => ({
+    id: segment.db_id || segment.id,
+    source: 'audio',
+    at: segment.start_ms ?? null,
+    end: segment.end_ms ?? null,
+    title: segment.character_name || segment.speaker_name || segment.track_key || 'Fala',
+    subtitle: segment.speaker_name || segment.track_key || 'audio',
+    text: segment.text || '',
+    tone: segment.ai?.needs_review ? 'orange' : 'blue'
+  }));
+  const roll20 = (state.review?.roll20Events || []).map(event => ({
+    id: event.id || event.source_event_id,
+    source: 'roll20',
+    at: event.approx_start_ms ?? event.approxStartMs ?? null,
+    end: null,
+    title: eventTypeLabel(event.event_type),
+    subtitle: [event.roll20_who, event.character_name || event.payload?.targetCharacter].filter(Boolean).join(' / ') || 'Roll20',
+    text: timelineTextFromRoll20(event),
+    tone: eventTypeTone(event.event_type),
+    raw: event
+  }));
+  return [...segments, ...roll20].sort((a, b) => {
+    const aAt = a.at === null || a.at === undefined ? Number.MAX_SAFE_INTEGER : Number(a.at);
+    const bAt = b.at === null || b.at === undefined ? Number.MAX_SAFE_INTEGER : Number(b.at);
+    if (aAt !== bAt) return aAt - bAt;
+    return String(a.source).localeCompare(String(b.source));
+  });
+}
+
+function renderTimeline() {
+  const items = timelineItems();
+  const synced = items.filter(item => item.at !== null && item.at !== undefined).length;
+  return `
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Timeline da sessao</h2>
+          <small>Falas, chat Roll20, rolagens e marcadores no mesmo eixo temporal.</small>
+        </div>
+        <div class="badges">${badge(synced + '/' + items.length + ' sincronizados', 'green')}${badge('sem IA', 'blue')}</div>
+      </div>
+      <div class="panel-body timeline-list">
+        ${items.map(renderTimelineItem).join('') || '<div class="empty">Nenhum item de timeline nesta sessao.</div>'}
+      </div>
+    </section>
+  `;
+}
+
+function renderTimelineItem(item) {
+  const time = item.at === null || item.at === undefined ? 'sem hora' : fmtDuration(item.at);
+  const duration = item.end && item.at !== null && item.at !== undefined ? ' ate ' + fmtDuration(item.end) : '';
+  return `
+    <article class="timeline-item ${item.source}">
+      <div class="timeline-time"><strong>${escapeHtml(time)}</strong><small>${escapeHtml(duration || item.source)}</small></div>
+      <div class="timeline-body">
+        <div class="row between">
+          <div>
+            <span class="label">${escapeHtml(item.subtitle || item.source)}</span>
+            <h2>${escapeHtml(item.title || item.source)}</h2>
+          </div>
+          <div class="badges">${badge(item.source, item.source === 'roll20' ? 'green' : 'blue')}${badge(item.tone || 'blue', item.tone || 'blue')}</div>
+        </div>
+        <p>${escapeHtml(item.text || '-')}</p>
+      </div>
+    </article>
+  `;
+}
 function renderReview() {
   const segments = filteredSegments();
   const tracks = [{ track_key: 'all', speaker_name: 'Todos' }, ...(state.review.tracks || [])];
@@ -1728,6 +1801,8 @@ function eventTypeLabel(type = '') {
     dm_backstage_note: 'DM',
     audio_processing_hint: 'Audio',
     raw_roll20_note: 'Nota',
+    roll20_chat_message: 'Chat',
+    roll20_dice_roll: 'Rolagem',
     invalid_roll20_command: 'Invalido'
   }[type] || type || 'Evento';
 }
@@ -1737,6 +1812,8 @@ function eventTypeTone(type = '') {
   if (type === 'canon_candidate') return 'violet';
   if (type === 'character_action_candidate') return 'green';
   if (type === 'audio_processing_hint') return 'blue';
+  if (type === 'roll20_chat_message') return 'blue';
+  if (type === 'roll20_dice_roll') return 'violet';
   if (type === 'invalid_roll20_command') return 'red';
   return 'blue';
 }

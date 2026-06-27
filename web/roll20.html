@@ -61,6 +61,20 @@
             <input id="commandPrefix" value="!dnd" autocomplete="off" />
           </label>
         </div>
+        <div class="roll20-sync-controls">
+          <label>
+            <span class="label">Inicio da sessao</span>
+            <input id="syncStartClock" placeholder="HH:MM opcional" autocomplete="off" />
+          </label>
+          <label class="check-row">
+            <input id="includePlainChat" type="checkbox" checked />
+            <span>Capturar conversa comum</span>
+          </label>
+          <label class="check-row">
+            <input id="includeDiceRolls" type="checkbox" checked />
+            <span>Capturar rolagens/dados</span>
+          </label>
+        </div>
         <label>
           <span class="label">Chat copiado do Roll20</span>
           <textarea id="chatInput" spellcheck="false" placeholder="Cole aqui linhas do chat com comandos !dnd"></textarea>

@@ -17,7 +17,8 @@
 }
 
 .roll20-header-actions,
-.roll20-actions {
+.roll20-actions,
+.roll20-sync-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -82,6 +83,23 @@
   display: grid;
   gap: 12px;
   padding: 14px;
+}
+
+.roll20-sync-controls {
+  justify-content: flex-start;
+  align-items: end;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 10px;
+}
+
+.roll20-sync-controls label:first-child {
+  min-width: min(220px, 100%);
+}
+
+.roll20-sync-controls .check-row {
+  min-height: 42px;
 }
 
 .roll20-input-panel textarea {
@@ -234,6 +252,7 @@
   .roll20-auth-panel .badges,
   .roll20-auth-panel .auth-actions,
   .roll20-actions,
+  .roll20-sync-controls,
   .roll20-event-main .badges {
     justify-content: flex-start;
   }

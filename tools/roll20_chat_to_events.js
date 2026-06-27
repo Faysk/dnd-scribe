@@ -13,13 +13,24 @@ function parseArgs(argv) {
     input: '',
     prefix: '!dnd',
     campaignSlug: 'yuhara-main',
-    summary: false
+    summary: false,
+    includePlain: false,
+    includeRolls: false,
+    syncStartClock: ''
   };
 
   for (let index = 2; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === '--summary') {
       args.summary = true;
+      continue;
+    }
+    if (value === '--include-plain') {
+      args.includePlain = true;
+      continue;
+    }
+    if (value === '--include-rolls') {
+      args.includeRolls = true;
       continue;
     }
     if (value === '--prefix') {
@@ -29,6 +40,11 @@ function parseArgs(argv) {
     }
     if (value === '--campaign') {
       args.campaignSlug = argv[index + 1] || args.campaignSlug;
+      index += 1;
+      continue;
+    }
+    if (value === '--sync-start-clock') {
+      args.syncStartClock = argv[index + 1] || args.syncStartClock;
       index += 1;
       continue;
     }
@@ -46,10 +62,15 @@ function readInput(input) {
 function main() {
   const args = parseArgs(process.argv);
   const text = readInput(args.input);
-  const parsed = parseRoll20ChatText(text, { prefix: args.prefix });
+  const parsed = parseRoll20ChatText(text, {
+    prefix: args.prefix,
+    includePlain: args.includePlain,
+    includeRolls: args.includeRolls,
+    syncStartClock: args.syncStartClock
+  });
   const events = normalizeRoll20Events(parsed, { campaignSlug: args.campaignSlug });
   const payload = args.summary ? summarizeRoll20Events(events) : events;
-  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
 }
 
 main();
