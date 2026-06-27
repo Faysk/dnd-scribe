@@ -26,6 +26,9 @@ O foco desta etapa foi permitir que o site em producao receba um ZIP Craig sem m
   - troca `GET /api/jobs` para ler `processing_jobs` do Supabase;
   - troca `GET /api/craig-map` para retornar o mapa em modo leitura;
   - mantem `POST /api/ingest/craig` bloqueado para evitar upload grande pela Vercel.
+- `api/uploads/craig-url.js` e `api/uploads/craig-complete.js`
+  - endpoints fisicos finos para a Vercel rotear caminhos aninhados;
+  - delegam para o handler principal.
 - `web/app.js`
   - troca upload multipart por upload direto R2;
   - mostra jobs de producao;
@@ -90,6 +93,7 @@ Resultados:
 - `web/` sincronizado para `public/` com sucesso.
 - rota local `/api/craig-map` testada com mock de `pg`, retornando 5 tracks.
 - CORS R2 aplicado com sucesso.
+- rota aninhada de upload precisou de endpoints fisicos em `api/uploads/` para evitar 404 da Vercel.
 
 ## Riscos e residuos
 
