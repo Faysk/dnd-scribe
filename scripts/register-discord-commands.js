@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 const DISCORD_API = 'https://discord.com/api/v10';
 
 const TYPE = {
@@ -24,6 +27,51 @@ const visibilityChoices = [
   ['Visivel para players', 'player_visible'],
   ['Candidato publico', 'public_candidate']
 ].map(([name, value]) => ({ name, value }));
+
+function stripBom(value) {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
+}
+
+function parseEnvValue(rawValue) {
+  const value = rawValue.trim();
+  const quote = value[0];
+  if ((quote === '"' || quote === "'") && value.endsWith(quote)) {
+    const unquoted = value.slice(1, -1);
+    if (quote === '"') {
+      return unquoted
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+    }
+    return unquoted;
+  }
+  return value;
+}
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return false;
+  const raw = stripBom(fs.readFileSync(filePath, 'utf8'));
+  for (const line of raw.split(/\r?\n/)) {
+    const cleaned = line.trim();
+    if (!cleaned || cleaned.startsWith('#')) continue;
+    const match = cleaned.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match) continue;
+    const [, key, rawValue] = match;
+    if (process.env[key] !== undefined) continue;
+    process.env[key] = parseEnvValue(rawValue);
+  }
+  return true;
+}
+
+function loadLocalEnv() {
+  const root = path.resolve(__dirname, '..');
+  return ['.env.local', '.env']
+    .map(fileName => path.join(root, fileName))
+    .filter(loadEnvFile)
+    .map(filePath => path.basename(filePath));
+}
 
 function commands() {
   return [
@@ -88,24 +136,40 @@ function commands() {
   ];
 }
 
+function requiredEnv() {
+  return {
+    DISCORD_APPLICATION_ID: process.env.DISCORD_APPLICATION_ID || process.env.DISCORD_CLIENT_ID,
+    DISCORD_GUILD_ID: process.env.DISCORD_GUILD_ID,
+    DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN
+  };
+}
+
 async function main() {
-  const applicationId = process.env.DISCORD_APPLICATION_ID || process.env.DISCORD_CLIENT_ID;
-  const guildId = process.env.DISCORD_GUILD_ID;
-  const token = process.env.DISCORD_BOT_TOKEN;
-  if (!applicationId || !guildId || !token) {
-    throw new Error('Configure DISCORD_APPLICATION_ID, DISCORD_GUILD_ID e DISCORD_BOT_TOKEN.');
+  const loadedEnvFiles = loadLocalEnv();
+  const env = requiredEnv();
+  const missing = Object.entries(env)
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+
+  if (missing.length) {
+    const loaded = loadedEnvFiles.length ? loadedEnvFiles.join(', ') : 'nenhum arquivo local encontrado';
+    throw new Error(
+      `Configure ${missing.join(', ')}. O script tentou ler .env.local e .env (${loaded}).`
+    );
   }
 
-  const url = `${DISCORD_API}/applications/${applicationId}/guilds/${guildId}/commands`;
+  const url = `${DISCORD_API}/applications/${env.DISCORD_APPLICATION_ID}/guilds/${env.DISCORD_GUILD_ID}/commands`;
   const response = await fetch(url, {
     method: 'PUT',
     headers: {
-      Authorization: `Bot ${token}`,
+      Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(commands())
   });
-  const body = await response.json().catch(async () => ({ raw: await response.text() }));
+
+  const rawBody = await response.text();
+  const body = rawBody ? JSON.parse(rawBody) : [];
   if (!response.ok) {
     throw new Error(`Discord command registration failed (${response.status}): ${JSON.stringify(body)}`);
   }
