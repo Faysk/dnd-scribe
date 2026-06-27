@@ -19,6 +19,8 @@ REQUIRED_RELATIONS = [
     "sessions",
     "recording_files",
     "audio_chunks",
+    "audio_speech_slices",
+    "audio_transcription_work_units",
     "transcription_cache",
     "ai_usage_ledger",
     "ai_usage_session_summary",
@@ -33,6 +35,16 @@ REQUIRED_COLUMNS = {
         "duration_ms",
         "sha256",
         "audio_dbfs",
+        "probably_silent",
+        "transcription_status",
+        "storage_path",
+    ],
+    "audio_speech_slices": [
+        "session_id",
+        "source_file_id",
+        "source_chunk_id",
+        "duration_ms",
+        "sha256",
         "probably_silent",
         "transcription_status",
         "storage_path",
@@ -239,31 +251,38 @@ with target_session as (
 ), chunk_stats as (
   select
     count(*)::int total_chunks,
-    count(*) filter (where nullif(ac.sha256, '') is null)::int missing_hash_chunks,
-    count(*) filter (where ac.probably_silent is true)::int silent_chunks,
-    count(distinct ac.id) filter (where tc.id is not null)::int cache_hit_chunks,
-    count(distinct ac.id) filter (
-      where nullif(ac.sha256, '') is not null
-        and coalesce(ac.probably_silent, false) is false
+    count(*) filter (where ac.probably_silent is true)::int silent_chunks
+  from audio_chunks ac
+  where ac.session_id = (select id from target_session)
+), work_unit_stats as (
+  select
+    count(*)::int total_work_units,
+    count(*) filter (where wu.unit_type = 'speech_slice')::int speech_slice_work_units,
+    count(*) filter (where wu.unit_type = 'chunk')::int chunk_fallback_work_units,
+    count(*) filter (where nullif(wu.sha256, '') is null)::int missing_hash_work_units,
+    count(distinct wu.id) filter (where tc.id is not null)::int cache_hit_work_units,
+    count(distinct wu.id) filter (
+      where nullif(wu.sha256, '') is not null
+        and coalesce(wu.probably_silent, false) is false
         and tc.id is null
-    )::int transcribe_candidate_chunks,
+    )::int transcribe_candidate_work_units,
     round((coalesce(sum(
       case
-        when nullif(ac.sha256, '') is not null
-         and coalesce(ac.probably_silent, false) is false
+        when nullif(wu.sha256, '') is not null
+         and coalesce(wu.probably_silent, false) is false
          and tc.id is null
-        then coalesce(ac.duration_ms, greatest(0, coalesce(ac.end_ms, 0) - coalesce(ac.start_ms, 0)), 0)
+        then coalesce(wu.duration_ms, greatest(0, coalesce(wu.end_ms, 0) - coalesce(wu.start_ms, 0)), 0)
         else 0
       end
     ), 0) / 60000.0)::numeric, 3) billable_audio_minutes
-  from audio_chunks ac
+  from audio_transcription_work_units wu
   left join transcription_cache tc
-    on tc.audio_sha256 = ac.sha256
+    on tc.audio_sha256 = wu.sha256
    and tc.provider = 'openai'
    and tc.model = {sql_literal(model)}
    and tc.prompt_version = {sql_literal(prompt_version)}
    and tc.status = 'succeeded'
-  where ac.session_id = (select id from target_session)
+  where wu.session_id = (select id from target_session)
 )
 select row_to_json(row) from (
   select
@@ -274,14 +293,18 @@ select row_to_json(row) from (
     fs.total_files,
     fs.missing_file_hashes,
     cs.total_chunks,
-    cs.missing_hash_chunks,
     cs.silent_chunks,
-    cs.cache_hit_chunks,
-    cs.transcribe_candidate_chunks,
-    cs.billable_audio_minutes
+    wus.total_work_units,
+    wus.speech_slice_work_units,
+    wus.chunk_fallback_work_units,
+    wus.missing_hash_work_units,
+    wus.cache_hit_work_units,
+    wus.transcribe_candidate_work_units,
+    wus.billable_audio_minutes
   from target_session ts
   cross join file_stats fs
   cross join chunk_stats cs
+  cross join work_unit_stats wus
 ) row;
 """
     return run_json(database_url, sql)
@@ -292,35 +315,38 @@ def validate_session(report: dict[str, Any] | None, policy: dict[str, Any], issu
         add_issue(issues, "error", "session_not_found", "Sessao nao encontrada para validacao.", sourceSessionId=source_session_id)
         return
 
-    max_chunks = int(((policy.get("guards") or {}).get("defaultMaxChunksPerRun") or 0))
+    max_units = int(((policy.get("guards") or {}).get("defaultMaxChunksPerRun") or 0))
     max_minutes = float(((policy.get("guards") or {}).get("defaultMaxAudioMinutesPerRun") or 0))
 
     total_chunks = int(report.get("total_chunks") or 0)
-    missing_hash = int(report.get("missing_hash_chunks") or 0)
+    total_units = int(report.get("total_work_units") or 0)
+    missing_hash = int(report.get("missing_hash_work_units") or 0)
     missing_file_hashes = int(report.get("missing_file_hashes") or 0)
-    candidate_chunks = int(report.get("transcribe_candidate_chunks") or 0)
+    candidate_units = int(report.get("transcribe_candidate_work_units") or 0)
     billable_minutes = float(report.get("billable_audio_minutes") or 0)
 
     if total_chunks == 0:
         add_issue(issues, "error", "no_chunks", "Sessao ainda nao tem chunks importados.", sourceSessionId=source_session_id)
+    if total_units == 0:
+        add_issue(issues, "warning", "no_work_units", "Sessao nao tem work units de transcricao depois dos filtros de custo.")
     if missing_hash:
         add_issue(
             issues,
             "error",
-            "chunks_missing_hash",
-            "Existem chunks sem sha256; eles devem ficar bloqueados ate reprocessar ingestao/import.",
+            "work_units_missing_hash",
+            "Existem work units sem sha256; elas devem ficar bloqueadas ate reprocessar metadados.",
             count=missing_hash,
         )
     if missing_file_hashes:
         add_issue(issues, "warning", "files_missing_hash", "Existem arquivos de gravacao sem sha256.", count=missing_file_hashes)
-    if max_chunks and candidate_chunks > max_chunks:
+    if max_units and candidate_units > max_units:
         add_issue(
             issues,
             "error",
-            "chunk_limit_exceeded",
-            "Numero de chunks candidatos passa o limite por rodada.",
-            candidates=candidate_chunks,
-            max=max_chunks,
+            "work_unit_limit_exceeded",
+            "Numero de work units candidatas passa o limite por rodada.",
+            candidates=candidate_units,
+            max=max_units,
         )
     if max_minutes and billable_minutes > max_minutes:
         add_issue(
@@ -331,8 +357,8 @@ def validate_session(report: dict[str, Any] | None, policy: dict[str, Any], issu
             billableMinutes=billable_minutes,
             max=max_minutes,
         )
-    if total_chunks and candidate_chunks == 0:
-        add_issue(issues, "warning", "nothing_to_transcribe", "Nenhum chunk novo precisa de transcricao para esse modelo/prompt.")
+    if total_chunks and candidate_units == 0:
+        add_issue(issues, "warning", "nothing_to_transcribe", "Nenhuma work unit nova precisa de transcricao para esse modelo/prompt.")
 
 
 def print_human(payload: dict[str, Any], strict: bool) -> None:
@@ -347,9 +373,13 @@ def print_human(payload: dict[str, Any], strict: bool) -> None:
     if session:
         print(f"session={session['source_session_id']}")
         print(f"chunks_total={session['total_chunks']}")
-        print(f"chunks_missing_hash={session['missing_hash_chunks']}")
-        print(f"chunks_cache_hit={session['cache_hit_chunks']}")
-        print(f"chunks_transcribe_candidates={session['transcribe_candidate_chunks']}")
+        print(f"chunks_silent={session['silent_chunks']}")
+        print(f"work_units_total={session['total_work_units']}")
+        print(f"work_units_speech_slices={session['speech_slice_work_units']}")
+        print(f"work_units_chunk_fallbacks={session['chunk_fallback_work_units']}")
+        print(f"work_units_missing_hash={session['missing_hash_work_units']}")
+        print(f"work_units_cache_hit={session['cache_hit_work_units']}")
+        print(f"work_units_transcribe_candidates={session['transcribe_candidate_work_units']}")
         print(f"billable_audio_minutes={session['billable_audio_minutes']}")
 
     if issues:
