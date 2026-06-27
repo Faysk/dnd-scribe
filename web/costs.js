@@ -98,10 +98,11 @@
     if (Number(summary.missingHash || 0) > 0) {
       return `python3 tools/backfill_audio_metadata.py --source-session-id ${id} --write`;
     }
-    if (Number(summary.chunkFallbacks || 0) > 0 && Number(summary.speechSlices || 0) === 0) {
-      return `python3 tools/build_speech_slices.py ${id} --limit 3 --write`;
+    if (Number(summary.chunkFallbacks || 0) > 0) {
+      const limit = Number(summary.speechSlices || 0) > 0 ? 50 : 3;
+      return `python3 tools/build_speech_slices.py ${id} --limit ${limit} --write`;
     }
-    return `python3 tools/run_transcription_job.py ${id}`;
+    return `python3 tools/plan_transcription_job.py ${id}`;
   }
 
   function renderCostDashboard(payload) {
@@ -122,6 +123,8 @@
 
         <div class="cost-metrics">
           ${card(num(summary.billableAudioMinutes, ' min'), 'minutos cobraveis', Number(summary.missingHash || 0) ? 'danger' : '')}
+          ${card(num(summary.rawAudioMinutes, ' min'), 'audio bruto')}
+          ${card(num(summary.silentAudioMinutes, ' min'), 'silencio omitido', 'success')}
           ${card(num(summary.missingHash), 'bloqueados sem hash', Number(summary.missingHash || 0) ? 'danger' : '')}
           ${card(num(summary.cacheHits), 'cache hits', 'success')}
           ${card(num(summary.transcribeCandidates), 'candidatos')}
@@ -135,7 +138,7 @@
 
         <section class="cost-grid">
           <article class="panel">
-            <div class="panel-head"><h2>Work units</h2><div class="badges">${chip(`${num(summary.workUnits)} total`, 'blue')}${chip(payload.model || '-', 'gold')}</div></div>
+            <div class="panel-head"><h2>Work units</h2><div class="badges">${chip(`${num(summary.workUnits)} total`, 'blue')}${chip(`${num(summary.silentChunks)} silenciosos`, 'gold')}${chip(payload.model || '-', 'gold')}</div></div>
             <div class="panel-body cost-table">${byTypeRows(payload.byType || [])}</div>
           </article>
           <article class="panel">
