@@ -4,7 +4,7 @@ Date: 2026-06-27
 
 ## Goal
 
-Add a DM-only monitoring center for the production app.
+Add a technical monitoring center for the production app.
 
 The page must answer:
 
@@ -31,12 +31,18 @@ GET /api/monitoring
 GET /api/monitoring?deep=1
 ```
 
-The endpoint requires campaign role:
+The first version required campaign role:
 
 - `owner`
 - `master`
 
-This is intentional because the response contains operational metadata about tokens and services. Secret values are never returned; the payload only includes presence, missing key names, derived JWT expiry when available and status labels.
+This was replaced by the RBAC foundation in `104-rbac-foundation.md`. The endpoint now requires:
+
+```text
+project.monitor.read
+```
+
+This is intentional because technical administration must be separate from DM/narrative authority. Secret values are never returned; the payload only includes presence, missing key names, derived JWT expiry when available and status labels.
 
 New frontend files:
 
@@ -84,7 +90,7 @@ Every detailed item is clickable via native `details/summary`.
 
 ## Security notes
 
-- The endpoint is DM-only.
+- The endpoint is technical-admin only via `project.monitor.read`.
 - No token values are exposed.
 - JWT expiry is decoded locally only when the key format supports it.
 - Optional services such as OpenAI and Roll20 operator credentials are shown as standby when absent.

@@ -13,6 +13,7 @@ const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
 const DEFAULT_RUN = 'classify_candidates_v2_gpt-4o';
 const DEFAULT_ACTOR = 'renanyuhara';
+const PROJECT_SCOPE_ID = 'dnd-scribe';
 const CRAIG_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
 
@@ -211,15 +212,25 @@ function discordIdentity(user) {
   return { id: String(discordId || '').trim(), handle: String(handle || '').trim() };
 }
 
-function capabilitiesForRole(role) {
+function permissionActionSet(rbac = null) {
+  return new Set((rbac?.permissions || []).map(item => item.action || item.permission_action).filter(Boolean));
+}
+
+function capabilitiesForRole(role, rbac = null) {
   const isDm = role === 'owner' || role === 'master';
+  const permissions = permissionActionSet(rbac);
+  const rbacAvailable = Boolean(rbac?.available);
   return {
     openTestMode: false,
-    canReadCampaign: Boolean(role),
-    canReviewOwnMaterial: Boolean(role),
-    canReviewTableMaterial: ['owner', 'master', 'reviewer'].includes(role),
-    canApproveCanon: isDm,
-    canManageCampaign: isDm
+    canReadCampaign: Boolean(role) || permissions.has('campaign.read'),
+    canReviewOwnMaterial: Boolean(role) || permissions.has('campaign.read'),
+    canReviewTableMaterial: ['owner', 'master', 'reviewer'].includes(role) || permissions.has('narrative.review.manage'),
+    canApproveCanon: isDm || permissions.has('narrative.canon.approve'),
+    canManageCampaign: isDm,
+    canManageAccess: isDm || permissions.has('campaign.access.manage') || permissions.has('project.rbac.manage'),
+    canViewMonitoring: permissions.has('project.monitor.read') || (!rbacAvailable && isDm),
+    canManageTechnical: permissions.has('project.rbac.manage'),
+    canRunTechnicalJobs: permissions.has('project.jobs.run')
   };
 }
 
@@ -335,6 +346,71 @@ select json_build_object(
   ) || { profile: null, memberships: [], campaignRole: null };
 }
 
+async function rbacTablesAvailable(db) {
+  return Boolean(await data(
+    `
+select (
+  to_regclass('public.role_assignments') is not null
+  and to_regclass('public.role_permissions') is not null
+  and to_regclass('public.role_definitions') is not null
+  and to_regclass('public.permission_catalog') is not null
+) data;`,
+    [],
+    db
+  ));
+}
+
+async function rbacForProfile(db, profileId) {
+  if (!profileId) return { available: await rbacTablesAvailable(db), assignments: [], permissions: [] };
+  const available = await rbacTablesAvailable(db);
+  if (!available) return { available: false, assignments: [], permissions: [] };
+  const assignments = await data(
+    `
+select coalesce(json_agg(item order by item->>'scopeType', item->>'roleSlug'), '[]'::json) data
+from (
+  select json_build_object(
+    'id', ra.id,
+    'roleSlug', rd.slug,
+    'roleName', rd.name,
+    'plane', rd.plane,
+    'scopeType', ra.scope_type,
+    'scopeId', ra.scope_id,
+    'status', ra.status,
+    'startsAt', ra.starts_at,
+    'endsAt', ra.ends_at
+  ) item
+  from role_assignments ra
+  join role_definitions rd on rd.id = ra.role_id
+  where ra.profile_id = $1::uuid
+    and ra.status = 'active'
+    and now() >= ra.starts_at
+    and (ra.ends_at is null or ra.ends_at > now())
+) rows;`,
+    [profileId],
+    db
+  ) || [];
+  const permissions = await data(
+    `
+select coalesce(json_agg(row_to_json(permission_row) order by permission_row.action, permission_row.scope_type, permission_row.scope_id), '[]'::json) data
+from (
+  select distinct pc.action, pc.plane, pc.description,
+         rd.slug role_slug, rd.name role_name,
+         ra.scope_type, ra.scope_id
+  from role_assignments ra
+  join role_definitions rd on rd.id = ra.role_id
+  join role_permissions rp on rp.role_id = rd.id
+  join permission_catalog pc on pc.action = rp.permission_action
+  where ra.profile_id = $1::uuid
+    and ra.status = 'active'
+    and now() >= ra.starts_at
+    and (ra.ends_at is null or ra.ends_at > now())
+) permission_row;`,
+    [profileId],
+    db
+  ) || [];
+  return { available: true, assignments, permissions };
+}
+
 async function authMePayload(req, campaignSlug) {
   const user = await supabaseUserFromRequest(req);
   if (!user) {
@@ -346,13 +422,16 @@ async function authMePayload(req, campaignSlug) {
       profile: null,
       memberships: [],
       campaignRole: null,
-      capabilities: capabilitiesForRole(null),
+      rbac: { available: false, assignments: [], permissions: [] },
+      capabilities: capabilitiesForRole(null, { available: false, assignments: [], permissions: [] }),
       note: 'Login Discord ou Google obrigatorio para acessar dados da mesa.'
     };
   }
   const db = getPool();
   await syncAuthProfile(db, user);
   const linked = await linkedProfileForUser(db, user.id, campaignSlug);
+  const rbac = await rbacForProfile(db, linked.profile?.id || null);
+  const capabilities = capabilitiesForRole(linked.campaignRole || null, rbac);
   return {
     ok: true,
     mode: 'auth_required',
@@ -367,11 +446,40 @@ async function authMePayload(req, campaignSlug) {
     profile: linked.profile,
     memberships: linked.memberships || [],
     campaignRole: linked.campaignRole || null,
-    capabilities: capabilitiesForRole(linked.campaignRole || null),
+    rbac,
+    capabilities,
     note: linked.campaignRole
       ? 'Perfil autenticado e aprovado na campanha.'
-      : 'Perfil autenticado; vinculo com a campanha ainda depende de aprovacao do DM.'
+      : capabilities.canViewMonitoring
+        ? 'Perfil autenticado com acesso tecnico ao projeto.'
+        : 'Perfil autenticado; vinculo com a campanha ainda depende de aprovacao do DM.'
   };
+}
+
+async function profileHasPermission(db, profileId, action, scopeType, scopeId) {
+  const available = await rbacTablesAvailable(db);
+  if (!available) return { available: false, allowed: false };
+  if (!profileId) return { available: true, allowed: false };
+  const allowed = Boolean(await data(
+    `
+select exists (
+  select 1
+  from role_assignments ra
+  join role_permissions rp on rp.role_id = ra.role_id
+  where ra.profile_id = $1::uuid
+    and rp.permission_action = $2
+    and ra.status = 'active'
+    and now() >= ra.starts_at
+    and (ra.ends_at is null or ra.ends_at > now())
+    and (
+      (ra.scope_type = $3 and ra.scope_id = $4)
+      or (ra.scope_type = 'project' and ra.scope_id = $5)
+    )
+) data;`,
+    [profileId, action, scopeType, scopeId, PROJECT_SCOPE_ID],
+    db
+  ));
+  return { available: true, allowed };
 }
 
 async function requireCampaignAccess(req, campaignSlug, allowedRoles = null) {
@@ -383,6 +491,23 @@ async function requireCampaignAccess(req, campaignSlug, allowedRoles = null) {
     throw httpError(403, 'Sem permissao para esta acao.');
   }
   return payload;
+}
+
+async function requirePermission(req, campaignSlug, options) {
+  const payload = await authMePayload(req, campaignSlug);
+  if (!payload.authenticated) throw httpError(401, 'Login Discord ou Google obrigatorio.');
+  const db = getPool();
+  const profileId = payload.profile?.id || null;
+  const check = await profileHasPermission(
+    db,
+    profileId,
+    options.action,
+    options.scopeType,
+    options.scopeId
+  );
+  if (check.allowed) return payload;
+  if (!check.available && options.legacyRoles?.includes(payload.campaignRole || '')) return payload;
+  throw httpError(403, options.error || 'Sem permissao tecnica para esta acao.');
 }
 
 async function roll20IngestPreviewPayload(req, campaign, raw) {
@@ -2276,7 +2401,13 @@ async function handleGet(req, res, path, query) {
     });
   }
   if (path === '/api/monitoring') {
-    const access = await requireCampaignAccess(req, campaign, ['owner', 'master']);
+    const access = await requirePermission(req, campaign, {
+      action: 'project.monitor.read',
+      scopeType: 'project',
+      scopeId: PROJECT_SCOPE_ID,
+      legacyRoles: ['owner', 'master'],
+      error: 'Monitoramento tecnico exige permissao project.monitor.read.'
+    });
     const deep = ['1', 'true', 'yes'].includes(String(query.get('deep') || '').toLowerCase());
     return sendJson(res, 200, await buildMonitoringPayload(getPool(), {
       campaignSlug: campaign,

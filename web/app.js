@@ -68,6 +68,7 @@ const state = {
     profile: null,
     memberships: [],
     campaignRole: null,
+    rbac: null,
     capabilities: null,
     profileLoading: false,
     profileError: null,
@@ -376,6 +377,14 @@ function canManageCampaign() {
   return Boolean(state.auth.capabilities?.canManageCampaign);
 }
 
+function canManageAccess() {
+  return Boolean(state.auth.capabilities?.canManageAccess);
+}
+
+function canViewMonitoring() {
+  return Boolean(state.auth.capabilities?.canViewMonitoring);
+}
+
 function canReviewRoll20Events() {
   return ['owner', 'master', 'reviewer'].includes(state.auth.campaignRole || '');
 }
@@ -400,6 +409,7 @@ async function loadAuthProfile(session = null) {
   state.auth.profile = null;
   state.auth.memberships = [];
   state.auth.campaignRole = null;
+  state.auth.rbac = null;
   state.auth.capabilities = null;
   state.auth.profileError = null;
   if (!state.auth.user || !state.auth.client) {
@@ -426,6 +436,7 @@ async function loadAuthProfile(session = null) {
     state.auth.profile = payload.profile || null;
     state.auth.memberships = payload.memberships || [];
     state.auth.campaignRole = payload.campaignRole || null;
+    state.auth.rbac = payload.rbac || null;
     state.auth.capabilities = payload.capabilities || null;
   } catch (error) {
     state.auth.profileError = error.message;
@@ -466,6 +477,15 @@ function roleLabel(role) {
     reviewer: 'Revisor',
     viewer: 'Leitor'
   }[role] || 'Sem papel';
+}
+
+function technicalRoleBadges() {
+  const assignments = state.auth.rbac?.assignments || [];
+  return assignments
+    .filter(item => item.plane === 'technical' || item.roleSlug?.startsWith('platform_') || item.roleSlug === 'security_admin' || item.roleSlug === 'billing_observer')
+    .slice(0, 3)
+    .map(item => badge(item.roleName || item.roleSlug, 'blue'))
+    .join('');
 }
 
 function sessionStatusLabel(status) {
@@ -531,19 +551,20 @@ function renderAuthPanel() {
     return;
   }
   const provider = authProviderName(user);
+  const techBadges = technicalRoleBadges();
   if (!state.auth.campaignRole) {
     panel.innerHTML = `
       <span class="label">Acesso</span>
       <strong>${escapeHtml(profileName)}</strong>
-      <small>${escapeHtml(profile ? profileDetail : 'Login conectado; vinculo da mesa pendente.')}</small>
+      <small>${escapeHtml(profile ? (profileDetail || 'Perfil tecnico vinculado.') : 'Login conectado; vinculo da mesa pendente.')}</small>
       <div class="badges">
         ${badge(authProviderLabel(provider), provider === 'discord' ? 'violet' : 'green')}
-        ${badge('Aguardando DM', 'orange')}
+        ${techBadges || badge('Aguardando DM', 'orange')}
       </div>
       ${state.auth.profileLoading ? '<small>Atualizando perfil da mesa...</small>' : ''}
       ${state.auth.profileError ? `<small>${escapeHtml(state.auth.profileError)}</small>` : ''}
       <div class="auth-actions">
-        <button class="primary" onclick="state.tab='access'; render();">Solicitar acesso</button>
+        <button class="primary" onclick="state.tab='access'; render();">${techBadges ? 'Abrir acesso' : 'Solicitar acesso'}</button>
         <button onclick="signOutAuth()">Sair</button>
       </div>
     `;
@@ -556,6 +577,7 @@ function renderAuthPanel() {
     <div class="badges">
       ${badge(authProviderLabel(provider), provider === 'discord' ? 'violet' : 'green')}
       ${badge(role, state.auth.campaignRole === 'master' ? 'gold' : 'blue')}
+      ${techBadges}
       ${badge('RBAC ativo', 'green')}
     </div>
     ${state.auth.profileLoading ? '<small>Atualizando perfil da mesa...</small>' : ''}

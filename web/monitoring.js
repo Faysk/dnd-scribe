@@ -268,11 +268,11 @@
     const view = document.getElementById('view');
     if (!view) return;
     const mon = monitoringState();
-    if (!canManageCampaign?.()) {
+    if (!canViewMonitoring?.()) {
       view.innerHTML = `
         <section class="loading-panel">
-          <h2>Monitoramento restrito ao DM</h2>
-          <p>Esta pagina mostra tokens, status de APIs e consumo operacional. Por isso fica limitada a owner/master.</p>
+          <h2>Monitoramento restrito</h2>
+          <p>Esta pagina mostra tokens, status de APIs e consumo operacional. Ela exige permissao tecnica project.monitor.read.</p>
         </section>
       `;
       return;
@@ -310,7 +310,7 @@
     renderHeader();
     renderStatusStrip();
     updateActionButtons();
-    if (window.state.auth.ready && !canReadCampaign()) {
+    if (window.state.auth.ready && !canReadCampaign() && !canViewMonitoring?.()) {
       document.getElementById('view').innerHTML = authGateView();
       return;
     }
