@@ -16,3 +16,8 @@ __pycache__/
 *.pyc
 data/review_session.generated.js
 data/review_decisions.generated.json
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
