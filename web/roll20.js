@@ -254,7 +254,7 @@ function renderAuthPanel() {
       <div>
         <span class="label">Acesso</span>
         <strong>Entrar na mesa</strong>
-        <small>Validacao no backend exige DM ou Owner. Preview local continua livre.</small>
+        <small>Validacao e gravacao no backend exigem DM ou Owner. Preview no navegador continua disponivel.</small>
       </div>
       <div class="badges">${badge('RBAC ativo', 'green')}${badge('DM/Owner', 'gold')}</div>
       <div class="auth-actions"><button class="primary" onclick="signInDiscord()">Entrar Discord</button><button onclick="signInGoogle()">Google</button></div>
@@ -554,7 +554,7 @@ function renderSummary() {
     </div>
     <div class="roll20-summary-block">
       <span class="label">Regra</span>
-      <p>O preview local nao grava nada. A validacao no backend tambem fica em dry-run por enquanto.</p>
+      <p>O preview no navegador nao grava nada. Validar API e Gravar eventos usam a API de producao.</p>
     </div>
     ${renderBackendStatus()}
   `;

@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Transformar a pagina estatica do Roll20 em uma ferramenta real de trabalho para a mesa: preview local continua instantaneo, mas DM/Owner logado pode validar o mesmo chat contra a API de producao antes de qualquer persistencia.
+Transformar a pagina estatica do Roll20 em uma ferramenta real de trabalho para a mesa: preview no navegador continua instantaneo, mas DM/Owner logado pode validar o mesmo chat contra a API de producao antes de qualquer persistencia.
 
 ## Decisoes
 
@@ -18,7 +18,7 @@ Transformar a pagina estatica do Roll20 em uma ferramenta real de trabalho para 
 - A tela mostra estado de login, role da campanha e a acao de login Discord/Google.
 - O botao `Validar API` envia o chat copiado para `/api/roll20-ingest` em modo dry-run.
 - A resposta do backend aparece no painel lateral com quantidade de eventos validos e role do ator.
-- O preview local, copiar JSON e baixar JSON continuam funcionando sem depender da API.
+- O preview no navegador, copiar JSON e baixar JSON continuam funcionando sem depender da gravacao; validacao e persistencia passam pela API de producao.
 
 ## Validacao feita
 
