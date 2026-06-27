@@ -17,8 +17,28 @@ const state = {
     prefix: DEFAULT_PREFIX,
     summary: { total: 0, valid: 0, invalid: 0, byCommand: {}, byEventType: {}, byVisibility: {} },
     events: []
+  },
+  backend: {
+    loading: false,
+    result: null,
+    error: null
+  },
+  auth: {
+    ready: false,
+    error: null,
+    config: null,
+    client: null,
+    user: null,
+    profile: null,
+    memberships: [],
+    campaignRole: null,
+    capabilities: null,
+    profileLoading: false,
+    profileError: null
   }
 };
+
+window.state = state;
 
 function $(selector) {
   return document.querySelector(selector);
@@ -48,6 +68,214 @@ function toast(message) {
 
 function badge(text, color = '') {
   return `<span class="badge ${color}">${escapeHtml(text)}</span>`;
+}
+
+function selectedCampaignSlug() {
+  return cleanText($('#campaignSlug')?.value, 120) || 'yuhara-main';
+}
+
+function roleLabel(role) {
+  return {
+    owner: 'Owner',
+    master: 'DM',
+    player: 'Jogador',
+    reviewer: 'Revisor',
+    viewer: 'Leitor'
+  }[role] || 'Sem papel';
+}
+
+function authDisplayName(user = state.auth.user) {
+  if (!user) return '';
+  return user.user_metadata?.full_name
+    || user.user_metadata?.name
+    || user.user_metadata?.global_name
+    || user.user_metadata?.preferred_username
+    || user.user_metadata?.user_name
+    || user.user_metadata?.username
+    || user.email
+    || 'Usuario autenticado';
+}
+
+function authProviderName(user = state.auth.user) {
+  return user?.app_metadata?.provider || user?.identities?.[0]?.provider || 'oauth';
+}
+
+function authProviderLabel(provider = authProviderName()) {
+  return { discord: 'Discord', google: 'Google' }[provider] || 'OAuth';
+}
+
+function canValidateRoll20() {
+  return state.auth.campaignRole === 'owner' || state.auth.campaignRole === 'master';
+}
+
+async function apiJson(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (options.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
+  const response = await fetch(path, { ...options, headers });
+  const raw = await response.text();
+  let payload = {};
+  try {
+    payload = raw ? JSON.parse(raw) : {};
+  } catch (_error) {
+    payload = { ok: false, error: raw || 'Resposta invalida da API.' };
+  }
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.error || `HTTP ${response.status}`);
+  }
+  return payload;
+}
+
+async function initAuth() {
+  try {
+    const config = await apiJson('/api/auth-config');
+    state.auth.config = config;
+    if (!config.supabaseUrl || !config.publishableKey) {
+      state.auth.error = 'Config publica do Supabase ausente.';
+      state.auth.ready = true;
+      render();
+      return;
+    }
+    if (!window.supabase?.createClient) {
+      state.auth.error = 'Cliente Supabase nao carregou no navegador.';
+      state.auth.ready = true;
+      render();
+      return;
+    }
+    state.auth.client = window.supabase.createClient(config.supabaseUrl, config.publishableKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    });
+    const { data, error } = await state.auth.client.auth.getSession();
+    if (error) throw error;
+    state.auth.user = data?.session?.user || null;
+    state.auth.ready = true;
+    render();
+    await loadAuthProfile(data?.session || null);
+    state.auth.client.auth.onAuthStateChange(async (_event, session) => {
+      state.auth.user = session?.user || null;
+      state.auth.ready = true;
+      render();
+      await loadAuthProfile(session || null);
+    });
+  } catch (error) {
+    state.auth.ready = true;
+    state.auth.error = error.message || String(error);
+    render();
+  }
+}
+
+async function loadAuthProfile(session = null) {
+  state.auth.profile = null;
+  state.auth.memberships = [];
+  state.auth.campaignRole = null;
+  state.auth.capabilities = null;
+  state.auth.profileError = null;
+  if (!state.auth.user || !state.auth.client) {
+    state.auth.profileLoading = false;
+    render();
+    return;
+  }
+  try {
+    state.auth.profileLoading = true;
+    render();
+    let activeSession = session;
+    if (!activeSession) {
+      const { data, error } = await state.auth.client.auth.getSession();
+      if (error) throw error;
+      activeSession = data?.session || null;
+    }
+    if (!activeSession?.access_token) return;
+    const campaign = encodeURIComponent(selectedCampaignSlug());
+    const payload = await apiJson(`/api/auth/me?campaignSlug=${campaign}`, {
+      headers: { Authorization: `Bearer ${activeSession.access_token}` }
+    });
+    state.auth.profile = payload.profile || null;
+    state.auth.memberships = payload.memberships || [];
+    state.auth.campaignRole = payload.campaignRole || null;
+    state.auth.capabilities = payload.capabilities || null;
+  } catch (error) {
+    state.auth.profileError = error.message || String(error);
+  } finally {
+    state.auth.profileLoading = false;
+    render();
+  }
+}
+
+async function signInProvider(provider) {
+  if (!state.auth.client) {
+    toast('Login ainda nao esta pronto.');
+    return;
+  }
+  const { error } = await state.auth.client.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: window.location.origin + window.location.pathname }
+  });
+  if (error) toast(error.message);
+}
+
+function signInDiscord() {
+  return signInProvider('discord');
+}
+
+function signInGoogle() {
+  return signInProvider('google');
+}
+
+async function signOutAuth() {
+  if (!state.auth.client) return;
+  const { error } = await state.auth.client.auth.signOut();
+  if (error) toast(error.message);
+  else toast('Sessao encerrada.');
+}
+
+function renderAuthPanel() {
+  const panel = $('#authPanel');
+  if (!panel) return;
+  if (!state.auth.ready) {
+    panel.innerHTML = `<div><span class="label">Acesso</span><strong>Conectando login da mesa</strong><small>Preparando Discord/Google.</small></div>`;
+    return;
+  }
+  if (state.auth.error) {
+    panel.innerHTML = `
+      <div>
+        <span class="label">Acesso</span>
+        <strong>Acesso fechado</strong>
+        <small>${escapeHtml(state.auth.error)}</small>
+      </div>
+      <div class="auth-actions"><button onclick="initAuth()">Tentar de novo</button></div>
+    `;
+    return;
+  }
+  if (!state.auth.user) {
+    panel.innerHTML = `
+      <div>
+        <span class="label">Acesso</span>
+        <strong>Entrar na mesa</strong>
+        <small>Validacao no backend exige DM ou Owner. Preview local continua livre.</small>
+      </div>
+      <div class="badges">${badge('RBAC ativo', 'green')}${badge('DM/Owner', 'gold')}</div>
+      <div class="auth-actions"><button class="primary" onclick="signInDiscord()">Entrar Discord</button><button onclick="signInGoogle()">Google</button></div>
+    `;
+    return;
+  }
+  const provider = authProviderName();
+  const role = roleLabel(state.auth.campaignRole);
+  const profileName = state.auth.profile?.displayName || authDisplayName();
+  const detail = state.auth.profile?.roll20Name ? `@${state.auth.profile.roll20Name}` : 'Perfil da mesa';
+  const statusBadge = canValidateRoll20() ? badge('Pode validar Roll20', 'green') : badge('Sem permissao de ingestao', 'orange');
+  panel.innerHTML = `
+    <div>
+      <span class="label">Acesso</span>
+      <strong>${escapeHtml(profileName)}</strong>
+      <small>${escapeHtml(state.auth.profile ? detail : 'Login conectado; vinculo pode estar pendente.')}${state.auth.profileLoading ? ' Atualizando...' : ''}</small>
+      ${state.auth.profileError ? `<small>${escapeHtml(state.auth.profileError)}</small>` : ''}
+    </div>
+    <div class="badges">${badge(authProviderLabel(provider), provider === 'discord' ? 'violet' : 'green')}${badge(role, canValidateRoll20() ? 'gold' : 'blue')}${statusBadge}</div>
+    <div class="auth-actions"><button onclick="loadAuthProfile()">Atualizar</button><button onclick="signOutAuth()">Sair</button></div>
+  `;
 }
 
 function splitRoll20Speaker(line, prefix = DEFAULT_PREFIX) {
@@ -243,6 +471,8 @@ function parseForm() {
   const prefix = cleanText($('#commandPrefix').value, 20) || DEFAULT_PREFIX;
   const parsed = parseRoll20ChatText($('#chatInput').value, prefix);
   const events = parsed.map(event => normalizeRoll20Event(event, campaignSlug));
+  state.backend.result = null;
+  state.backend.error = null;
   state.payload = {
     campaignSlug,
     sourceSessionId: sourceSessionId || null,
@@ -258,6 +488,47 @@ function parseForm() {
 
 function metric(value, label) {
   return `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`;
+}
+
+function renderBackendStatus() {
+  if (state.backend.loading) {
+    return `
+      <div class="roll20-summary-block roll20-api-state">
+        <span class="label">Backend</span>
+        <p>Validando parser e permissao no servidor...</p>
+      </div>
+    `;
+  }
+  if (state.backend.error) {
+    return `
+      <div class="roll20-summary-block roll20-api-state error">
+        <span class="label">Backend</span>
+        <p>${escapeHtml(state.backend.error)}</p>
+      </div>
+    `;
+  }
+  if (state.backend.result) {
+    const summary = state.backend.result.summary || {};
+    return `
+      <div class="roll20-summary-block roll20-api-state success">
+        <span class="label">Backend</span>
+        <p>Dry-run autenticado aceito. ${escapeHtml(summary.total || 0)} eventos, ${escapeHtml(summary.valid || 0)} validos.</p>
+        <div class="badges">
+          ${badge(state.backend.result.actor?.role || 'role', 'gold')}
+          ${badge(state.backend.result.mode || 'dry_run', 'green')}
+        </div>
+      </div>
+    `;
+  }
+  const message = state.auth.user
+    ? (canValidateRoll20() ? 'Pronto para validar no backend.' : 'Somente DM/Owner valida no backend.')
+    : 'Entre com Discord ou Google para validar no backend.';
+  return `
+    <div class="roll20-summary-block roll20-api-state">
+      <span class="label">Backend</span>
+      <p>${escapeHtml(message)}</p>
+    </div>
+  `;
 }
 
 function renderSummary() {
@@ -279,8 +550,9 @@ function renderSummary() {
     </div>
     <div class="roll20-summary-block">
       <span class="label">Regra</span>
-      <p>O preview nao grava nada. Canon e bastidores continuam dependendo do DM.</p>
+      <p>O preview local nao grava nada. A validacao no backend tambem fica em dry-run por enquanto.</p>
     </div>
+    ${renderBackendStatus()}
   `;
 }
 
@@ -324,9 +596,18 @@ function renderJson() {
 }
 
 function render() {
+  renderAuthPanel();
+  renderBackendButton();
   renderSummary();
   renderEvents();
   renderJson();
+}
+
+function renderBackendButton() {
+  const button = $('#backendPreviewBtn');
+  if (!button) return;
+  button.disabled = state.backend.loading;
+  button.textContent = state.backend.loading ? 'Validando...' : 'Validar API';
 }
 
 function copyJson() {
@@ -336,6 +617,42 @@ function copyJson() {
     return;
   }
   toast('Clipboard indisponivel neste navegador.');
+}
+
+function backendPayload() {
+  return {
+    campaignSlug: selectedCampaignSlug(),
+    sourceSessionId: cleanText($('#sourceSessionId')?.value, 180) || null,
+    source: 'roll20-copy-paste',
+    prefix: cleanText($('#commandPrefix')?.value, 20) || DEFAULT_PREFIX,
+    dryRun: true,
+    text: String($('#chatInput')?.value || '')
+  };
+}
+
+async function validateBackendPreview() {
+  parseForm();
+  state.backend.loading = true;
+  state.backend.error = null;
+  state.backend.result = null;
+  render();
+  try {
+    if (!backendPayload().text.trim()) throw new Error('Cole o chat do Roll20 antes de validar.');
+    if (!state.auth.user) throw new Error('Login Discord ou Google obrigatorio para validar na API.');
+    if (!canValidateRoll20()) throw new Error('Somente DM ou Owner pode validar ingestao Roll20 no backend.');
+    const result = await apiJson('/api/roll20-ingest', {
+      method: 'POST',
+      body: JSON.stringify(backendPayload())
+    });
+    state.backend.result = result;
+    toast('Backend validou o dry-run.');
+  } catch (error) {
+    state.backend.error = error.message || String(error);
+    toast(state.backend.error);
+  } finally {
+    state.backend.loading = false;
+    render();
+  }
 }
 
 function downloadJson() {
@@ -363,6 +680,7 @@ function boot() {
     parseForm();
   });
   $('#parseBtn').addEventListener('click', parseForm);
+  $('#backendPreviewBtn').addEventListener('click', validateBackendPreview);
   $('#copyJsonBtn').addEventListener('click', copyJson);
   $('#downloadJsonBtn').addEventListener('click', downloadJson);
   $('#clearBtn').addEventListener('click', clearForm);
@@ -370,7 +688,15 @@ function boot() {
     $('#chatInput').value = SAMPLE_CHAT;
     parseForm();
   });
+  $('#campaignSlug').addEventListener('change', () => loadAuthProfile());
   render();
+  initAuth();
 }
+
+window.signInDiscord = signInDiscord;
+window.signInGoogle = signInGoogle;
+window.signOutAuth = signOutAuth;
+window.initAuth = initAuth;
+window.loadAuthProfile = loadAuthProfile;
 
 boot();

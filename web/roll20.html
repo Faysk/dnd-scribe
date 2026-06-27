@@ -14,7 +14,7 @@
       <div>
         <span class="label">Roll20</span>
         <h1>Importar chat da mesa</h1>
-        <p>Preview local para comandos <code>!dnd</code>. Nada sai do navegador nesta etapa.</p>
+        <p>Preview local para comandos <code>!dnd</code> e validacao autenticada para DM/Owner.</p>
       </div>
       <div class="roll20-header-actions">
         <a class="button-link" href="/">Voltar</a>
@@ -22,6 +22,14 @@
         <button id="parseBtn" class="primary">Processar</button>
       </div>
     </header>
+
+    <section class="roll20-auth-panel" id="authPanel">
+      <div>
+        <span class="label">Acesso</span>
+        <strong>Conectando login da mesa</strong>
+        <small>Discord e o login principal; Google fica como alternativa.</small>
+      </div>
+    </section>
 
     <section class="roll20-grid">
       <form class="roll20-input-panel" id="roll20Form">
@@ -45,6 +53,7 @@
         </label>
         <div class="roll20-actions">
           <button type="submit" class="primary">Gerar preview</button>
+          <button type="button" id="backendPreviewBtn">Validar API</button>
           <button type="button" id="copyJsonBtn">Copiar JSON</button>
           <button type="button" id="downloadJsonBtn">Baixar JSON</button>
           <button type="button" id="clearBtn">Limpar</button>
@@ -79,6 +88,8 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/auth-fetch.js"></script>
   <script src="/roll20.js"></script>
 </body>
 </html>
