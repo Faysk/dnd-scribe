@@ -22,6 +22,7 @@ DEFAULT_SCHEMA_FILES = [
     Path("schemas/20260626_010_audio_speech_slices.sql"),
     Path("schemas/20260626_011_audio_work_units_absolute_times.sql"),
     Path("schemas/20260626_012_audio_chunks_updated_at.sql"),
+    Path("schemas/20260627_013_exclude_silent_work_units.sql"),
 ]
 
 
