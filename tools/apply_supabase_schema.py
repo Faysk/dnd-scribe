@@ -26,6 +26,8 @@ DEFAULT_SCHEMA_FILES = [
     Path("schemas/20260628_014_audio_artifacts_retention.sql"),
     Path("schemas/20260628_015_audio_artifact_reclassify.sql"),
     Path("schemas/20260628_016_processing_job_steps.sql"),
+    Path("schemas/20260628_017_craig_manifest_contract.sql"),
+    Path("schemas/20260628_018_craig_manifest_temporal_quality.sql"),
 ]
 
 

@@ -611,6 +611,86 @@ where id = $1::uuid;`,
     ]
   );
 
+  const validationErrors = new Set();
+  if (!manifest.tracks.length) validationErrors.add('manifest_without_flac_tracks');
+  if (!sessionWindow.started_at) validationErrors.add('missing_start_time');
+  if (!sessionWindow.logical_date) validationErrors.add('missing_logical_date');
+  if (sessionWindow.duration_source === 'pending_track_duration') validationErrors.add('duration_pending');
+  if (!sessionWindow.duration_ms || !sessionWindow.duration_source) validationErrors.add('duration_pending');
+  if (!participants.length) validationErrors.add('missing_participants');
+  const validationErrorList = [...validationErrors];
+  const manifestStatus = validationErrors.has('manifest_without_flac_tracks')
+    ? 'invalid'
+    : validationErrorList.length
+      ? 'warning'
+      : 'valid';
+
+  await db.query(
+    `
+insert into craig_manifests (
+  id, session_id, source_recording_file_id, created_by_job_id, schema_version, status,
+  recording_id, guild_name, channel_name, requester,
+  started_at, ended_at, logical_date, time_zone, duration_ms, duration_source, crosses_midnight,
+  zip_object_size, zip_entries, tracks_count, participants_count, info_filename,
+  manifest_json, validation_errors, created_at, updated_at
+)
+values (
+  gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, $4::integer, $5,
+  $6, $7, $8, $9,
+  nullif($10, '')::timestamptz, nullif($11, '')::timestamptz, nullif($12, '')::date, $13, $14::integer, $15, $16::boolean,
+  $17::bigint, $18::integer, $19::integer, $20::integer, $21,
+  $22::jsonb, $23::jsonb, now(), now()
+)
+on conflict (session_id, source_recording_file_id) do update set
+  created_by_job_id = excluded.created_by_job_id,
+  schema_version = excluded.schema_version,
+  status = excluded.status,
+  recording_id = excluded.recording_id,
+  guild_name = excluded.guild_name,
+  channel_name = excluded.channel_name,
+  requester = excluded.requester,
+  started_at = excluded.started_at,
+  ended_at = excluded.ended_at,
+  logical_date = excluded.logical_date,
+  time_zone = excluded.time_zone,
+  duration_ms = excluded.duration_ms,
+  duration_source = excluded.duration_source,
+  crosses_midnight = excluded.crosses_midnight,
+  zip_object_size = excluded.zip_object_size,
+  zip_entries = excluded.zip_entries,
+  tracks_count = excluded.tracks_count,
+  participants_count = excluded.participants_count,
+  info_filename = excluded.info_filename,
+  manifest_json = excluded.manifest_json,
+  validation_errors = excluded.validation_errors,
+  updated_at = now();`,
+    [
+      job.session_id,
+      manifest.recordingFileId,
+      job.id,
+      manifest.schemaVersion || 1,
+      manifestStatus,
+      manifest.craig?.recording_id || null,
+      manifest.craig?.guild || null,
+      manifest.craig?.channel || null,
+      manifest.craig?.requester || null,
+      sessionWindow.started_at || '',
+      sessionWindow.ended_at || '',
+      sessionWindow.logical_date || '',
+      sessionWindow.time_zone || SESSION_TIME_ZONE,
+      sessionWindow.duration_ms || 0,
+      sessionWindow.duration_source || '',
+      Boolean(sessionWindow.crosses_midnight),
+      manifest.objectSize || 0,
+      manifest.zipEntries.length,
+      manifest.tracks.length,
+      participants.length,
+      manifest.infoFilename || null,
+      JSON.stringify(manifestMetadata.cloud_manifest_only),
+      JSON.stringify(validationErrorList)
+    ]
+  );
+
   const nextJob = await db.query(
     `
 insert into processing_jobs (id, session_id, job_type, status, attempts, input, output, created_at)
