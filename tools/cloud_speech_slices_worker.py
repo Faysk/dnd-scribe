@@ -24,6 +24,7 @@ import wave
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import boto3
 import psycopg
@@ -132,6 +133,12 @@ def r2_client():
     endpoint = optional_env("R2_S3_ENDPOINT", "R2_ENDPOINT")
     if not endpoint:
         raise RuntimeError("Missing R2_S3_ENDPOINT or R2_ENDPOINT")
+    parsed = urlparse(endpoint)
+    if not parsed.scheme or not parsed.netloc:
+        raise RuntimeError("R2 endpoint must include scheme and host")
+    # Some local tooling accepts an endpoint with the bucket in the path.
+    # boto3 expects the account-level S3 endpoint and adds the bucket itself.
+    endpoint = f"{parsed.scheme}://{parsed.netloc}"
     return boto3.client(
         "s3",
         endpoint_url=endpoint,
