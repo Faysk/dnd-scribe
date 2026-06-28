@@ -38,6 +38,7 @@
   function ensureState() {
     window.state.storageInventory ||= {
       loading: false,
+      cleanupRunning: false,
       error: null,
       data: null,
       loadedAt: null
@@ -175,6 +176,47 @@
     }
   }
 
+  async function runStorageCleanup(dryRun = true) {
+    const inventory = ensureState();
+    if (inventory.cleanupRunning) return null;
+    const cleanup = inventory.data?.cleanup || {};
+    const canRun = Boolean(window.state?.auth?.capabilities?.canRunTechnicalJobs);
+    if (!dryRun && !canRun) {
+      toast?.('Sua conta nao tem permissao tecnica para executar limpeza.');
+      return null;
+    }
+    if (!dryRun && Number(cleanup.deleteReadyBytes || 0) <= 0) {
+      toast?.('Nao ha artefatos delete_ready para limpar.');
+      return null;
+    }
+    if (!dryRun && !window.confirm('Deletar do R2 apenas artefatos marcados como delete_ready? Esta acao nao apaga sessoes nem transcricoes.')) {
+      return null;
+    }
+    inventory.cleanupRunning = true;
+    try { render?.(); } catch (_error) {}
+    try {
+      const payload = await api('/api/storage/cleanup-run', {
+        method: 'POST',
+        body: JSON.stringify({
+          dryRun,
+          limit: 5,
+          confirm: dryRun ? undefined : 'DELETE_READY_R2'
+        })
+      });
+      remember?.(dryRun ? 'Simulacao de limpeza concluida.' : 'Limpeza segura executada.', payload);
+      toast?.(dryRun ? 'Simulacao de limpeza concluida.' : 'Limpeza segura executada.');
+      await loadStorageInventory(true);
+      return payload;
+    } catch (error) {
+      toast?.(error.message);
+      remember?.(`Limpeza de storage falhou: ${error.message}`);
+      return null;
+    } finally {
+      inventory.cleanupRunning = false;
+      try { render?.(); } catch (_error) {}
+    }
+  }
+
   function renderCategorySummary(data) {
     const total = Math.max(1, Number(data?.totals?.bytes || 0));
     const categories = data?.categories || [];
@@ -298,6 +340,9 @@
       window.setTimeout(() => loadStorageInventory(false), 0);
     }
     const data = inventory.data;
+    const cleanup = data?.cleanup || {};
+    const canRunCleanup = Boolean(window.state?.auth?.capabilities?.canRunTechnicalJobs);
+    const hasDeleteReady = Number(cleanup.deleteReadyBytes || 0) > 0;
     return `
       <article class="ops-card storage-inventory-card">
         <div class="storage-inventory-head">
@@ -308,6 +353,8 @@
           </div>
           <div class="actions">
             <button onclick="loadStorageInventory(true)" ${inventory.loading ? 'disabled' : ''}>${inventory.loading ? 'Atualizando...' : 'Atualizar inventario'}</button>
+            <button onclick="runStorageCleanup(true)" ${inventory.cleanupRunning ? 'disabled' : ''}>Simular limpeza</button>
+            <button class="danger" onclick="runStorageCleanup(false)" ${inventory.cleanupRunning || !canRunCleanup || !hasDeleteReady ? 'disabled' : ''}>Executar limpeza segura</button>
           </div>
         </div>
         ${inventory.error ? `<div class="empty">${esc(inventory.error)}</div>` : ''}
@@ -376,6 +423,7 @@
 
   injectStyles();
   window.loadStorageInventory = loadStorageInventory;
+  window.runStorageCleanup = runStorageCleanup;
   window.renderStorageInventoryCard = renderStorageInventoryCard;
   try { renderOps = renderOpsWithStorage; } catch (_error) {}
   window.renderOps = renderOpsWithStorage;

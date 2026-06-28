@@ -1642,6 +1642,20 @@ function createR2SignedUrl(key, expiresSeconds, bucketOverride = '', method = 'G
   return `${endpoint.protocol}//${endpoint.host}${canonicalUri}?${query}&X-Amz-Signature=${signature}`;
 }
 
+async function deleteR2Object(bucket, key) {
+  const response = await fetch(createR2SignedUrl(key, 300, bucket, 'DELETE'), {
+    method: 'DELETE'
+  });
+  if (!response.ok) {
+    const message = await response.text().catch(() => '');
+    throw httpError(502, `Falha ao deletar objeto R2 (${response.status}): ${message.slice(0, 200)}`);
+  }
+  return {
+    ok: true,
+    status: response.status
+  };
+}
+
 async function audioUrlPayload(campaign, sourceSessionId, trackKey, expiresRaw) {
   const normalizedTrackKey = String(trackKey || '').trim();
   if (!normalizedTrackKey) throw httpError(400, 'trackKey obrigatorio.');
@@ -1683,6 +1697,164 @@ select row_to_json(file_row) data from (
     },
     url: createR2SignedUrl(file.storage_path, expiresSeconds, file.storage_bucket)
   };
+}
+
+function normalizeCleanupLimit(value) {
+  const limit = Number(value || 5);
+  if (!Number.isFinite(limit) || limit <= 0) return 5;
+  return Math.max(1, Math.min(20, Math.floor(limit)));
+}
+
+async function selectCleanupCandidates(db, campaign, limit) {
+  const result = await db.query(
+    `
+select cleanup.*
+from audio_storage_cleanup_candidates cleanup
+join sessions s on s.id = cleanup.session_id
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1
+  and cleanup.readiness_status = 'delete_ready'
+  and cleanup.lifecycle_status = 'delete_ready'
+order by cleanup.reclaimable_bytes desc, cleanup.updated_at asc
+limit $2::integer;`,
+    [campaign, limit]
+  );
+  return result.rows;
+}
+
+async function runStorageCleanup(req, campaign, body) {
+  const access = await requirePermission(req, campaign, {
+    action: 'project.jobs.run',
+    scopeType: 'project',
+    scopeId: PROJECT_SCOPE_ID,
+    legacyRoles: ['owner', 'master'],
+    error: 'Limpeza de storage exige permissao project.jobs.run.'
+  });
+  const dryRun = body.dryRun !== false;
+  const limit = normalizeCleanupLimit(body.limit || body.maxObjects);
+  if (!dryRun && body.confirm !== 'DELETE_READY_R2') {
+    throw httpError(400, 'Execucao real exige confirm="DELETE_READY_R2".');
+  }
+  const db = getPool();
+  const candidates = await selectCleanupCandidates(db, campaign, limit);
+  const summary = {
+    ok: true,
+    mode: 'storage_cleanup_delete_ready',
+    dryRun,
+    limit,
+    candidateObjects: candidates.length,
+    candidateBytes: candidates.reduce((total, item) => total + Number(item.reclaimable_bytes || item.size_bytes || 0), 0),
+    deletedObjects: 0,
+    deletedBytes: 0,
+    failedObjects: 0,
+    actor: {
+      profileId: access.profile?.id || null,
+      displayName: access.profile?.displayName || access.user?.displayName || null
+    },
+    objects: candidates.map(item => ({
+      artifactId: item.artifact_id,
+      sourceSessionId: item.source_session_id,
+      artifactType: item.artifact_type,
+      storageBucket: item.storage_bucket,
+      storagePath: item.storage_path,
+      sizeBytes: item.size_bytes,
+      reclaimableBytes: item.reclaimable_bytes,
+      readinessStatus: item.readiness_status
+    })),
+    failures: []
+  };
+  if (dryRun || !candidates.length) return summary;
+
+  for (const item of candidates) {
+    const claimed = await db.query(
+      `
+update audio_artifacts
+set lifecycle_status = 'delete_queued',
+    metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+      'delete_queued_by', $2::text,
+      'delete_queued_at', now()
+    ),
+    updated_at = now()
+where id = $1::uuid
+  and lifecycle_status = 'delete_ready'
+returning id;`,
+      [item.artifact_id, String(access.profile?.id || access.user?.id || access.user?.email || 'unknown')]
+    );
+    if (!claimed.rows.length) continue;
+    await db.query(
+      `
+insert into audio_artifact_events (artifact_id, event_type, actor_profile_id, note, payload)
+values ($1::uuid, 'delete_queued', $2::uuid, 'Queued for R2 deletion by storage cleanup runner.', $3::jsonb);`,
+      [
+        item.artifact_id,
+        access.profile?.id || null,
+        JSON.stringify({ source: 'api/storage/cleanup-run', storage_path: item.storage_path })
+      ]
+    );
+    try {
+      await deleteR2Object(item.storage_bucket, item.storage_path);
+      await db.query(
+        `
+update audio_artifacts
+set lifecycle_status = 'deleted',
+    metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+      'deleted_by', $2::text,
+      'deleted_at', now(),
+      'delete_runner', 'api/storage/cleanup-run'
+    ),
+    updated_at = now()
+where id = $1::uuid;`,
+        [item.artifact_id, String(access.profile?.id || access.user?.id || access.user?.email || 'unknown')]
+      );
+      await db.query(
+        `
+insert into audio_artifact_events (artifact_id, event_type, actor_profile_id, note, payload)
+values ($1::uuid, 'deleted', $2::uuid, 'Deleted R2 object through safe cleanup runner.', $3::jsonb);`,
+        [
+          item.artifact_id,
+          access.profile?.id || null,
+          JSON.stringify({
+            source: 'api/storage/cleanup-run',
+            storage_bucket: item.storage_bucket,
+            storage_path: item.storage_path,
+            size_bytes: item.size_bytes
+          })
+        ]
+      );
+      summary.deletedObjects += 1;
+      summary.deletedBytes += Number(item.reclaimable_bytes || item.size_bytes || 0);
+    } catch (error) {
+      summary.failedObjects += 1;
+      summary.failures.push({
+        artifactId: item.artifact_id,
+        storagePath: item.storage_path,
+        error: error.message || String(error)
+      });
+      await db.query(
+        `
+update audio_artifacts
+set lifecycle_status = 'failed',
+    metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+      'delete_failed_at', now(),
+      'delete_error', $2::text
+    ),
+    updated_at = now()
+where id = $1::uuid;`,
+        [item.artifact_id, String(error.message || error).slice(0, 1000)]
+      );
+      await db.query(
+        `
+insert into audio_artifact_events (artifact_id, event_type, actor_profile_id, note, payload)
+values ($1::uuid, 'note', $2::uuid, 'R2 deletion failed; artifact moved to failed lifecycle.', $3::jsonb);`,
+        [
+          item.artifact_id,
+          access.profile?.id || null,
+          JSON.stringify({ source: 'api/storage/cleanup-run', error: error.message || String(error) })
+        ]
+      );
+    }
+  }
+  return summary;
 }
 
 function safeUploadFilename(value) {
@@ -3824,6 +3996,10 @@ async function handlePost(req, res, path) {
   if (path === '/api/jobs/retry') {
     const payload = await retryProcessingJob(req, campaign, body);
     return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
+  }
+  if (path === '/api/storage/cleanup-run') {
+    const payload = await runStorageCleanup(req, campaign, body);
+    return sendJson(res, 200, payload);
   }
   if (path === '/api/uploads/craig-url') {
     await requireCampaignAccess(req, campaign, ['owner', 'master']);
