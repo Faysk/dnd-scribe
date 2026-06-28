@@ -200,7 +200,7 @@ select
   rf.duration_ms,
   coalesce(rf.source_system, 'recording_files'),
   rf.source_file_role,
-  rf.source_track_key,
+  coalesce(rf.metadata->>'track_key', rf.metadata->>'source_track_key'),
   jsonb_build_object('backfilled_from', 'recording_files'),
   coalesce(rf.created_at, now()),
   now()
