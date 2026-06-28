@@ -9,6 +9,7 @@
     'cloud_extract_craig_tracks',
     'cloud_plan_audio_chunks'
   ]);
+  const STALE_RUNNING_MINUTES = 20;
 
   function esc(value = '') {
     return String(value)
@@ -38,6 +39,24 @@
       unit += 1;
     }
     return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+  }
+
+  function minutesSince(value) {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return null;
+    return Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+  }
+
+  function jobAgeMinutes(job) {
+    return minutesSince(job?.startedAt || job?.createdAt);
+  }
+
+  function isZeroCostJob(job) {
+    return zeroCostPipelineTypes.has(job?.type || '');
+  }
+
+  function isStaleRunning(job) {
+    return isZeroCostJob(job) && job?.status === 'running' && Number(jobAgeMinutes(job)) >= STALE_RUNNING_MINUTES;
   }
 
   function jobTone(status = '') {
@@ -85,6 +104,51 @@
     }[type] || 'Executar';
   }
 
+  function pipelineStatus(jobs = []) {
+    const relevant = jobs.filter(job => isZeroCostJob(job) || job.type === 'cloud_detect_speech_slices');
+    const next = relevant.find(job => isZeroCostJob(job) && ['queued', 'retrying'].includes(job.status));
+    const running = relevant.find(job => isZeroCostJob(job) && job.status === 'running');
+    const stale = relevant.find(isStaleRunning);
+    const blocked = relevant.find(job => job.type === 'cloud_detect_speech_slices' && ['queued', 'retrying', 'running', 'failed'].includes(job.status));
+    const failed = relevant.filter(job => job.status === 'failed');
+    const counts = relevant.reduce((summary, job) => {
+      const status = job.status || 'unknown';
+      summary[status] = (summary[status] || 0) + 1;
+      return summary;
+    }, {});
+    return { relevant, next, running, stale, blocked, failed, counts };
+  }
+
+  function pipelineTitle(status) {
+    if (status.next) return `Proxima etapa: ${status.next.type}`;
+    if (status.stale) return `Possivel timeout: ${status.stale.type}`;
+    if (status.running) return `Rodando: ${status.running.type}`;
+    if (status.failed.length) return `${status.failed.length} job(s) com falha`;
+    if (status.blocked) return 'Aguardando worker de fala';
+    return 'Sem etapa zero-cost pendente';
+  }
+
+  function pipelineDetail(status, sourceSessionId) {
+    if (status.next) return `${sourceSessionId || status.next.session?.sourceSessionId || 'sessao'} pronta para continuar sem OpenAI paga.`;
+    if (status.stale) return `Rodando ha ${jobAgeMinutes(status.stale)} min. O continuador ja envia sinal de recovery quando o backend suportar.`;
+    if (status.running) return `Rodando ha ${jobAgeMinutes(status.running) ?? '-'} min. Atualize antes de disparar outra etapa.`;
+    if (status.failed.length) return 'Use Tentar novamente no job falho antes de continuar a esteira.';
+    if (status.blocked) return 'ZIP, manifest, extracao e chunks chegaram ao limite atual; falta o worker cloud de fala.';
+    return sourceSessionId || 'Selecione uma sessao para inspecionar a esteira.';
+  }
+
+  function pipelineBadges(status) {
+    const badges = [];
+    if (status.counts.queued) badges.push(chip(`${status.counts.queued} fila`, 'gold'));
+    if (status.counts.retrying) badges.push(chip(`${status.counts.retrying} retry`, 'orange'));
+    if (status.counts.running) badges.push(chip(`${status.counts.running} rodando`, 'orange'));
+    if (status.failed.length) badges.push(chip(`${status.failed.length} falha`, 'red'));
+    if (status.stale) badges.push(chip(`>${STALE_RUNNING_MINUTES} min`, 'red'));
+    if (status.blocked && !status.next) badges.push(chip('fala pendente', 'blue'));
+    if (!badges.length) badges.push(chip('OpenAI $0', 'green'));
+    return badges.join('');
+  }
+
   function jobActionControls(job) {
     const endpoint = jobEndpoint(job);
     const retryButton = canRetry(job)
@@ -99,11 +163,15 @@
       : job.type === 'cloud_plan_audio_chunks'
         ? `<label class="inline-job-limit"><span class="label">Chunk s</span><input id="jobChunkSeconds_${esc(job.id)}" type="number" min="60" max="1800" step="60" value="600" /></label>`
       : '';
+    const inspectButton = job.status === 'running'
+      ? `<button onclick="continuePipeline('${esc(job.session?.sourceSessionId || '')}', { dryRun: true, maxRuns: 1 })">Inspecionar</button>`
+      : '';
     return `
       <div class="job-actions">
         ${limit}
         <button onclick="runCloudJob('${esc(job.id)}', '${esc(job.type)}', true)" ${canDryRun(job) ? '' : 'disabled'}>Simular</button>
         <button class="primary" onclick="runCloudJob('${esc(job.id)}', '${esc(job.type)}', false)" ${canExecute(job) ? '' : 'disabled'}>${esc(actionLabel(job.type))}</button>
+        ${inspectButton}
         ${retryButton}
       </div>
     `;
@@ -189,8 +257,9 @@
     const workerStatus = job.output?.workerStatus || job.output?.uploadStatus || '';
     const session = job.session?.sourceSessionId || '';
     const stepStatus = job.stepSummary?.status || '';
+    const age = job.status === 'running' ? jobAgeMinutes(job) : null;
     return `
-      <div class="job-row">
+      <div class="job-row ${isStaleRunning(job) ? 'pipeline-stale' : ''}">
         <div class="row between">
           <div>
             <strong>${esc(job.type || 'job')}</strong>
@@ -200,11 +269,13 @@
             ${chip(status, jobTone(status))}
             ${stepStatus ? chip(`steps: ${stepStatus}`, jobTone(stepStatus)) : ''}
             ${workerStatus ? chip(workerStatus, 'blue') : ''}
+            ${age !== null ? chip(`${age} min`, isStaleRunning(job) ? 'red' : 'orange') : ''}
             ${chip(shortId(job.id), 'gold')}
           </div>
         </div>
         ${renderJobSteps(job)}
         ${renderTrackSummary(job)}
+        ${isStaleRunning(job) ? `<p>Este job esta rodando ha mais de ${STALE_RUNNING_MINUTES} minutos. Atualize e use retry se ele aparecer como falha; o continuador ja envia sinal de recovery para o backend.</p>` : ''}
         ${jobActionControls(job)}
         ${job.error ? `<p>${esc(String(job.error).slice(0, 240))}</p>` : ''}
         ${job.output ? `<pre>${esc(JSON.stringify(job.output, null, 2).slice(0, 900))}</pre>` : ''}
@@ -215,19 +286,19 @@
   function renderJobsListWithActions() {
     const jobs = window.state?.jobs || [];
     if (!jobs.length) return `<div class="empty">Nenhum job de producao registrado.</div>`;
-    const next = jobs.find(job => zeroCostPipelineTypes.has(job.type) && ['queued', 'retrying'].includes(job.status));
-    const running = jobs.find(job => zeroCostPipelineTypes.has(job.type) && job.status === 'running');
+    const status = pipelineStatus(jobs);
     const sourceSessionId = selectedPipelineSourceSessionId();
     return `
       <div class="pipeline-control">
         <div>
           <span class="label">Pipeline Craig</span>
-          <strong>${esc(next ? `Proxima etapa: ${next.type}` : running ? `Rodando: ${running.type}` : 'Sem etapa zero-cost pendente')}</strong>
-          <small>${esc(sourceSessionId || 'Use uma sessao ou job especifico para filtrar a continuidade.')}</small>
+          <strong>${esc(pipelineTitle(status))}</strong>
+          <small>${esc(pipelineDetail(status, sourceSessionId))}</small>
+          <div class="badges">${pipelineBadges(status)}</div>
         </div>
         <div class="job-actions">
           <button onclick="continuePipeline('${esc(sourceSessionId)}', { dryRun: true, maxRuns: 1 })">Simular proxima</button>
-          <button class="primary" onclick="continuePipeline('${esc(sourceSessionId)}')" ${next ? '' : 'disabled'}>Continuar pipeline</button>
+          <button class="primary" onclick="continuePipeline('${esc(sourceSessionId)}')" ${status.next ? '' : 'disabled'}>Continuar pipeline</button>
         </div>
       </div>
       <div class="job-list">
@@ -259,7 +330,7 @@
       toast?.('Worker ainda nao implementado para este job.');
       return;
     }
-    const body = { jobId, dryRun };
+    const body = { jobId, dryRun, recoverStale: true, staleMinutes: STALE_RUNNING_MINUTES };
     if (type === 'cloud_extract_craig_tracks') {
       const limit = Number(document.getElementById(`jobLimit_${jobId}`)?.value || 1);
       body.maxTracks = Math.max(1, Math.min(3, Number.isFinite(limit) ? Math.floor(limit) : 1));
@@ -279,7 +350,7 @@
         window.state.ingest = { ...window.state.ingest, lastJobResult: payload.jobResult };
       }
       remember?.(`Job ${type}: ${dryRun ? 'simulado' : 'executado'}.`, payload.jobResult?.summary || payload.summary || payload.message || payload);
-      toast?.(dryRun ? 'Simulacao concluida.' : 'Job executado.');
+      toast?.(payload.message || (dryRun ? 'Simulacao concluida.' : 'Job executado.'));
       await loadJobs?.(true);
       if (!dryRun && (payload.sourceSessionId || payload.jobResult?.sourceSessionId) && typeof loadSessions === 'function') {
         await loadSessions(false);
@@ -293,6 +364,14 @@
     } finally {
       if (typeof setBusy === 'function') setBusy(false);
     }
+  }
+
+  function pipelineCompletionToast(payload, dryRun) {
+    const recovered = payload?.staleRecovery?.recovered?.length || 0;
+    if (recovered) return `${recovered} job(s) antigo(s) recuperado(s); pipeline atualizado.`;
+    if (payload?.blockedJob) return payload.message || 'Pipeline pausado na proxima etapa planejada.';
+    if (payload?.message) return payload.message;
+    return dryRun ? 'Simulacao concluida.' : 'Pipeline atualizado.';
   }
 
   async function continuePipeline(sourceSessionId = '', options = {}) {
@@ -322,7 +401,9 @@
           sourceSessionId: resolvedSourceSessionId,
           dryRun,
           maxTracks,
-          chunkSeconds
+          chunkSeconds,
+          recoverStale: true,
+          staleMinutes: STALE_RUNNING_MINUTES
         });
         lastPayload = payload;
         if (payload.jobs) window.state.jobs = payload.jobs;
@@ -344,7 +425,7 @@
       if (lastPayload?.continueRecommended) {
         toast?.('Pipeline pausado para proteger o tempo da Function. Clique em continuar de novo.');
       } else {
-        toast?.(lastPayload?.message || (dryRun ? 'Simulacao concluida.' : 'Pipeline atualizado.'));
+        toast?.(pipelineCompletionToast(lastPayload, dryRun));
       }
       await loadJobs?.(true);
       if (typeof loadSessions === 'function') await loadSessions(false);
