@@ -244,6 +244,17 @@ values (%s::uuid, 'deleted', 'Deleted R2 object through storage cleanup worker.'
     return {**item, "action": "deleted"}
 
 
+def configure_db_timeouts(conn: psycopg.Connection) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+select
+  set_config('lock_timeout', '10s', true),
+  set_config('statement_timeout', '60s', true);
+"""
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env.local")
@@ -265,10 +276,13 @@ def main() -> int:
         raise SystemExit(f"--execute requires --confirm {CONFIRM_TOKEN}")
 
     with psycopg.connect(database_url, autocommit=False) as conn:
+        configure_db_timeouts(conn)
         readiness = refresh_readiness(conn, args.campaign, args.actor, args.source_session_id)
         if not args.execute:
             readiness["dryRunRollback"] = True
         candidates = select_candidates(conn, args.campaign, args.source_session_id, limit)
+        if not args.execute:
+            conn.rollback()
         output: dict[str, Any] = {
             "execute": args.execute,
             "campaign": args.campaign,
@@ -327,8 +341,6 @@ def main() -> int:
                 }
                 for item in results
             ]
-        else:
-            conn.rollback()
 
     if args.json:
         print(json.dumps(output, ensure_ascii=False, indent=2, default=json_default))
