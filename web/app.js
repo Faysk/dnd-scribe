@@ -53,6 +53,8 @@ const state = {
   log: [],
   ingest: {
     busy: false,
+    phase: null,
+    progress: null,
     error: null,
     result: null
   },
@@ -841,10 +843,7 @@ async function loadJobs(scheduleNext = true) {
     const payload = await api('/api/jobs');
     state.jobs = payload.jobs || [];
     render();
-    const hasActive = state.jobs.some(job => (
-      ['queued', 'running'].includes(job.status)
-      && job.output?.workerStatus !== 'pending_worker_implementation'
-    ));
+    const hasActive = state.jobs.some(job => ['running', 'retrying'].includes(job.status));
     if (scheduleNext && hasActive && !state.jobsPolling) {
       state.jobsPolling = true;
       window.setTimeout(async () => {
@@ -1208,9 +1207,35 @@ function renderCraigIngestPanel() {
       <div class="actions">
         <button class="primary" onclick="uploadCraigFromForm()" ${state.ingest.busy ? 'disabled' : ''}>Enviar ZIP para producao</button>
       </div>
-      ${state.ingest.busy ? `<div class="loading-panel"><div class="loader-line"></div><h2>Enviando ZIP Craig para R2...</h2></div>` : ''}
+      ${state.ingest.busy ? renderIngestProgress() : ''}
       ${state.ingest.error ? `<div class="empty">${escapeHtml(state.ingest.error)}</div>` : ''}
       ${state.ingest.result ? renderIngestResult(state.ingest.result) : ''}
+    </div>
+  `;
+}
+
+function ingestPhaseLabel(phase) {
+  return {
+    planning: 'Criando URL segura no R2...',
+    uploading: 'Enviando ZIP direto para o R2...',
+    confirming: 'Confirmando upload e criando job cloud...',
+    done: 'Upload confirmado.'
+  }[phase] || 'Preparando upload Craig...';
+}
+
+function renderIngestProgress() {
+  const progress = Number(state.ingest.progress);
+  const hasProgress = Number.isFinite(progress);
+  const width = Math.min(100, Math.max(0, hasProgress ? progress : 15));
+  return `
+    <div class="loading-panel ingest-progress">
+      <div class="loader-line"></div>
+      <div class="row between">
+        <h2>${escapeHtml(ingestPhaseLabel(state.ingest.phase))}</h2>
+        ${hasProgress ? badge(`${Math.round(width)}%`, 'blue') : badge('preparando', 'gold')}
+      </div>
+      <div class="progress-bar"><span style="width:${width}%"></span></div>
+      <p>O arquivo grande nao passa pela Vercel Function; o navegador envia direto para o bucket R2.</p>
     </div>
   `;
 }
@@ -1375,7 +1400,7 @@ async function uploadCraigFromForm() {
     toast('Selecione o ZIP Craig.');
     return;
   }
-  state.ingest = { busy: true, error: null, result: null };
+  state.ingest = { busy: true, phase: 'planning', progress: null, error: null, result: null };
   setBusy(true);
   render();
   try {
@@ -1393,16 +1418,18 @@ async function uploadCraigFromForm() {
       })
     });
     remember(`URL R2 criada: ${planned.upload?.storagePath || file.name}`);
-    const uploadResponse = await fetch(planned.upload.signedUrl, {
-      method: 'PUT',
-      body: file,
-      headers: {
-        'Content-Type': planned.upload.contentType || file.type || 'application/zip'
-      }
-    });
+    state.ingest = { busy: true, phase: 'uploading', progress: 0, error: null, result: null };
+    render();
+    const uploadResponse = await uploadFileToSignedUrl(
+      planned.upload.signedUrl,
+      file,
+      planned.upload.contentType || file.type || 'application/zip'
+    );
     if (!uploadResponse.ok) {
       throw new Error(`Upload R2 falhou (${uploadResponse.status}). Verifique CORS do bucket e tente novamente.`);
     }
+    state.ingest = { busy: true, phase: 'confirming', progress: 100, error: null, result: null };
+    render();
     const payload = await api('/api/uploads/craig-complete', {
       method: 'POST',
       body: JSON.stringify({
@@ -1413,7 +1440,7 @@ async function uploadCraigFromForm() {
         runId: DEFAULT_RUN
       })
     });
-    state.ingest = { busy: false, error: null, result: payload };
+    state.ingest = { busy: false, phase: 'done', progress: 100, error: null, result: payload };
     if (payload.sessions) state.sessions = payload.sessions;
     if (payload.jobs) state.jobs = payload.jobs;
     state.selectedSourceSessionId = planned.session.sourceSessionId || state.selectedSourceSessionId;
@@ -1427,13 +1454,42 @@ async function uploadCraigFromForm() {
       toast('ZIP Craig enviado.');
     }
   } catch (error) {
-    state.ingest = { busy: false, error: error.message, result: null };
+    state.ingest = { busy: false, phase: null, progress: null, error: error.message, result: null };
     toast(error.message);
   } finally {
     setBusy(false);
     state.tab = 'sessions';
     render();
   }
+}
+
+function uploadFileToSignedUrl(url, file, contentType) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('PUT', url, true);
+    request.setRequestHeader('Content-Type', contentType || 'application/zip');
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      state.ingest = {
+        ...state.ingest,
+        busy: true,
+        phase: 'uploading',
+        progress: Math.round((event.loaded / event.total) * 100)
+      };
+      render();
+    };
+    request.onload = () => {
+      resolve({
+        ok: request.status >= 200 && request.status < 300,
+        status: request.status,
+        statusText: request.statusText,
+        text: request.responseText || ''
+      });
+    };
+    request.onerror = () => reject(new Error('Upload R2 falhou por erro de rede ou CORS.'));
+    request.onabort = () => reject(new Error('Upload R2 cancelado.'));
+    request.send(file);
+  });
 }
 
 async function saveCraigTrack(trackKey, editableKey = false) {

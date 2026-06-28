@@ -1968,8 +1968,8 @@ returning *;`,
         source: 'r2_direct_upload'
       }),
       JSON.stringify({
-        workerStatus: 'pending_worker_implementation',
-        nextAction: 'Implementar executor cloud para extrair ZIP, gerar chunks/slices e atualizar Supabase.',
+        workerStatus: 'ready_to_run',
+        nextAction: 'Executar cloud_ingest_craig pela tela Operacao para ler o manifest do ZIP no R2.',
         paidAiCostUsd: 0
       })
     ]
@@ -2006,7 +2006,7 @@ where id = $1::uuid;`,
     job: jobResponse(ingestJobResult.rows[0]),
     cost: {
       paidAiCostUsd: 0,
-      note: 'Upload confirmado. O job cloud_ingest_craig ainda nao executa IA paga.'
+      note: 'Upload confirmado. O job cloud_ingest_craig esta pronto para execucao sem IA paga.'
     }
   };
 }

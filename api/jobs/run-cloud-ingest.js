@@ -528,8 +528,8 @@ returning id;`,
         tracks: manifest.tracks.map(item => ({ filename: item.filename, sizeBytes: item.fileSize }))
       }),
       JSON.stringify({
-        workerStatus: 'pending_worker_implementation',
-        nextAction: 'Extrair FLACs do ZIP para objetos R2 individuais antes de chunks/slices.',
+        workerStatus: 'ready_to_run',
+        nextAction: 'Executar cloud_extract_craig_tracks para extrair FLACs do ZIP para objetos R2 individuais.',
         paidAiCostUsd: 0
       }),
       manifest.recordingFileId
