@@ -19,6 +19,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import traceback
 import wave
 from collections import defaultdict
 from pathlib import Path
@@ -214,12 +215,12 @@ with target as (
   select s.id session_id
   from sessions s
   join campaigns c on c.id = s.campaign_id
-  where c.slug = %s
-    and s.source_session_id = %s
+  where c.slug = %s::text
+    and s.source_session_id = %s::text
 ), inserted as (
   insert into processing_jobs (id, session_id, job_type, status, attempts, input, output, created_at)
   select gen_random_uuid(), target.session_id, 'cloud_detect_speech_slices', 'queued', 0,
-         jsonb_build_object('sourceSessionId', %s, 'createdBy', 'cloud_speech_slices_worker'),
+         jsonb_build_object('sourceSessionId', %s::text, 'createdBy', 'cloud_speech_slices_worker'),
          jsonb_build_object('workerStatus', 'ready_to_run', 'paidAiCostUsd', 0),
          now()
   from target
@@ -248,7 +249,7 @@ join campaigns c on c.id = s.campaign_id
 where c.slug = %s
   and pj.job_type = 'cloud_detect_speech_slices'
   and (%s::uuid is null or pj.id = %s::uuid)
-  and (%s = '' or s.source_session_id = %s)
+  and (%s::text = '' or s.source_session_id = %s::text)
 order by case pj.status
     when 'queued' then 10
     when 'retrying' then 20
@@ -276,7 +277,7 @@ with candidate as (
     and pj.job_type = 'cloud_detect_speech_slices'
     and pj.status in ('queued','retrying')
     and (%s::uuid is null or pj.id = %s::uuid)
-    and (%s = '' or s.source_session_id = %s)
+    and (%s::text = '' or s.source_session_id = %s::text)
   order by case when %s::uuid is not null and pj.id = %s::uuid then 0 else 1 end, pj.created_at
   limit 1
   for update skip locked
@@ -1014,7 +1015,14 @@ def main() -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
     except Exception as error:  # noqa: BLE001
-        print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False, indent=2), flush=True)
+        print(
+            json.dumps(
+                {"ok": False, "error": str(error), "traceback": traceback.format_exc().splitlines()},
+                ensure_ascii=False,
+                indent=2,
+            ),
+            flush=True,
+        )
         return 1
 
 
