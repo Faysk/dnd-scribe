@@ -1012,7 +1012,7 @@ function render() {
   document.querySelectorAll('#tabs button').forEach(button => {
     button.classList.toggle('active', button.dataset.tab === state.tab);
   });
-  if (!state.review && state.tab !== 'sessions') {
+  if (!state.review && !['sessions', 'upload', 'ops'].includes(state.tab)) {
     $('#view').innerHTML = loadingView();
     return;
   }
@@ -1022,6 +1022,7 @@ function render() {
   }
   const routes = {
     sessions: renderSessionsManager,
+    upload: renderUploadView,
     review: renderReview,
     timeline: renderTimeline,
     candidates: renderCandidates,
@@ -1143,13 +1144,6 @@ function renderSessionsManager() {
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Ingestao Craig</h2>${badge('prod upload', 'green')}</div>
-        <div class="panel-body">
-          ${renderCraigIngestPanel()}
-        </div>
-      </div>
-
-      <div class="panel">
         <div class="panel-head">
           <h2>Mapa Craig</h2>
           <button onclick="loadCraigMap()">Atualizar</button>
@@ -1157,6 +1151,151 @@ function renderSessionsManager() {
         <div class="panel-body">
           ${renderCraigMapPanel()}
         </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderUploadView() {
+  const sourceSessionId = ingestSourceSessionId();
+  const session = state.sessions.find(item => item.sourceSessionId === sourceSessionId) || selectedSession();
+  return `
+    <section class="upload-page">
+      <div class="upload-page-head">
+        <div>
+          <span class="label">Upload Craig</span>
+          <h2>Nova sessao gravada</h2>
+          <p>Envio direto para R2, manifest e extracao preparados para producao.</p>
+        </div>
+        <div class="badges">
+          ${badge('Discord/Google auth', 'green')}
+          ${badge('OpenAI sob controle', 'blue')}
+          ${badge('sessao por inicio local', 'gold')}
+        </div>
+      </div>
+      <div class="upload-workspace">
+        <section class="panel upload-main-panel">
+          <div class="panel-head">
+            <h2>Preparar upload</h2>
+            ${badge('prod upload', 'green')}
+          </div>
+          <div class="panel-body">
+            ${renderCraigIngestPanel()}
+          </div>
+        </section>
+        <aside class="upload-side-panel">
+          ${renderUploadSessionCard(session)}
+          ${renderUploadJobsCard()}
+          ${renderUploadMapCard()}
+        </aside>
+      </div>
+    </section>
+  `;
+}
+
+function renderUploadSessionCard(session) {
+  const sourceSessionId = ingestSourceSessionId();
+  if (!session && !sourceSessionId) {
+    return `
+      <section class="panel">
+        <div class="panel-head"><h2>Sessao</h2>${badge('nova', 'blue')}</div>
+        <div class="panel-body">
+          <div class="empty">A sessao sera criada depois que a URL R2 for planejada. O manifest Craig ancora data, inicio e fim.</div>
+        </div>
+      </section>
+    `;
+  }
+  const target = session || { sourceSessionId };
+  return `
+    <section class="panel">
+      <div class="panel-head"><h2>Sessao</h2>${badge(sessionStatusLabel(target.status || 'uploaded'), target.status === 'archived' ? 'orange' : 'green')}</div>
+      <div class="panel-body upload-summary-grid">
+        <div><span class="label">Source</span><strong>${escapeHtml(target.sourceSessionId || sourceSessionId)}</strong></div>
+        <div><span class="label">Data logica</span><strong>${escapeHtml(target.sessionDate || 'aguardando manifest')}</strong></div>
+        <div><span class="label">Inicio</span><strong>${escapeHtml(fmtDateTime(target.startedAt))}</strong></div>
+        <div><span class="label">Fim</span><strong>${escapeHtml(fmtDateTime(target.endedAt))}</strong></div>
+        <div><span class="label">Arquivos</span><strong>${escapeHtml(target.recordingFiles || 0)}</strong></div>
+        <div><span class="label">Duracao</span><strong>${escapeHtml(target.durationMs ? fmtDuration(target.durationMs) : 'pendente')}</strong></div>
+      </div>
+    </section>
+  `;
+}
+
+function uploadRelevantJobs() {
+  const sourceSessionId = ingestSourceSessionId();
+  const uploadTypes = new Set(['craig_direct_upload', 'cloud_ingest_craig', 'cloud_extract_craig_tracks', 'cloud_plan_audio_chunks']);
+  return (state.jobs || [])
+    .filter(job => uploadTypes.has(job.type))
+    .filter(job => !sourceSessionId || job.session?.sourceSessionId === sourceSessionId)
+    .slice(0, 8);
+}
+
+function renderUploadJobsCard() {
+  const jobs = uploadRelevantJobs();
+  return `
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Pipeline</h2>
+        <button onclick="loadJobs(true)">Atualizar</button>
+      </div>
+      <div class="panel-body">
+        ${jobs.length ? `<div class="job-list">${jobs.map(renderUploadJobRow).join('')}</div>` : `<div class="empty">Sem jobs para esta sessao ainda.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderUploadJobRow(job) {
+  const canRun = ['cloud_ingest_craig', 'cloud_extract_craig_tracks'].includes(job.type);
+  const canExecute = canRun && ['queued', 'retrying'].includes(job.status);
+  const canDryRun = canRun && ['queued', 'retrying', 'running'].includes(job.status);
+  const workerStatus = job.output?.workerStatus || job.output?.uploadStatus || '';
+  const limit = job.type === 'cloud_extract_craig_tracks'
+    ? `<label class="inline-job-limit"><span class="label">Faixas</span><input id="jobLimit_${escapeHtml(job.id)}" type="number" min="1" max="3" value="1" /></label>`
+    : '';
+  return `
+    <div class="job-row upload-job-row">
+      <div class="row between">
+        <div>
+          <strong>${escapeHtml(job.type || 'job')}</strong>
+          <small>${escapeHtml(job.createdAt || '')}</small>
+        </div>
+        <div class="badges">
+          ${badge(job.status || 'unknown', job.status === 'failed' ? 'red' : job.status === 'succeeded' ? 'green' : job.status === 'running' ? 'orange' : 'gold')}
+          ${workerStatus ? badge(workerStatus, 'blue') : ''}
+          ${badge(String(job.id || '').slice(0, 8), 'gold')}
+        </div>
+      </div>
+      ${canRun ? `<div class="job-actions">
+        ${limit}
+        <button onclick="runCloudJob('${escapeHtml(job.id)}', '${escapeHtml(job.type)}', true)" ${canDryRun ? '' : 'disabled'}>Simular</button>
+        <button class="primary" onclick="runCloudJob('${escapeHtml(job.id)}', '${escapeHtml(job.type)}', false)" ${canExecute ? '' : 'disabled'}>${job.type === 'cloud_extract_craig_tracks' ? 'Extrair' : 'Ler manifest'}</button>
+      </div>` : ''}
+      ${job.error ? `<p>${escapeHtml(String(job.error).slice(0, 220))}</p>` : ''}
+    </div>
+  `;
+}
+
+function renderUploadMapCard() {
+  const tracks = state.craigMap?.tracks || {};
+  const values = Object.values(tracks);
+  const known = values.filter(item => item.status === 'known').length;
+  const unknown = Math.max(0, values.length - known);
+  return `
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Mapa Craig</h2>
+        <button onclick="loadCraigMap()">Atualizar</button>
+      </div>
+      <div class="panel-body">
+        ${state.craigMapError ? `<div class="empty">${escapeHtml(state.craigMapError)}</div>` : `
+          <div class="upload-summary-grid">
+            <div><span class="label">Tracks</span><strong>${escapeHtml(values.length)}</strong></div>
+            <div><span class="label">Conhecidas</span><strong>${escapeHtml(known)}</strong></div>
+            <div><span class="label">Revisar</span><strong>${escapeHtml(unknown)}</strong></div>
+          </div>
+          <div class="actions"><button onclick="state.tab='sessions'; render();">Abrir mapa completo</button></div>
+        `}
       </div>
     </section>
   `;
@@ -1242,12 +1381,36 @@ function renderCraigIngestPanel() {
         </select>
         <small>Use uma sessao existente apenas para corrigir/reprocessar um upload ja conhecido.</small>
       </label>
-      <label><span class="label">ZIP Craig</span><input id="craigZipFile" type="file" accept=".zip,application/zip" /></label>
-      <div class="field-grid">
-        <label><span class="label">Chunk segundos</span><input id="ingestChunkSeconds" type="number" min="60" step="30" value="600" /></label>
-        <label><span class="label">Amostra segundos</span><input id="ingestSampleSeconds" type="number" min="0" step="30" placeholder="vazio" /></label>
+      <div class="upload-form-section">
+        <div class="row between">
+          <div>
+            <span class="label">Arquivo</span>
+            <strong>ZIP Craig</strong>
+          </div>
+          ${badge(fileName ? fmtBytes(state.ingest.file?.size || upload?.sizeBytes || 0) : 'aguardando arquivo', fileName ? 'blue' : 'gold')}
+        </div>
+        <input id="craigZipFile" type="file" accept=".zip,application/zip" onchange="rememberCraigFileSelection(this)" />
+        <div id="uploadFilePreview" class="upload-file-preview">
+          ${fileName ? `${escapeHtml(fileName)}${recordingId ? ` • Craig ${escapeHtml(recordingId)}` : ''}` : 'Nenhum arquivo escolhido.'}
+        </div>
       </div>
-      <label class="check-row"><input id="ingestSkipChunks" type="checkbox" /> <span>Somente manifest quando o worker cloud estiver ativo</span></label>
+      <div class="upload-form-section">
+        <span class="label">Metadados opcionais</span>
+        <div class="field-grid">
+          <label><span class="label">Titulo</span><input id="ingestSessionTitle" placeholder="vazio = Sessao Craig pelo ID do ZIP" /></label>
+          <label><span class="label">Data manual</span><input id="ingestSessionDate" type="date" /></label>
+          <label><span class="label">Arco</span><input id="ingestSessionArc" placeholder="Arco atual" /></label>
+          <label><span class="label">Resumo curto</span><input id="ingestSessionSummary" placeholder="Opcional para catalogo" /></label>
+        </div>
+      </div>
+      <div class="upload-form-section">
+        <span class="label">Processamento</span>
+        <div class="field-grid">
+          <label><span class="label">Chunk segundos</span><input id="ingestChunkSeconds" type="number" min="60" step="30" value="600" /></label>
+          <label><span class="label">Amostra segundos</span><input id="ingestSampleSeconds" type="number" min="0" step="30" placeholder="vazio" /></label>
+        </div>
+        <label class="check-row"><input id="ingestSkipChunks" type="checkbox" /> <span>Somente manifest quando o worker cloud estiver ativo</span></label>
+      </div>
       ${renderIngestChecklist()}
       <div class="actions">
         <button class="primary" onclick="uploadCraigFromForm()" ${state.ingest.busy ? 'disabled' : ''}>Enviar ZIP para producao</button>
@@ -1472,6 +1635,28 @@ function renderIngestResult(result) {
   `;
 }
 
+function rememberCraigFileSelection(input) {
+  const file = input?.files?.[0] || null;
+  const preview = document.getElementById('uploadFilePreview');
+  if (!file) {
+    state.ingest = { ...state.ingest, file: null };
+    if (preview) preview.textContent = 'Nenhum arquivo escolhido.';
+    return;
+  }
+  state.ingest = {
+    ...state.ingest,
+    file: {
+      name: file.name,
+      size: file.size,
+      type: file.type || 'application/zip'
+    }
+  };
+  const recordingId = recordingIdFromCraigName(file.name);
+  if (preview) {
+    preview.textContent = `${file.name} - ${fmtBytes(file.size)}${recordingId ? ` - Craig ${recordingId}` : ''}`;
+  }
+}
+
 function editSessionForm(session) {
   return `
     <div class="detail-grid">
@@ -1501,6 +1686,9 @@ function editSessionForm(session) {
       <div class="actions">
         <button class="success" onclick="updateSessionFromForm()">Salvar sessao</button>
         <button onclick="loadSession('${escapeHtml(session.sourceSessionId)}')">Abrir review</button>
+        ${session.status === 'archived'
+          ? `<button onclick="setSessionArchived(false)">Restaurar</button>`
+          : `<button class="danger" onclick="setSessionArchived(true)">Arquivar</button>`}
       </div>
     </div>
   `;
@@ -1514,7 +1702,7 @@ function sessionCatalogRow(session) {
         <small>${escapeHtml(session.sessionDate || 'sem data')} • ${escapeHtml(sessionTimeRange(session))} • ${escapeHtml(session.sourceSessionId || '')}</small>
       </div>
       <div class="badges">
-        ${badge(sessionStatusLabel(session.status), session.status === 'failed' ? 'red' : 'blue')}
+        ${badge(sessionStatusLabel(session.status), session.status === 'failed' ? 'red' : session.status === 'archived' ? 'orange' : 'blue')}
         ${badge(session.startedAt ? 'ancorada' : 'sem inicio', session.startedAt ? 'green' : 'orange')}
         ${badge(`${session.participants || 0} participantes`, 'green')}
         ${badge(`${session.segments || 0} seg`, 'violet')}
@@ -1598,6 +1786,44 @@ async function updateSessionFromForm() {
   }
 }
 
+async function setSessionArchived(archived) {
+  const session = selectedSession();
+  if (!session) return;
+  const nextStatus = archived ? 'archived' : (Number(session.recordingFiles || 0) > 0 ? 'uploaded' : 'planned');
+  const action = archived ? 'arquivar' : 'restaurar';
+  const ok = window.confirm(`Deseja ${action} a sessao "${session.title || session.sourceSessionId}"? Isso nao apaga arquivos nem historico.`);
+  if (!ok) return;
+  try {
+    setBusy(true);
+    const payload = await api('/api/sessions/update', {
+      method: 'POST',
+      body: JSON.stringify({
+        sourceSessionId: session.sourceSessionId,
+        title: $('#editSessionTitle')?.value || session.title || session.sourceSessionId,
+        sessionDate: $('#editSessionDate')?.value || session.sessionDate || null,
+        startedAt: localDateTimeToIso($('#editSessionStartedAt')?.value || '') || session.startedAt || null,
+        endedAt: localDateTimeToIso($('#editSessionEndedAt')?.value || '') || session.endedAt || null,
+        arc: $('#editSessionArc')?.value || session.arc || '',
+        status: nextStatus,
+        summary: $('#editSessionSummary')?.value || session.summary || '',
+        runId: DEFAULT_RUN
+      })
+    });
+    state.sessions = payload.sessions || state.sessions;
+    state.review = null;
+    state.summary = null;
+    remember(`Sessao ${archived ? 'arquivada' : 'restaurada'}: ${session.sourceSessionId}`);
+    toast(archived ? 'Sessao arquivada.' : 'Sessao restaurada.');
+    await loadSession(session.sourceSessionId);
+    state.tab = 'sessions';
+    render();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function uploadCraigFromForm() {
   const file = $('#craigZipFile')?.files?.[0];
   if (!file) {
@@ -1623,6 +1849,10 @@ async function uploadCraigFromForm() {
       body: JSON.stringify({
         sourceSessionId: targetSessionId,
         attachToExisting: Boolean(targetSessionId),
+        title: $('#ingestSessionTitle')?.value || '',
+        sessionDate: $('#ingestSessionDate')?.value || null,
+        arc: $('#ingestSessionArc')?.value || '',
+        summary: $('#ingestSessionSummary')?.value || '',
         fileName: file.name,
         sizeBytes: file.size,
         contentType: file.type || 'application/zip',
@@ -3117,7 +3347,9 @@ window.setCandidateDecision = setCandidateDecision;
 window.loadSegmentAudio = loadSegmentAudio;
 window.createSessionFromForm = createSessionFromForm;
 window.updateSessionFromForm = updateSessionFromForm;
+window.setSessionArchived = setSessionArchived;
 window.uploadCraigFromForm = uploadCraigFromForm;
+window.rememberCraigFileSelection = rememberCraigFileSelection;
 window.saveCraigTrack = saveCraigTrack;
 window.initAuth = initAuth;
 window.loadAuthProfile = loadAuthProfile;
