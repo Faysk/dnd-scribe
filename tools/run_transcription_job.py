@@ -9,11 +9,13 @@ import mimetypes
 import re
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from validate_ai_cost_pipeline import apply_env_cost_overrides, load_env, load_json, policy_model
 
@@ -88,6 +90,48 @@ def resolve_path(raw_path: str) -> Path:
     return ROOT / path
 
 
+def optional_env(env: dict[str, str], *names: str) -> str:
+    for name in names:
+        value = str(env.get(name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def r2_client(env: dict[str, str]):
+    endpoint = optional_env(env, "R2_S3_ENDPOINT", "R2_ENDPOINT")
+    if not endpoint:
+        raise RuntimeError("R2_S3_ENDPOINT or R2_ENDPOINT is required to download cloud audio")
+    parsed = urlparse(endpoint)
+    if not parsed.scheme or not parsed.netloc:
+        raise RuntimeError("R2 endpoint must include scheme and host")
+    endpoint = f"{parsed.scheme}://{parsed.netloc}"
+
+    import boto3
+    from botocore.config import Config
+
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=env.get("R2_ACCESS_KEY_ID"),
+        aws_secret_access_key=env.get("R2_SECRET_ACCESS_KEY"),
+        region_name="auto",
+        config=Config(signature_version="s3v4"),
+    )
+
+
+def download_r2_audio(env: dict[str, str], unit: dict[str, Any], tmp_dir: Path) -> Path:
+    bucket = str(unit.get("storage_bucket") or env.get("R2_BUCKET") or "").strip()
+    key = str(unit.get("storage_path") or "").strip()
+    if not bucket or not key:
+        raise RuntimeError("Work unit is missing storage_bucket/storage_path")
+    suffix = Path(key).suffix or ".audio"
+    target = tmp_dir / "r2-audio" / str(unit["work_unit_id"])[:2] / f"{unit['work_unit_id']}{suffix}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    r2_client(env).download_file(bucket, key, str(target))
+    return target
+
+
 def run_validator(args: argparse.Namespace, execute_mode: bool) -> None:
     cmd = [
         sys.executable,
@@ -133,6 +177,7 @@ with target_session as (
     wu.end_ms,
     coalesce(wu.duration_ms, greatest(0, coalesce(wu.end_ms, 0) - coalesce(wu.start_ms, 0)), 0)::int duration_ms,
     wu.sha256,
+    wu.storage_bucket,
     wu.storage_path,
     wu.audio_dbfs,
     rf.original_filename,
@@ -564,6 +609,8 @@ def transcribe_unit(
     job_id: str,
     unit: dict[str, Any],
     policy: dict[str, Any],
+    env: dict[str, str],
+    tmp_dir: Path,
     api_key: str,
     model: str,
     prompt_version: str,
@@ -580,23 +627,10 @@ def transcribe_unit(
         "audioChunkId": unit.get("audio_chunk_id"),
         "trackKey": unit.get("track_key"),
         "unitIndex": unit.get("unit_index"),
+        "storageBucket": unit.get("storage_bucket"),
+        "storagePath": unit.get("storage_path"),
         "path": str(path),
     }
-
-    if not path.exists():
-        message = f"Local audio file not found: {path}"
-        if execute_mode:
-            update_work_unit_status(database_url, unit, "failed", {"error": message})
-            write_ledger(database_url, session, job_id, unit, model, "failed", estimate_cost(unit, policy), None, {**base, "error": message})
-        return {**base, "action": "missing_file", "error": message}
-
-    size = path.stat().st_size
-    if size > max_file_bytes:
-        message = f"Audio work unit exceeds max file size: {size} bytes"
-        if execute_mode:
-            update_work_unit_status(database_url, unit, "failed", {"error": message, "sizeBytes": size})
-            write_ledger(database_url, session, job_id, unit, model, "failed", estimate_cost(unit, policy), None, {**base, "error": message, "sizeBytes": size})
-        return {**base, "action": "too_large", "sizeBytes": size, "error": message}
 
     cache = cache_entry(database_url, unit, model, prompt_version)
     if cache:
@@ -607,6 +641,30 @@ def transcribe_unit(
     estimated = estimate_cost(unit, policy)
     if not execute_mode:
         return {**base, "action": "would_transcribe", "durationMs": unit.get("duration_ms"), "estimatedCostUsd": estimated}
+
+    if not path.exists():
+        try:
+            path = download_r2_audio(env, unit, tmp_dir)
+            base["downloadedPath"] = str(path)
+        except Exception as error:  # noqa: BLE001
+            message = f"Audio file not found locally and R2 download failed: {error}"
+            update_work_unit_status(database_url, unit, "failed", {"error": message})
+            write_ledger(database_url, session, job_id, unit, model, "failed", estimated, None, {**base, "error": message})
+            return {**base, "action": "missing_file", "error": message}
+
+    if not path.exists():
+        message = f"Audio file not found: {path}"
+        update_work_unit_status(database_url, unit, "failed", {"error": message})
+        write_ledger(database_url, session, job_id, unit, model, "failed", estimated, None, {**base, "error": message})
+        return {**base, "action": "missing_file", "error": message}
+
+    size = path.stat().st_size
+    if size > max_file_bytes:
+        message = f"Audio work unit exceeds max file size: {size} bytes"
+        if execute_mode:
+            update_work_unit_status(database_url, unit, "failed", {"error": message, "sizeBytes": size})
+            write_ledger(database_url, session, job_id, unit, model, "failed", estimated, None, {**base, "error": message, "sizeBytes": size})
+        return {**base, "action": "too_large", "sizeBytes": size, "error": message}
 
     try:
         raw_response, request_id = openai_transcribe(api_key, path, model, language, prompt, timeout)
@@ -710,27 +768,31 @@ def main() -> int:
     max_file_bytes = int(args.max_file_mib * 1024 * 1024)
     prompt = None if args.no_prompt else args.prompt
     failed = False
-    for unit in units:
-        result = transcribe_unit(
-            database_url,
-            session,
-            job_id,
-            unit,
-            policy,
-            api_key,
-            model,
-            args.prompt_version,
-            args.language,
-            prompt,
-            max_file_bytes,
-            args.timeout,
-            args.execute,
-        )
-        results.append(result)
-        if result.get("action") in {"failed", "missing_file", "too_large"}:
-            failed = True
-            if args.execute and not args.continue_on_error:
-                break
+    with tempfile.TemporaryDirectory(prefix="dnd-transcribe-") as temp_name:
+        tmp_dir = Path(temp_name)
+        for unit in units:
+            result = transcribe_unit(
+                database_url,
+                session,
+                job_id,
+                unit,
+                policy,
+                env,
+                tmp_dir,
+                api_key,
+                model,
+                args.prompt_version,
+                args.language,
+                prompt,
+                max_file_bytes,
+                args.timeout,
+                args.execute,
+            )
+            results.append(result)
+            if result.get("action") in {"failed", "missing_file", "too_large"}:
+                failed = True
+                if args.execute and not args.continue_on_error:
+                    break
 
     output = {
         "execute": args.execute,

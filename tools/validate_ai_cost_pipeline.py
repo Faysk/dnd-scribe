@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -85,7 +86,7 @@ ENV_COST_OVERRIDES = {
 
 
 def load_env(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
+    values: dict[str, str] = dict(os.environ)
     if not path.exists():
         return values
     for raw in path.read_text(errors="replace").splitlines():
@@ -360,12 +361,14 @@ def validate_session(report: dict[str, Any] | None, policy: dict[str, Any], issu
     if total_units == 0:
         add_issue(issues, "warning", "no_work_units", "Sessao nao tem work units de transcricao depois dos filtros de custo.")
     if missing_hash:
+        level = "error" if candidate_units == 0 else "warning"
         add_issue(
             issues,
-            "error",
+            level,
             "work_units_missing_hash",
-            "Existem work units sem sha256; elas devem ficar bloqueadas ate reprocessar metadados.",
+            "Existem work units sem sha256; elas ficam fora do lote pago ate reprocessar metadados.",
             count=missing_hash,
+            transcribeCandidates=candidate_units,
         )
     if missing_file_hashes:
         add_issue(issues, "warning", "files_missing_hash", "Existem arquivos de gravacao sem sha256.", count=missing_file_hashes)
