@@ -8,7 +8,8 @@ Esta etapa nao decide o que pode ser apagado. Essa decisao vem da view `audio_st
 
 ## Entregas
 
-- Nova rota POST: `/api/storage/cleanup-run`.
+- Nova rota POST usada pelo front em producao: `/api/storage-cleanup-run`.
+- Alias aceito no codigo: `/api/storage/cleanup-run`; na Vercel Hobby atual, caminhos profundos podem retornar 404 antes do catch-all.
 - Usa a Function existente `api/[...path].js`, sem aumentar a contagem de Functions na Vercel.
 - Permissao exigida: `project.jobs.run`.
 - Modo padrao: `dryRun`.

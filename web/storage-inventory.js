@@ -195,7 +195,7 @@
     inventory.cleanupRunning = true;
     try { render?.(); } catch (_error) {}
     try {
-      const payload = await api('/api/storage/cleanup-run', {
+      const payload = await api('/api/storage-cleanup-run', {
         method: 'POST',
         body: JSON.stringify({
           dryRun,

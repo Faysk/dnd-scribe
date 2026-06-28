@@ -4565,7 +4565,7 @@ async function handlePost(req, res, path) {
     const payload = await runCloudPlanChunks(req, campaign, body);
     return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
   }
-  if (path === '/api/storage/cleanup-run') {
+  if (path === '/api/storage-cleanup-run' || path === '/api/storage/cleanup-run') {
     const payload = await runStorageCleanup(req, campaign, body);
     return sendJson(res, 200, payload);
   }
