@@ -4,6 +4,7 @@ const path = require('node:path');
 const zlib = require('node:zlib');
 const { Pool } = require('pg');
 const { notifyDiscord } = require('../../lib/discord');
+const { markJobStep } = require('../../lib/job-steps');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const MAX_INFO_ENTRY_BYTES = 1024 * 1024;
@@ -720,6 +721,11 @@ async function runCloudIngest(raw) {
   }
 
   try {
+    if (!dryRun) {
+      await markJobStep(db, job, 'running', {
+        progress: { workerStatus: 'manifest_running', paidAiCostUsd: 0 }
+      });
+    }
     const manifest = await buildManifest(job);
     const persisted = await persistManifest(db, job, manifest, dryRun);
     if (!dryRun) {
@@ -734,6 +740,17 @@ async function runCloudIngest(raw) {
         sessionWindow: persisted.sessionWindow,
         nextJobId: persisted.nextJobId
       }
+      });
+      await markJobStep(db, job, 'succeeded', {
+        retryable: false,
+        progress: {
+          workerStatus: 'manifest_succeeded',
+          paidAiCostUsd: 0,
+          tracks: manifest.tracks.length,
+          participants: manifest.participants.length,
+          zipEntries: manifest.zipEntries.length,
+          nextJobId: persisted.nextJobId || null
+        }
       });
       await notifyJob({
         target: 'recordings',
@@ -771,6 +788,10 @@ async function runCloudIngest(raw) {
   } catch (error) {
     if (!dryRun) {
       await failJob(db, job.id, error, { workerStatus: 'manifest_failed', paidAiCostUsd: 0 });
+      await markJobStep(db, job, 'failed', {
+        error: error.message || String(error),
+        progress: { workerStatus: 'manifest_failed', paidAiCostUsd: 0 }
+      });
       await notifyJob({
         target: 'ops',
         title: 'Falha no Craig manifest',

@@ -1733,6 +1733,16 @@ function jobResponse(row) {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     createdAt: row.created_at,
+    stepSummary: row.step_status ? {
+      status: row.step_status,
+      total: row.total_steps || 0,
+      succeeded: row.succeeded_steps || 0,
+      failed: row.failed_steps || 0,
+      running: row.running_steps || 0,
+      retrying: row.retrying_steps || 0,
+      blocked: row.blocked_steps || 0
+    } : null,
+    steps: row.job_steps || [],
     session: row.source_session_id ? {
       sourceSessionId: row.source_session_id,
       title: row.session_title || null,
@@ -1749,16 +1759,105 @@ async function listJobs(campaign, sourceSessionId = '') {
     `
 select pj.id, pj.job_type, pj.status, pj.attempts, pj.input, pj.output, pj.error,
        pj.started_at, pj.finished_at, pj.created_at,
-       s.source_session_id, s.title session_title, s.status session_status
+       s.source_session_id, s.title session_title, s.status session_status,
+       jss.step_status, jss.total_steps, jss.succeeded_steps, jss.failed_steps,
+       jss.running_steps, jss.retrying_steps, jss.blocked_steps, jss.steps job_steps
 from processing_jobs pj
 left join sessions s on s.id = pj.session_id
 left join campaigns c on c.id = s.campaign_id
+left join processing_job_step_summary jss on jss.job_id = pj.id
 where c.slug = $1 ${sourceFilter}
 order by pj.created_at desc
 limit 50;`,
     params
   );
   return result.rows.map(jobResponse);
+}
+
+async function retryProcessingJob(req, campaign, body) {
+  const access = await requirePermission(req, campaign, {
+    action: 'project.jobs.run',
+    scopeType: 'project',
+    scopeId: PROJECT_SCOPE_ID,
+    legacyRoles: ['owner', 'master'],
+    error: 'Reprocessar jobs exige permissao project.jobs.run.'
+  });
+  const jobId = cleanText(body.jobId || body.job_id, 80);
+  if (!jobId) throw httpError(400, 'jobId obrigatorio para retry.');
+  const reason = cleanText(body.reason || 'retry_requested_from_ui', 500);
+  const actor = access.profile?.id || access.user?.id || access.user?.email || 'unknown';
+  const db = getPool();
+  const result = await db.query(
+    `
+with target as (
+  select pj.id
+  from processing_jobs pj
+  join sessions s on s.id = pj.session_id
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1
+    and pj.id = $2::uuid
+    and pj.status in ('failed','cancelled')
+  for update
+)
+update processing_jobs pj
+set status = 'retrying',
+    error = null,
+    finished_at = null,
+    output = coalesce(pj.output, '{}'::jsonb) || jsonb_build_object(
+      'retryRequestedAt', now(),
+      'retryRequestedBy', $3::text,
+      'retryReason', $4::text
+    )
+from target
+where pj.id = target.id
+returning pj.id;`,
+    [campaign, jobId, String(actor), reason]
+  );
+  if (!result.rows.length) {
+    throw httpError(409, 'Job nao encontrado ou nao esta em estado retryable.');
+  }
+  await db.query(
+    `
+update processing_job_steps
+set status = 'retrying',
+    error = null,
+    retryable = true,
+    finished_at = null,
+    progress = coalesce(progress, '{}'::jsonb) || jsonb_build_object(
+      'retryRequestedAt', now(),
+      'retryRequestedBy', $2::text,
+      'retryReason', $3::text
+    ),
+    updated_at = now()
+where job_id = $1::uuid
+  and status in ('failed','blocked');`,
+    [jobId, String(actor), reason]
+  );
+  await db.query(
+    `
+insert into processing_job_steps (
+  id, job_id, step_key, label, status, attempts, retryable, order_index,
+  progress, created_at, updated_at
+)
+select gen_random_uuid(), $1::uuid, 'retry_request', 'Retry solicitado', 'retrying',
+       0, true, 5,
+       jsonb_build_object('retryRequestedAt', now(), 'retryRequestedBy', $2::text, 'retryReason', $3::text),
+       now(), now()
+where not exists (
+  select 1 from processing_job_steps where job_id = $1::uuid and step_key = 'retry_request'
+)
+on conflict (job_id, step_key) do update set
+  status = 'retrying',
+  progress = coalesce(processing_job_steps.progress, '{}'::jsonb) || excluded.progress,
+  updated_at = now();`,
+    [jobId, String(actor), reason]
+  );
+  return {
+    ok: true,
+    retried: true,
+    jobId,
+    reason
+  };
 }
 
 function loadCraigMapConfig() {
@@ -3698,6 +3797,10 @@ async function handlePost(req, res, path) {
     } finally {
       client.release();
     }
+  }
+  if (path === '/api/jobs/retry') {
+    const payload = await retryProcessingJob(req, campaign, body);
+    return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
   }
   if (path === '/api/uploads/craig-url') {
     await requireCampaignAccess(req, campaign, ['owner', 'master']);

@@ -3,6 +3,7 @@ const { Readable } = require('node:stream');
 const zlib = require('node:zlib');
 const { Pool } = require('pg');
 const { notifyDiscord } = require('../../lib/discord');
+const { markJobStep } = require('../../lib/job-steps');
 
 const ZIP_TAIL_BYTES = 128 * 1024;
 const MAX_TRACKS_PER_RUN = 3;
@@ -578,6 +579,11 @@ async function runCloudExtract(raw) {
   }
 
   try {
+    if (!dryRun) {
+      await markJobStep(db, job, 'running', {
+        progress: { workerStatus: 'extract_running', paidAiCostUsd: 0, maxTracks }
+      });
+    }
     const plan = await buildPlan(db, job);
     const pending = plan.tracks.filter(item => !item.existingRecordingFileId);
     const selected = pending.slice(0, maxTracks);
@@ -629,6 +635,10 @@ async function runCloudExtract(raw) {
 
     if (remaining > 0) {
       await requeueJob(db, job.id, progress);
+      await markJobStep(db, job, 'retrying', {
+        progress,
+        retryable: true
+      });
       await notifyJob({
         target: 'recordings',
         title: 'Craig tracks parcialmente extraidas',
@@ -657,6 +667,14 @@ async function runCloudExtract(raw) {
         ...progress,
         nextJobId,
         extractedFiles: finalFiles.length
+      });
+      await markJobStep(db, job, 'succeeded', {
+        retryable: false,
+        progress: {
+          ...progress,
+          nextJobId,
+          extractedFiles: finalFiles.length
+        }
       });
       await db.query(
         `
@@ -698,6 +716,10 @@ where id = $1::uuid;`,
   } catch (error) {
     if (!dryRun) {
       await failJob(db, job.id, error, { workerStatus: 'extract_failed', paidAiCostUsd: 0 });
+      await markJobStep(db, job, 'failed', {
+        error: error.message || String(error),
+        progress: { workerStatus: 'extract_failed', paidAiCostUsd: 0 }
+      });
       await notifyJob({
         target: 'ops',
         title: 'Falha ao extrair Craig tracks',

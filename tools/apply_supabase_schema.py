@@ -25,6 +25,7 @@ DEFAULT_SCHEMA_FILES = [
     Path("schemas/20260627_013_exclude_silent_work_units.sql"),
     Path("schemas/20260628_014_audio_artifacts_retention.sql"),
     Path("schemas/20260628_015_audio_artifact_reclassify.sql"),
+    Path("schemas/20260628_016_processing_job_steps.sql"),
 ]
 
 
