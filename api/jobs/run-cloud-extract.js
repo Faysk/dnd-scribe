@@ -309,7 +309,7 @@ with candidate as (
   order by pj.created_at
   for update skip locked
   limit 1
-)
+), updated as (
 update processing_jobs pj
 set status = 'running',
     attempts = coalesce(pj.attempts, 0) + 1,
@@ -318,7 +318,14 @@ set status = 'running',
     output = coalesce(pj.output, '{}'::jsonb) || $2::jsonb
 from candidate
 where pj.id = candidate.id
-returning pj.*;`,
+returning pj.*
+), enriched as (
+  select updated.*, s.source_session_id, s.title session_title, c.slug campaign_slug
+  from updated
+  join sessions s on s.id = updated.session_id
+  join campaigns c on c.id = s.campaign_id
+)
+select * from enriched;`,
     [jobId || null, JSON.stringify({ workerStatus: 'running', worker: 'vercel_cloud_extract', paidAiCostUsd: 0 })]
   );
   return result.rows[0] || null;
