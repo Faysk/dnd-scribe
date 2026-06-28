@@ -67,11 +67,15 @@ def run_json(database_url: str, sql: str) -> Any:
 
 def run_scalar(database_url: str, sql: str) -> str | None:
     output = subprocess.check_output(
-        ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-tA", "-c", sql],
+        ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-q", "-tA", "-c", sql],
         text=True,
         encoding="utf-8",
     )
-    return output.strip() or None
+    for line in output.splitlines():
+        value = line.strip()
+        if value:
+            return value
+    return None
 
 
 def execute(database_url: str, sql: str) -> None:
@@ -184,31 +188,31 @@ with target_session as (
     p.id::text participant_id,
     p.player_name,
     p.character_name,
-    p.role speaker_role
+    p.role speaker_role,
+    tc.id::text cache_id
   from audio_transcription_work_units wu
   join recording_files rf on rf.id = wu.source_file_id
   left join participants p on p.id = rf.participant_id
+  left join transcription_cache tc
+    on tc.audio_sha256 = wu.sha256
+   and tc.provider = 'openai'
+   and tc.model = {sql_literal(model)}
+   and tc.prompt_version = {sql_literal(prompt_version)}
+   and tc.status = 'succeeded'
   where wu.session_id = (select id from target_session)
     and nullif(wu.sha256, '') is not null
     and nullif(wu.storage_path, '') is not null
     and coalesce(wu.probably_silent, false) is false
     and coalesce(wu.transcription_status, 'pending') not in ('skipped_silence', 'transcribed', 'cached')
-    and not exists (
-      select 1
-      from transcription_cache tc
-      where tc.audio_sha256 = wu.sha256
-        and tc.provider = 'openai'
-        and tc.model = {sql_literal(model)}
-        and tc.prompt_version = {sql_literal(prompt_version)}
-        and tc.status = 'succeeded'
-    )
-  order by wu.track_key, wu.start_ms, wu.unit_type, wu.unit_index
+  order by (tc.id is not null) desc, wu.track_key, wu.start_ms, wu.unit_type, wu.unit_index
 ), stats as (
   select
     count(*)::int total_candidates,
     count(*) filter (where unit_type = 'speech_slice')::int speech_slice_candidates,
     count(*) filter (where unit_type = 'chunk')::int chunk_fallback_candidates,
-    round((coalesce(sum(duration_ms), 0) / 60000.0)::numeric, 3) candidate_audio_minutes
+    count(*) filter (where cache_id is not null)::int cache_hit_candidates,
+    count(*) filter (where cache_id is null)::int transcribe_candidates,
+    round((coalesce(sum(duration_ms) filter (where cache_id is null), 0) / 60000.0)::numeric, 3) candidate_audio_minutes
   from candidates
 )
 select json_build_object(
@@ -281,7 +285,8 @@ def estimate_cost(unit: dict[str, Any], policy: dict[str, Any]) -> float | None:
 
 
 def estimate_units(units: list[dict[str, Any]], policy: dict[str, Any]) -> dict[str, Any]:
-    duration_ms = sum(int(unit.get("duration_ms") or 0) for unit in units)
+    billable_units = [unit for unit in units if not unit.get("cache_id")]
+    duration_ms = sum(int(unit.get("duration_ms") or 0) for unit in billable_units)
     minutes_exact = duration_ms / 60000.0
     per_minute = unit_cost(policy, "transcriptionAudioMinute")
     return {

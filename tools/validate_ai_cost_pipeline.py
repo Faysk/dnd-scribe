@@ -292,16 +292,20 @@ with target_session as (
    and tc.prompt_version = {sql_literal(prompt_version)}
    and tc.status = 'succeeded'
   where wu.session_id = (select id from target_session)
-), candidate_work_units as (
+), workable_units as (
   select *
   from work_units
   where nullif(sha256, '') is not null
     and coalesce(probably_silent, false) is false
-    and cache_id is null
-  order by track_key, start_ms, unit_type, unit_index
+    and coalesce(transcription_status, 'pending') not in ('skipped_silence', 'transcribed', 'cached')
+  order by (cache_id is not null) desc, track_key, start_ms, unit_type, unit_index
+), paid_candidate_work_units as (
+  select *
+  from workable_units
+  where cache_id is null
 ), planned_work_units as (
   select *
-  from candidate_work_units
+  from workable_units
   {planned_limit_clause}
 ), work_unit_stats as (
   select
@@ -315,11 +319,11 @@ with target_session as (
   select
     count(*)::int transcribe_candidate_work_units,
     round((coalesce(sum(coalesce(duration_ms, greatest(0, coalesce(end_ms, 0) - coalesce(start_ms, 0)), 0)), 0) / 60000.0)::numeric, 3) billable_audio_minutes
-  from candidate_work_units
+  from paid_candidate_work_units
 ), planned_stats as (
   select
-    count(*)::int planned_transcribe_work_units,
-    round((coalesce(sum(coalesce(duration_ms, greatest(0, coalesce(end_ms, 0) - coalesce(start_ms, 0)), 0)), 0) / 60000.0)::numeric, 3) planned_billable_audio_minutes
+    count(*) filter (where cache_id is null)::int planned_transcribe_work_units,
+    round((coalesce(sum(coalesce(duration_ms, greatest(0, coalesce(end_ms, 0) - coalesce(start_ms, 0)), 0)) filter (where cache_id is null), 0) / 60000.0)::numeric, 3) planned_billable_audio_minutes
   from planned_work_units
 )
 select row_to_json(row) from (
