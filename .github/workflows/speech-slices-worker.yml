@@ -104,4 +104,12 @@ jobs:
           if [ "${{ github.event.inputs.replace }}" = "true" ]; then
             args+=(--replace)
           fi
-          python tools/cloud_speech_slices_worker.py "${args[@]}"
+          python tools/cloud_speech_slices_worker.py "${args[@]}" 2>&1 | tee speech-slices-worker.log
+
+      - name: Upload worker log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: speech-slices-worker-log
+          path: speech-slices-worker.log
+          if-no-files-found: ignore
