@@ -614,6 +614,142 @@ limit 1;`,
   }
 }
 
+function artifactTypeForTrack(track) {
+  return String(track.filename || '').toLowerCase().endsWith('.flac')
+    ? 'raw_track_flac'
+    : 'raw_track_other';
+}
+
+async function upsertTrackAudioArtifact(db, job, track, recordingFileId, reason = 'extracted_track') {
+  if (!recordingFileId) return null;
+  const artifactType = artifactTypeForTrack(track);
+  const result = await db.query(
+    `
+with policy as (
+  select default_retention_class, expires_after
+  from audio_retention_policies
+  where artifact_type = $4
+), upserted as (
+  insert into audio_artifacts (
+    session_id, source_file_id, created_by_job_id, artifact_type, retention_class,
+    lifecycle_status, storage_bucket, storage_path, original_filename, mime_type,
+    codec, size_bytes, duration_ms, source_system, source_role, track_key,
+    retention_expires_at, metadata, created_at, updated_at
+  )
+  values (
+    $1::uuid, $2::uuid, $3::uuid, $4,
+    coalesce((select default_retention_class from policy), 'work_temp'),
+    'active', $5, $6, $7, 'audio/flac',
+    case when $4 = 'raw_track_flac' then 'flac' else null end,
+    $8::bigint, $9::integer, 'craig', $10, $11,
+    case
+      when (select expires_after from policy) is null then null
+      else now() + (select expires_after from policy)
+    end,
+    $12::jsonb, now(), now()
+  )
+  on conflict (storage_bucket, storage_path) do update set
+    source_file_id = coalesce(audio_artifacts.source_file_id, excluded.source_file_id),
+    created_by_job_id = coalesce(audio_artifacts.created_by_job_id, excluded.created_by_job_id),
+    artifact_type = excluded.artifact_type,
+    retention_class = case
+      when audio_artifacts.retention_class in ('permanent','permanent_compact','review_hold','legal_hold')
+        then audio_artifacts.retention_class
+      else excluded.retention_class
+    end,
+    lifecycle_status = case
+      when audio_artifacts.lifecycle_status in ('deleted','missing','failed') then 'active'
+      else audio_artifacts.lifecycle_status
+    end,
+    original_filename = excluded.original_filename,
+    mime_type = excluded.mime_type,
+    codec = excluded.codec,
+    size_bytes = greatest(coalesce(audio_artifacts.size_bytes, 0), coalesce(excluded.size_bytes, 0)),
+    duration_ms = coalesce(excluded.duration_ms, audio_artifacts.duration_ms),
+    source_system = excluded.source_system,
+    source_role = excluded.source_role,
+    track_key = coalesce(excluded.track_key, audio_artifacts.track_key),
+    retention_expires_at = coalesce(audio_artifacts.retention_expires_at, excluded.retention_expires_at),
+    metadata = coalesce(audio_artifacts.metadata, '{}'::jsonb) || excluded.metadata,
+    updated_at = now()
+  returning id
+)
+select id from upserted;`,
+    [
+      job.session_id,
+      recordingFileId,
+      job.id,
+      artifactType,
+      track.storageBucket,
+      track.targetPath,
+      baseName(track.filename),
+      track.fileSize,
+      track.durationMs || null,
+      `craig_track_${track.trackKey}`,
+      track.trackKey,
+      JSON.stringify({
+        indexed_from: 'cloud_extract_craig_tracks',
+        indexed_reason: reason,
+        source_job_id: job.id,
+        source_recording_file_id: sourceRecordingFileId(job),
+        source_zip_bucket: track.sourceBucket,
+        source_zip_path: track.sourcePath,
+        source_zip_filename: track.filename,
+        track_key: track.trackKey,
+        compressed_size: track.compressedSize,
+        compression_method: track.compressionMethod,
+        duration_ms: track.durationMs || null,
+        crc32: track.crc32,
+        indexed_at: new Date().toISOString()
+      })
+    ]
+  );
+  const artifactId = result.rows[0]?.id || null;
+  if (artifactId) {
+    await db.query(
+      `
+insert into audio_artifact_events (artifact_id, event_type, job_id, note, payload)
+select $1::uuid, 'created', $2::uuid, 'Indexed Craig track in audio artifact inventory.', $3::jsonb
+where not exists (
+  select 1
+  from audio_artifact_events
+  where artifact_id = $1::uuid
+    and event_type = 'created'
+    and payload->>'source' = 'cloud_extract_craig_tracks'
+);`,
+      [
+        artifactId,
+        job.id,
+        JSON.stringify({
+          source: 'cloud_extract_craig_tracks',
+          reason,
+          recording_file_id: recordingFileId,
+          track_key: track.trackKey,
+          storage_bucket: track.storageBucket,
+          storage_path: track.targetPath
+        })
+      ]
+    );
+  }
+  return artifactId;
+}
+
+async function syncExistingTrackArtifacts(db, job, tracks) {
+  let synced = 0;
+  for (const track of tracks) {
+    if (!track.existingRecordingFileId) continue;
+    const artifactId = await upsertTrackAudioArtifact(
+      db,
+      job,
+      track,
+      track.existingRecordingFileId,
+      'existing_recording_file'
+    );
+    if (artifactId) synced += 1;
+  }
+  return synced;
+}
+
 async function upsertTrackFile(db, job, track, participantId) {
   const result = await db.query(
     `
@@ -661,7 +797,9 @@ returning id;`,
       })
     ]
   );
-  return result.rows[0].id;
+  const recordingFileId = result.rows[0].id;
+  await upsertTrackAudioArtifact(db, job, track, recordingFileId, 'newly_extracted_track');
+  return recordingFileId;
 }
 
 async function insertNextChunkJob(db, job, extractedFiles) {
@@ -805,6 +943,7 @@ async function runCloudExtract(raw) {
         await syncPlannedExtractionStep(db, job, track);
       }
     }
+    const indexedExistingArtifacts = dryRun ? 0 : await syncExistingTrackArtifacts(db, job, plan.tracks);
     const pending = plan.tracks.filter(item => !item.existingRecordingFileId);
     const selected = pending.slice(0, maxTracks);
     if (dryRun) {
@@ -872,6 +1011,7 @@ async function runCloudExtract(raw) {
       paidAiCostUsd: 0,
       extractedThisRun: extracted.length,
       alreadyExtractedBeforeRun: plan.tracks.length - pending.length,
+      indexedExistingArtifacts,
       totalTracks: plan.tracks.length,
       remainingTracks: remaining,
       maxTracks,
