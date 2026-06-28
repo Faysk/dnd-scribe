@@ -32,6 +32,7 @@ DEFAULT_SCHEMA_FILES = [
     Path("schemas/20260628_020_audio_cleanup_readiness.sql"),
     Path("schemas/20260628_021_audio_cleanup_success_policy.sql"),
     Path("schemas/20260628_022_audio_cleanup_transcription_evidence.sql"),
+    Path("schemas/20260628_023_silent_speech_slice_cleanup.sql"),
 ]
 
 

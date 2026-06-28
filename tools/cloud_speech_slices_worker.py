@@ -598,7 +598,12 @@ values (
   %s::uuid, %s::uuid, %s::uuid, %s, %s::integer,
   %s::integer, %s::integer, %s::integer, %s, %s, %s,
   %s::numeric, %s::integer, %s::numeric, %s::boolean, %s::numeric,
-  'ffmpeg_silencedetect', %s::jsonb, 'pending', %s::jsonb, now(), now()
+  'ffmpeg_silencedetect',
+  %s::jsonb,
+  case when %s::boolean then 'skipped_silence' else 'pending' end,
+  %s::jsonb,
+  now(),
+  now()
 )
 on conflict (source_chunk_id, slice_index) do update set
   start_ms = excluded.start_ms,
@@ -615,6 +620,7 @@ on conflict (source_chunk_id, slice_index) do update set
   detection_params = excluded.detection_params,
   metadata = coalesce(audio_speech_slices.metadata, '{}'::jsonb) || excluded.metadata,
   transcription_status = case
+    when excluded.probably_silent is true then 'skipped_silence'
     when audio_speech_slices.transcription_status = 'skipped_silence' then 'pending'
     else audio_speech_slices.transcription_status
   end,
@@ -638,6 +644,7 @@ on conflict (source_chunk_id, slice_index) do update set
             stats.get("probably_silent"),
             stats.get("silence_dbfs_threshold"),
             jsonb(detection_params),
+            stats.get("probably_silent"),
             jsonb({"builder": "tools/cloud_speech_slices_worker.py"}),
         ),
     )

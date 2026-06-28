@@ -286,7 +286,7 @@ insert into audio_speech_slices (
   {sql_optional_number(stats.get('silence_dbfs_threshold'))},
   'ffmpeg_silencedetect',
   {sql_json(detection_params)},
-  'pending',
+  case when {sql_bool(stats.get('probably_silent'))} then 'skipped_silence' else 'pending' end,
   {sql_json(metadata)},
   now(),
   now()
@@ -305,6 +305,11 @@ do update set
   silence_dbfs_threshold = excluded.silence_dbfs_threshold,
   detection_params = excluded.detection_params,
   metadata = coalesce(audio_speech_slices.metadata, '{{}}'::jsonb) || excluded.metadata,
+  transcription_status = case
+    when excluded.probably_silent is true then 'skipped_silence'
+    when audio_speech_slices.transcription_status = 'skipped_silence' then 'pending'
+    else audio_speech_slices.transcription_status
+  end,
   updated_at = now();
 """,
     )
