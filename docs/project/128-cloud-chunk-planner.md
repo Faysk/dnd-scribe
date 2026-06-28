@@ -13,7 +13,7 @@ Ativar `cloud_plan_audio_chunks` em producao sem criar uma nova Vercel Function 
 - Faz range request pequeno no FLAC para ler `STREAMINFO`.
 - Calcula duracao, sample rate, canais e bits por sample sem baixar o arquivo inteiro.
 - Cria chunks planejados em `audio_chunks` usando `chunkSeconds`, padrao `600`.
-- Usa upsert idempotente por `(session_id, track_key, chunk_index)`.
+- Usa upsert idempotente em lote por `(session_id, track_key, chunk_index)`.
 - Marca chunks como `transcription_status = planned_cloud_chunk`.
 - Mantem `storage_path` e `sha256` vazios porque o audio do chunk ainda nao foi renderizado.
 - Cria o proximo job `cloud_detect_speech_slices`.

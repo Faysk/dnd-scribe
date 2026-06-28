@@ -2398,19 +2398,43 @@ function buildTrackChunkRows(track, chunkSeconds) {
   return rows;
 }
 
-async function upsertPlannedChunk(db, job, row) {
+async function upsertPlannedChunks(db, job, chunks) {
+  if (!chunks.length) return 0;
+  const rows = chunks.map(row => ({
+    source_file_id: row.sourceFileId,
+    chunk_index: row.chunkIndex,
+    start_ms: row.startMs,
+    end_ms: row.endMs,
+    track_key: row.trackKey,
+    source_chunk_name: row.sourceChunkName,
+    duration_ms: row.durationMs,
+    metadata: row.metadata
+  }));
   const result = await db.query(
     `
+with rows as (
+  select *
+  from jsonb_to_recordset($2::jsonb) as row_data(
+    source_file_id uuid,
+    chunk_index integer,
+    start_ms integer,
+    end_ms integer,
+    track_key text,
+    source_chunk_name text,
+    duration_ms integer,
+    metadata jsonb
+  )
+)
 insert into audio_chunks (
   id, session_id, source_file_id, chunk_index, start_ms, end_ms,
   storage_bucket, storage_path, transcription_status, track_key, source_chunk_name,
   duration_ms, size_bytes, metadata, created_at, updated_at
 )
-values (
-  gen_random_uuid(), $1::uuid, $2::uuid, $3::integer, $4::integer, $5::integer,
-  null, null, 'planned_cloud_chunk', $6, $7,
-  $8::integer, null, $9::jsonb, now(), now()
-)
+select
+  gen_random_uuid(), $1::uuid, rows.source_file_id, rows.chunk_index, rows.start_ms, rows.end_ms,
+  null, null, 'planned_cloud_chunk', rows.track_key, rows.source_chunk_name,
+  rows.duration_ms, null, rows.metadata, now(), now()
+from rows
 on conflict (session_id, track_key, chunk_index) where track_key is not null
 do update set
   source_file_id = excluded.source_file_id,
@@ -2427,19 +2451,9 @@ do update set
   metadata = coalesce(audio_chunks.metadata, '{}'::jsonb) || excluded.metadata,
   updated_at = now()
 returning id;`,
-    [
-      job.session_id,
-      row.sourceFileId,
-      row.chunkIndex,
-      row.startMs,
-      row.endMs,
-      row.trackKey,
-      row.sourceChunkName,
-      row.durationMs,
-      JSON.stringify(row.metadata)
-    ]
+    [job.session_id, JSON.stringify(rows)]
   );
-  return result.rows[0]?.id || null;
+  return result.rowCount || 0;
 }
 
 async function insertDetectSpeechJob(db, job, chunkSummary) {
@@ -2543,9 +2557,7 @@ async function runCloudPlanChunks(req, campaign, body) {
         cost: { paidAiCostUsd: 0 }
       };
     }
-    for (const chunk of chunks) {
-      await upsertPlannedChunk(db, job, chunk);
-    }
+    const persistedChunks = await upsertPlannedChunks(db, job, chunks);
     const nextJobId = await insertDetectSpeechJob(db, job, {
       chunks: chunks.length,
       chunkSeconds
@@ -2562,6 +2574,7 @@ where id = $1::uuid;`,
         job.id,
         JSON.stringify({
           ...summary,
+          persistedChunks,
           nextJobId,
           completedAt: new Date().toISOString()
         })
@@ -2569,7 +2582,7 @@ where id = $1::uuid;`,
     );
     await markJobStep(db, job, 'succeeded', {
       retryable: false,
-      progress: { ...summary, nextJobId }
+      progress: { ...summary, persistedChunks, nextJobId }
     });
     await db.query(
       `
@@ -2597,7 +2610,7 @@ where id = $1::uuid;`,
       mode: 'cloud_plan_audio_chunks',
       jobId: job.id,
       sourceSessionId: job.source_session_id,
-      summary: { ...summary, nextJobId },
+      summary: { ...summary, persistedChunks, nextJobId },
       cost: { paidAiCostUsd: 0 }
     };
   } catch (error) {
