@@ -711,6 +711,7 @@ async function extractEntryToR2(track) {
     contentLength = track.compressedSize;
   } else if (track.compressionMethod === 8) {
     body = body.pipe(zlib.createInflateRaw());
+    contentLength = track.fileSize;
   } else {
     throw httpError(400, `Metodo de compressao nao suportado em ${track.filename}: ${track.compressionMethod}`);
   }
