@@ -29,6 +29,8 @@ DEFAULT_SCHEMA_FILES = [
     Path("schemas/20260628_017_craig_manifest_contract.sql"),
     Path("schemas/20260628_018_craig_manifest_temporal_quality.sql"),
     Path("schemas/20260628_019_craig_track_extraction_steps.sql"),
+    Path("schemas/20260628_020_audio_cleanup_readiness.sql"),
+    Path("schemas/20260628_021_audio_cleanup_success_policy.sql"),
 ]
 
 

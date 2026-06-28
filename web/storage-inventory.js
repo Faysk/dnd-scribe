@@ -65,8 +65,15 @@
       .storage-object-list { display: grid; gap: 6px; margin-top: 10px; }
       .storage-object-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; background: #070a0f; }
       .storage-object-row code { color: var(--muted); overflow-wrap: anywhere; }
+      .cleanup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+      .cleanup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: #070a0f; padding: 8px; }
+      .cleanup-row.red { border-color: var(--red); background: #1d1011; }
+      .cleanup-row.gold { border-color: var(--gold); background: #1a1710; }
+      .cleanup-row.green { border-color: var(--green); }
+      .cleanup-row code { display: block; color: var(--muted); overflow-wrap: anywhere; }
+      .cleanup-row small { overflow-wrap: anywhere; }
       @media (max-width: 900px) {
-        .storage-inventory-head, .storage-grid, .storage-category-line, .storage-object-row { grid-template-columns: 1fr; }
+        .storage-inventory-head, .storage-grid, .storage-category-line, .storage-object-row, .cleanup-grid, .cleanup-row { grid-template-columns: 1fr; }
       }
     `;
     document.head.appendChild(style);
@@ -113,6 +120,7 @@
 
   function inventoryFromMonitoring(payload) {
     const rows = metricById(payload, 'storage')?.data || [];
+    const cleanup = metricById(payload, 'audio-cleanup')?.data || null;
     const categories = rows.map(normalizeStorageRow).sort((a, b) => b.bytes - a.bytes);
     const totals = categories.reduce((acc, item) => {
       acc.objects += item.objects;
@@ -129,6 +137,7 @@
       truncated: false,
       totals,
       categories,
+      cleanup,
       sessions: [],
       largestObjects: [],
       policy: {
@@ -181,6 +190,56 @@
           </div>
         `).join('')}
       </div>
+    `;
+  }
+
+  function cleanupTone(status = '') {
+    if (status === 'delete_ready') return 'green';
+    if (status === 'blocked') return 'gold';
+    if (status === 'hold') return 'blue';
+    return 'blue';
+  }
+
+  function renderCleanupReadiness(data) {
+    const cleanup = data?.cleanup;
+    if (!cleanup) return '<div class="empty">Readiness de limpeza ainda nao retornou no snapshot.</div>';
+    const rows = cleanup.byStatus || [];
+    const largest = cleanup.largest || [];
+    return `
+      <div class="cleanup-grid">
+        <div class="storage-tile"><span class="label">Liberavel com seguranca</span><strong>${esc(bytes(cleanup.deleteReadyBytes))}</strong><small>${esc(cleanup.deleteReadyObjects || 0)} objeto(s) marcados</small></div>
+        <div class="storage-tile"><span class="label">Bloqueado por evidencia</span><strong>${esc(bytes(cleanup.blockedBytes))}</strong><small>${esc(cleanup.blockedObjects || 0)} objeto(s) aguardando etapa</small></div>
+        <div class="storage-tile"><span class="label">Acervo protegido</span><strong>${esc(bytes(cleanup.holdBytes))}</strong><small>${esc(cleanup.holdObjects || 0)} objeto(s) permanentes/revisao</small></div>
+      </div>
+      ${rows.length ? `
+        <div class="storage-session-list">
+          ${rows.map(row => `
+            <div class="storage-category-line">
+              <div>${chip(row.artifact_type || 'artifact', cleanupTone(row.readiness_status))}<small>${esc(row.readiness_status || '')}</small></div>
+              <strong>${esc(bytes(row.bytes))}</strong>
+              <small>${esc(row.objects || 0)} objetos • ${esc(bytes(row.reclaimable_bytes))} liberavel</small>
+              <div class="storage-bar"><span style="width:${Math.max(2, Math.min(100, Math.round((Number(row.bytes || 0) / Math.max(1, Number(cleanup.bytes || 0))) * 100)))}%"></span></div>
+            </div>
+          `).join('')}
+        </div>
+      ` : '<div class="empty">Nenhum artefato classificado para limpeza.</div>'}
+      ${largest.length ? `
+        <div class="storage-object-list">
+          ${largest.map(item => `
+            <div class="cleanup-row ${esc(cleanupTone(item.readiness_status))}">
+              <div>
+                <strong>${esc(item.artifact_type || 'artifact')}</strong>
+                <code>${esc(item.storage_path || '')}</code>
+                <small>${esc(item.required_action || '')}${item.blockers?.length ? ` • bloqueios: ${esc(item.blockers.join(', '))}` : ''}</small>
+              </div>
+              <div class="badges">
+                ${chip(bytes(item.size_bytes), cleanupTone(item.readiness_status))}
+                ${chip(item.readiness_status || 'unknown', cleanupTone(item.readiness_status))}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
     `;
   }
 
@@ -257,10 +316,12 @@
           <div class="storage-grid">
             <div class="storage-tile"><span class="label">Total rastreado</span><strong>${esc(bytes(data.totals?.bytes))}</strong><small>${esc(data.totals?.objects || 0)} arquivos</small></div>
             <div class="storage-tile"><span class="label">Audio rastreado</span><strong>${esc(minutes(data.totals?.audioMinutes))}</strong><small>antes da compactacao final</small></div>
-            <div class="storage-tile"><span class="label">Fonte</span><strong>${esc(data.prefix || '-')}</strong><small>${esc(data.bucket || '')}</small></div>
-            <div class="storage-tile"><span class="label">Meta</span><strong>${esc(bytes(data.policy?.targetPermanentBytes))}</strong><small>permanente por sessao</small></div>
+            <div class="storage-tile"><span class="label">Liberavel</span><strong>${esc(bytes(data.cleanup?.deleteReadyBytes))}</strong><small>sem deletar automaticamente</small></div>
+            <div class="storage-tile"><span class="label">Bloqueado</span><strong>${esc(bytes(data.cleanup?.blockedBytes))}</strong><small>aguarda evidencia/compactacao</small></div>
           </div>
           ${data.truncated ? '<div class="empty">Inventario truncado. A proxima etapa adiciona paginacao por continuation token.</div>' : ''}
+          <h3>Readiness de limpeza</h3>
+          ${renderCleanupReadiness(data)}
           ${renderCategorySummary(data)}
           <h3>Sessoes mais pesadas</h3>
           ${renderSessionRows(data)}
