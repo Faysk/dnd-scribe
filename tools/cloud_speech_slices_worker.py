@@ -129,6 +129,10 @@ def execute(conn: psycopg.Connection, sql: str, params: tuple[Any, ...] = ()) ->
         cursor.execute(sql, params)
 
 
+def jsonb(value: Any) -> Jsonb:
+    return Jsonb(json.loads(json.dumps(value, default=str)))
+
+
 def r2_client():
     endpoint = optional_env("R2_S3_ENDPOINT", "R2_ENDPOINT")
     if not endpoint:
@@ -204,7 +208,7 @@ on conflict (job_id, step_key) do update set
             status,
             status,
             status not in {"succeeded", "skipped"},
-            Jsonb(progress),
+            jsonb(progress),
             clean_text(error, 4000) or None,
             status,
             status,
@@ -564,7 +568,7 @@ returning id::text;
             artifact.get("start_ms"),
             artifact.get("end_ms"),
             artifact.get("delete_after_job_type"),
-            Jsonb(artifact.get("metadata") or {}),
+            jsonb(artifact.get("metadata") or {}),
         ),
     )
     return row["id"] if row else None
@@ -633,8 +637,8 @@ on conflict (source_chunk_id, slice_index) do update set
             stats.get("audio_dbfs"),
             stats.get("probably_silent"),
             stats.get("silence_dbfs_threshold"),
-            Jsonb(detection_params),
-            Jsonb({"builder": "tools/cloud_speech_slices_worker.py"}),
+            jsonb(detection_params),
+            jsonb({"builder": "tools/cloud_speech_slices_worker.py"}),
         ),
     )
 
@@ -655,7 +659,7 @@ where id = %s::uuid;
             not has_speech,
             detection_params.get("noiseDb"),
             has_speech,
-            Jsonb({"speechDetection": detection_params, "speechDetected": has_speech}),
+            jsonb({"speechDetection": detection_params, "speechDetected": has_speech}),
             chunk["audio_chunk_id"],
         ),
     )
@@ -897,7 +901,7 @@ where id = %s::uuid;
 """,
         (
             status,
-            Jsonb({"workerStatus": worker_status, "paidAiCostUsd": 0, "summary": summary}),
+            jsonb({"workerStatus": worker_status, "paidAiCostUsd": 0, "summary": summary}),
             clean_text(summary.get("error"), 4000) or None,
             status,
             job["id"],
