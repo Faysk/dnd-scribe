@@ -80,6 +80,9 @@ const state = {
   },
   jobs: [],
   jobsPolling: false,
+  pipelineControl: null,
+  pipelineControlLoading: false,
+  pipelineControlError: null,
   craigMap: null,
   craigMapEditable: false,
   craigMapError: null,
@@ -866,6 +869,9 @@ async function loadJobs(scheduleNext = true) {
   try {
     const payload = await api('/api/jobs');
     state.jobs = payload.jobs || [];
+    if (typeof window.refreshPipelineControl === 'function') {
+      await window.refreshPipelineControl(false);
+    }
     render();
     const hasActive = state.jobs.some(job => ['running', 'retrying'].includes(job.status));
     if (scheduleNext && hasActive && !state.jobsPolling) {
@@ -900,6 +906,8 @@ async function loadSession(sourceSessionId) {
     setBusy(true);
     state.loadingSession = true;
     state.selectedSourceSessionId = sourceSessionId;
+    state.pipelineControl = null;
+    state.pipelineControlError = null;
     render();
     const payload = await api(`/api/session?sourceSessionId=${encodeURIComponent(sourceSessionId)}&runId=${encodeURIComponent(DEFAULT_RUN)}`);
     state.review = payload.review;
@@ -942,6 +950,9 @@ async function loadSession(sourceSessionId) {
       remember(`Rascunho restaurado: ${draft.segments} segmentos, ${draft.candidates} candidatos.`);
     }
     remember(`Sessao carregada: ${sourceSessionId}`, payload.summary);
+    if (typeof window.refreshPipelineControl === 'function') {
+      await window.refreshPipelineControl(false);
+    }
     render();
   } catch (error) {
     toast(error.message);
@@ -1241,7 +1252,8 @@ function renderUploadJobsCard() {
         <h2>Pipeline</h2>
         <button onclick="loadJobs(true)">Atualizar</button>
       </div>
-      <div class="panel-body">
+        <div class="panel-body">
+        ${window.renderPipelineControl ? window.renderPipelineControl('upload') : ''}
         <div class="pipeline-control upload-pipeline-control">
           <div>
             <span class="label">Continuacao zero-cost</span>
@@ -3235,6 +3247,13 @@ function renderOps() {
       <article class="ops-card">
         <h2>Eventos Roll20</h2>
         ${renderRoll20Events()}
+      </article>
+      <article class="ops-card">
+        <div class="row between">
+          <h2>Esteira automatica</h2>
+          <button onclick="refreshPipelineControl(true)">Atualizar</button>
+        </div>
+        ${window.renderPipelineControl ? window.renderPipelineControl('ops') : '<div class="empty">Modulo de esteira carregando.</div>'}
       </article>
       <article class="ops-card">
         <div class="row between">

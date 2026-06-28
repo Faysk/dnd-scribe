@@ -30,6 +30,14 @@ const PIPELINE_KNOWN_NEXT_JOB_TYPES = [
   ...PIPELINE_RUNNABLE_JOB_TYPES,
   'cloud_detect_speech_slices'
 ];
+const GITHUB_WORKFLOW_REPO = process.env.GITHUB_WORKFLOW_REPOSITORY || process.env.GITHUB_REPOSITORY || 'Faysk/dnd-scribe';
+const GITHUB_WORKFLOW_REF = process.env.GITHUB_WORKFLOW_REF || 'main';
+const GITHUB_WORKFLOW_TOKEN_NAMES = ['GITHUB_WORKFLOW_TOKEN', 'GITHUB_TOKEN', 'GH_TOKEN'];
+const TRANSCRIPTION_MODEL = process.env.OPENAI_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe';
+const TRANSCRIPTION_PROMPT_VERSION = 'transcribe_v1';
+const DEFAULT_TRANSCRIPTION_LIMIT = 50;
+const DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE = Number(process.env.DND_COST_TRANSCRIPTION_AUDIO_MINUTE_USD || 0.003);
+const DEFAULT_TRANSCRIPTION_APPROVAL_USD = 0.08;
 
 const SESSION_STATUSES = new Set([
   'planned',
@@ -1738,7 +1746,7 @@ function normalizeCleanupLimit(value) {
   return Math.max(1, Math.min(20, Math.floor(limit)));
 }
 
-async function selectCleanupCandidates(db, campaign, limit, requireLifecycleReady = true) {
+async function selectCleanupCandidates(db, campaign, limit, requireLifecycleReady = true, sourceSessionId = '') {
   const result = await db.query(
     `
 select cleanup.*
@@ -1748,14 +1756,15 @@ join campaigns c on c.id = s.campaign_id
 where c.slug = $1
   and cleanup.readiness_status = 'delete_ready'
   and ($3::boolean is false or cleanup.lifecycle_status = 'delete_ready')
+  and ($4::text = '' or cleanup.source_session_id = $4::text)
 order by cleanup.reclaimable_bytes desc, cleanup.updated_at asc
 limit $2::integer;`,
-    [campaign, limit, requireLifecycleReady]
+    [campaign, limit, requireLifecycleReady, cleanText(sourceSessionId || '', 180)]
   );
   return result.rows;
 }
 
-async function refreshCleanupReadiness(db, campaign, actor) {
+async function refreshCleanupReadiness(db, campaign, actor, sourceSessionId = '') {
   const result = await db.query(
     `
 with ready as (
@@ -1766,6 +1775,7 @@ with ready as (
   where c.slug = $1
     and cleanup.readiness_status = 'delete_ready'
     and cleanup.lifecycle_status in ('active', 'superseded')
+    and ($3::text = '' or cleanup.source_session_id = $3::text)
 ), updated as (
   update audio_artifacts aa
   set lifecycle_status = 'delete_ready',
@@ -1795,7 +1805,7 @@ with ready as (
 )
 select count(*)::int objects, coalesce(sum(reclaimable_bytes), 0)::bigint bytes
 from updated;`,
-    [campaign, String(actor || 'unknown')]
+    [campaign, String(actor || 'unknown'), cleanText(sourceSessionId || '', 180)]
   );
   const row = result.rows[0] || {};
   return {
@@ -1814,6 +1824,7 @@ async function runStorageCleanup(req, campaign, body) {
   });
   const dryRun = body.dryRun !== false;
   const limit = normalizeCleanupLimit(body.limit || body.maxObjects);
+  const sourceSessionId = cleanText(body.sourceSessionId || body.source_session_id || '', 180);
   if (!dryRun && body.confirm !== 'DELETE_READY_R2') {
     throw httpError(400, 'Execucao real exige confirm="DELETE_READY_R2".');
   }
@@ -1821,13 +1832,14 @@ async function runStorageCleanup(req, campaign, body) {
   const actorId = String(access.profile?.id || access.user?.id || access.user?.email || 'unknown');
   const readinessRefresh = dryRun
     ? { objects: 0, bytes: 0, dryRunSkipped: true }
-    : await refreshCleanupReadiness(db, campaign, actorId);
-  const candidates = await selectCleanupCandidates(db, campaign, limit, !dryRun);
+    : await refreshCleanupReadiness(db, campaign, actorId, sourceSessionId);
+  const candidates = await selectCleanupCandidates(db, campaign, limit, !dryRun, sourceSessionId);
   const summary = {
     ok: true,
     mode: 'storage_cleanup_delete_ready',
     dryRun,
     limit,
+    sourceSessionId: sourceSessionId || null,
     candidateObjects: candidates.length,
     candidateBytes: candidates.reduce((total, item) => total + Number(item.reclaimable_bytes || item.size_bytes || 0), 0),
     readinessRefresh,
@@ -1942,6 +1954,525 @@ values ($1::uuid, 'note', $2::uuid, 'R2 deletion failed; artifact moved to faile
     }
   }
   return summary;
+}
+
+function githubWorkflowToken() {
+  for (const name of GITHUB_WORKFLOW_TOKEN_NAMES) {
+    const value = process.env[name];
+    if (value) return { name, value };
+  }
+  return { name: null, value: '' };
+}
+
+function workflowDispatchStatus() {
+  const token = githubWorkflowToken();
+  return {
+    configured: Boolean(token.value),
+    tokenEnv: token.name,
+    missingEnv: token.value ? null : 'GITHUB_WORKFLOW_TOKEN',
+    repository: GITHUB_WORKFLOW_REPO,
+    ref: GITHUB_WORKFLOW_REF
+  };
+}
+
+function normalizeWorkflowLimit(value, fallback, min, max) {
+  const number = Number(value || fallback);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(number)));
+}
+
+function normalizeMoney(value, fallback = null) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return fallback;
+  return Number(number.toFixed(6));
+}
+
+async function githubApi(pathname, options = {}) {
+  const token = githubWorkflowToken();
+  if (!token.value) {
+    throw httpError(409, 'Automacao GitHub Actions indisponivel: configure GITHUB_WORKFLOW_TOKEN na Vercel com permissao Actions: write.');
+  }
+  const response = await fetch(`https://api.github.com${pathname}`, {
+    ...options,
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token.value}`,
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(options.headers || {})
+    }
+  });
+  if (response.status === 204) return null;
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw httpError(response.status, payload.message || `GitHub API falhou (${response.status}).`);
+  }
+  return payload;
+}
+
+async function dispatchGithubWorkflow(workflowFile, inputs) {
+  const repo = GITHUB_WORKFLOW_REPO;
+  const encodedWorkflow = encodeURIComponent(workflowFile);
+  const startedAt = new Date();
+  await githubApi(`/repos/${repo}/actions/workflows/${encodedWorkflow}/dispatches`, {
+    method: 'POST',
+    body: JSON.stringify({
+      ref: GITHUB_WORKFLOW_REF,
+      inputs
+    })
+  });
+  let run = null;
+  try {
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    const runs = await githubApi(`/repos/${repo}/actions/workflows/${encodedWorkflow}/runs?event=workflow_dispatch&per_page=5`);
+    run = (runs.workflow_runs || []).find(item => {
+      const created = new Date(item.created_at || 0);
+      return created.getTime() >= startedAt.getTime() - 5000;
+    }) || (runs.workflow_runs || [])[0] || null;
+  } catch (_error) {
+    run = null;
+  }
+  return {
+    workflow: workflowFile,
+    repository: repo,
+    ref: GITHUB_WORKFLOW_REF,
+    requestedAt: startedAt.toISOString(),
+    run: run ? {
+      id: run.id,
+      name: run.name,
+      status: run.status,
+      conclusion: run.conclusion,
+      createdAt: run.created_at,
+      url: run.html_url
+    } : null
+  };
+}
+
+async function recordWorkflowDispatch(db, campaign, sourceSessionId, jobType, input, dispatch, actorId) {
+  if (!sourceSessionId) return null;
+  const result = await db.query(
+    `
+with target as (
+  select s.id session_id
+  from sessions s
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1 and s.source_session_id = $2
+  limit 1
+), inserted as (
+  insert into processing_jobs (session_id, job_type, status, attempts, input, output, started_at, finished_at, created_at)
+  select target.session_id, $3, 'succeeded', 1, $4::jsonb, $5::jsonb, now(), now(), now()
+  from target
+  returning id
+)
+select id::text from inserted;`,
+    [
+      campaign,
+      sourceSessionId,
+      jobType,
+      JSON.stringify(input),
+      JSON.stringify({
+        workerStatus: 'workflow_dispatched',
+        dispatchedBy: actorId || 'unknown',
+        dispatch
+      })
+    ]
+  );
+  return result.rows[0]?.id || null;
+}
+
+async function markSpeechWorkflowDispatched(db, campaign, sourceSessionId, dispatch, actorId) {
+  const result = await db.query(
+    `
+with target as (
+  select pj.id
+  from processing_jobs pj
+  join sessions s on s.id = pj.session_id
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1
+    and s.source_session_id = $2
+    and pj.job_type = 'cloud_detect_speech_slices'
+    and pj.status in ('queued','retrying','running')
+  order by pj.created_at desc
+  limit 1
+)
+update processing_jobs pj
+set output = coalesce(pj.output, '{}'::jsonb) || jsonb_build_object(
+      'workerStatus', 'workflow_dispatched',
+      'githubWorkflow', $3::jsonb,
+      'workflowDispatchedBy', $4::text,
+      'workflowDispatchedAt', now()
+    )
+from target
+where pj.id = target.id
+returning pj.id::text;`,
+    [campaign, sourceSessionId, JSON.stringify(dispatch), actorId || 'unknown']
+  );
+  return result.rows[0]?.id || null;
+}
+
+async function pipelineControlMetrics(db, campaign, sourceSessionId, limit = DEFAULT_TRANSCRIPTION_LIMIT) {
+  const model = TRANSCRIPTION_MODEL;
+  const promptVersion = TRANSCRIPTION_PROMPT_VERSION;
+  const result = await db.query(
+    `
+with target_session as (
+  select s.id, s.campaign_id, s.source_session_id, s.title, s.status, s.started_at, s.ended_at, c.slug campaign_slug
+  from sessions s
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1
+    and s.source_session_id = $2
+  limit 1
+), candidates as (
+  select
+    wu.*,
+    tc.id cache_id,
+    coalesce(wu.duration_ms, greatest(0, coalesce(wu.end_ms, 0) - coalesce(wu.start_ms, 0)), 0)::int effective_duration_ms
+  from audio_transcription_work_units wu
+  left join transcription_cache tc
+    on tc.audio_sha256 = wu.sha256
+   and tc.provider = 'openai'
+   and tc.model = $3
+   and tc.prompt_version = $4
+   and tc.status = 'succeeded'
+  where wu.session_id = (select id from target_session)
+    and nullif(wu.sha256, '') is not null
+    and nullif(wu.storage_path, '') is not null
+    and coalesce(wu.probably_silent, false) is false
+    and coalesce(wu.transcription_status, 'pending') not in ('skipped_silence', 'transcribed', 'cached')
+), limited as (
+  select *
+  from candidates
+  order by (cache_id is not null) desc, track_key, start_ms, unit_type, unit_index
+  limit $5::int
+), by_track as (
+  select
+    track_key,
+    count(*)::int objects,
+    round((coalesce(sum(effective_duration_ms) filter (where cache_id is null), 0) / 60000.0)::numeric, 3) minutes
+  from limited
+  group by track_key
+  order by track_key
+), work_stats as (
+  select
+    count(*)::int total_candidates,
+    count(*) filter (where unit_type = 'speech_slice')::int speech_slice_candidates,
+    count(*) filter (where unit_type = 'chunk')::int chunk_fallback_candidates,
+    count(*) filter (where cache_id is not null)::int cache_hit_candidates,
+    count(*) filter (where cache_id is null)::int transcribe_candidates,
+    round((coalesce(sum(effective_duration_ms) filter (where cache_id is null), 0) / 60000.0)::numeric, 3) candidate_audio_minutes
+  from candidates
+), limited_stats as (
+  select
+    count(*)::int objects,
+    count(*) filter (where cache_id is not null)::int cache_hit_objects,
+    count(*) filter (where cache_id is null)::int billable_objects,
+    round((coalesce(sum(effective_duration_ms) filter (where cache_id is null), 0) / 60000.0)::numeric, 3) billable_minutes
+  from limited
+), speech_stats as (
+  select
+    count(*)::int objects,
+    count(*) filter (where transcription_status = 'pending')::int pending,
+    count(*) filter (where transcription_status = 'transcribed')::int transcribed,
+    count(*) filter (where transcription_status = 'cached')::int cached,
+    count(*) filter (where transcription_status = 'skipped_silence')::int skipped_silence,
+    round((coalesce(sum(duration_ms), 0) / 60000.0)::numeric, 3) minutes
+  from audio_speech_slices
+  where session_id = (select id from target_session)
+), chunk_stats as (
+  select
+    count(*)::int objects,
+    count(*) filter (where transcription_status = 'pending')::int pending,
+    count(*) filter (where transcription_status = 'transcribed')::int transcribed,
+    count(*) filter (where transcription_status = 'cached')::int cached,
+    count(*) filter (where transcription_status = 'skipped_silence')::int skipped_silence
+  from audio_chunks
+  where session_id = (select id from target_session)
+), cleanup_stats as (
+  select
+    count(*)::int objects,
+    count(*) filter (where readiness_status = 'delete_ready')::int delete_ready_objects,
+    coalesce(sum(reclaimable_bytes) filter (where readiness_status = 'delete_ready'), 0)::bigint delete_ready_bytes,
+    coalesce(sum(reclaimable_bytes) filter (where readiness_status = 'blocked'), 0)::bigint blocked_bytes,
+    coalesce(sum(reclaimable_bytes) filter (where readiness_status = 'hold'), 0)::bigint hold_bytes
+  from audio_storage_cleanup_candidates
+  where session_id = (select id from target_session)
+), storage_stats as (
+  select
+    count(*) filter (where lifecycle_status = 'active')::int active_objects,
+    coalesce(sum(size_bytes) filter (where lifecycle_status = 'active'), 0)::bigint active_bytes,
+    count(*) filter (where lifecycle_status = 'delete_ready')::int delete_ready_objects,
+    coalesce(sum(size_bytes) filter (where lifecycle_status = 'delete_ready'), 0)::bigint delete_ready_bytes,
+    count(*) filter (where lifecycle_status = 'deleted')::int deleted_objects,
+    coalesce(sum(size_bytes) filter (where lifecycle_status = 'deleted'), 0)::bigint deleted_bytes
+  from audio_artifacts
+  where session_id = (select id from target_session)
+), ledger_stats as (
+  select
+    count(*)::int entries,
+    round(coalesce(sum(input_audio_minutes), 0)::numeric, 3) minutes,
+    round(coalesce(sum(estimated_cost_usd), 0)::numeric, 6) cost
+  from ai_usage_ledger
+  where session_id = (select id from target_session)
+    and operation_type = 'transcription'
+), segment_stats as (
+  select count(*)::int segments
+  from transcript_segments
+  where session_id = (select id from target_session)
+)
+select jsonb_build_object(
+  'session', (select to_jsonb(target_session) from target_session),
+  'workUnits', (select to_jsonb(work_stats) from work_stats),
+  'limitedTranscription', (select to_jsonb(limited_stats) from limited_stats),
+  'limitedByTrack', coalesce((select jsonb_agg(to_jsonb(by_track)) from by_track), '[]'::jsonb),
+  'speechSlices', (select to_jsonb(speech_stats) from speech_stats),
+  'chunks', (select to_jsonb(chunk_stats) from chunk_stats),
+  'cleanup', (select to_jsonb(cleanup_stats) from cleanup_stats),
+  'storage', (select to_jsonb(storage_stats) from storage_stats),
+  'ledger', (select to_jsonb(ledger_stats) from ledger_stats),
+  'segments', (select to_jsonb(segment_stats) from segment_stats)
+) data;`,
+    [campaign, sourceSessionId, model, promptVersion, limit]
+  );
+  const data = result.rows[0]?.data || {};
+  if (!data.session) throw httpError(404, `Sessao nao encontrada: ${sourceSessionId}`);
+  return data;
+}
+
+function derivePipelineControl(campaign, sourceSessionId, jobs, metrics) {
+  const failed = jobs.filter(job => job.status === 'failed');
+  const running = jobs.filter(job => job.status === 'running');
+  const zeroCostNext = jobs.find(job => PIPELINE_RUNNABLE_JOB_TYPES.includes(job.type) && ['queued', 'retrying'].includes(job.status));
+  const speechJob = jobs.find(job => job.type === 'cloud_detect_speech_slices' && ['queued', 'retrying', 'running', 'failed'].includes(job.status));
+  const pendingTranscription = Number(metrics.workUnits?.total_candidates || 0);
+  const limitedMinutes = Number(metrics.limitedTranscription?.billable_minutes || 0);
+  const estimatedCostUsd = Number((limitedMinutes * DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE).toFixed(6));
+  const cleanupBytes = Number(metrics.cleanup?.delete_ready_bytes || 0);
+  let stage = 'complete';
+  let tone = 'green';
+  let title = 'Esteira concluida';
+  let detail = 'Nao ha etapa pendente para esta sessao.';
+
+  if (failed.length) {
+    stage = 'needs_attention';
+    tone = 'red';
+    title = 'Falha exige acao';
+    detail = 'Reenfileire ou investigue o job falho antes de continuar.';
+  } else if (running.length) {
+    stage = 'running';
+    tone = 'orange';
+    title = 'Etapa em execucao';
+    detail = 'Aguarde o worker terminar ou atualize a tela para acompanhar.';
+  } else if (zeroCostNext) {
+    stage = 'zero_cost_ready';
+    tone = 'blue';
+    title = `Proxima etapa: ${zeroCostNext.type}`;
+    detail = 'Pode continuar pela Function sem custo OpenAI.';
+  } else if (speechJob && ['queued', 'retrying'].includes(speechJob.status)) {
+    stage = 'speech_ready';
+    tone = 'blue';
+    title = 'Detectar fala e gerar Opus';
+    detail = 'Dispara worker GitHub Actions para slices e audio compacto.';
+  } else if (speechJob?.status === 'failed') {
+    stage = 'speech_failed';
+    tone = 'red';
+    title = 'Speech worker falhou';
+    detail = 'Use retry ou rode novamente com lote menor.';
+  } else if (pendingTranscription > 0) {
+    stage = 'transcription_ready';
+    tone = 'gold';
+    title = 'Transcricao pronta para lote';
+    detail = `${pendingTranscription} unidade(s) pendente(s); lote atual estimado em US$ ${estimatedCostUsd.toFixed(6)}.`;
+  } else if (cleanupBytes > 0) {
+    stage = 'cleanup_ready';
+    tone = 'green';
+    title = 'Limpeza segura disponivel';
+    detail = 'Ha artefatos delete_ready que podem sair do R2.';
+  }
+
+  const actions = [];
+  if (zeroCostNext) {
+    actions.push({ id: 'continue_zero_cost_dry', label: 'Simular zero-cost', action: 'continue_zero_cost', dryRun: true, tone: '' });
+    actions.push({ id: 'continue_zero_cost', label: 'Continuar zero-cost', action: 'continue_zero_cost', dryRun: false, tone: 'primary' });
+  }
+  if (speechJob && ['queued', 'retrying', 'failed'].includes(speechJob.status)) {
+    actions.push({ id: 'dispatch_speech_dry', label: 'Simular fala', action: 'dispatch_speech_slices', write: false, tone: '' });
+    actions.push({ id: 'dispatch_speech', label: 'Rodar fala', action: 'dispatch_speech_slices', write: true, tone: 'primary' });
+  }
+  if (pendingTranscription > 0) {
+    actions.push({
+      id: 'dispatch_transcription_dry',
+      label: 'Simular transcricao',
+      action: 'dispatch_transcription',
+      execute: false,
+      estimatedCostUsd,
+      tone: ''
+    });
+    actions.push({
+      id: 'dispatch_transcription',
+      label: `Transcrever lote US$ ${estimatedCostUsd.toFixed(4)}`,
+      action: 'dispatch_transcription',
+      execute: true,
+      estimatedCostUsd,
+      tone: 'primary'
+    });
+  }
+  if (cleanupBytes > 0) {
+    actions.push({ id: 'dispatch_cleanup_dry', label: 'Simular limpeza', action: 'dispatch_storage_cleanup', execute: false, tone: '' });
+    actions.push({ id: 'dispatch_cleanup', label: 'Limpar R2', action: 'dispatch_storage_cleanup', execute: true, tone: 'danger' });
+  }
+
+  return {
+    ok: true,
+    mode: 'pipeline_control',
+    campaign,
+    sourceSessionId,
+    stage,
+    tone,
+    title,
+    detail,
+    workflowDispatch: workflowDispatchStatus(),
+    model: TRANSCRIPTION_MODEL,
+    promptVersion: TRANSCRIPTION_PROMPT_VERSION,
+    transcriptionCostUsdPerMinute: DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE,
+    estimatedBatchCostUsd: estimatedCostUsd,
+    jobs,
+    metrics,
+    actions
+  };
+}
+
+async function buildPipelineControlPayload(campaign, sourceSessionId, options = {}) {
+  const cleanSource = cleanText(sourceSessionId || '', 180);
+  if (!cleanSource) throw httpError(400, 'sourceSessionId obrigatorio para controle de pipeline.');
+  const limit = normalizeWorkflowLimit(options.limit || options.transcriptionLimit, DEFAULT_TRANSCRIPTION_LIMIT, 1, 100);
+  const db = getPool();
+  const [jobs, metrics] = await Promise.all([
+    listJobs(campaign, cleanSource),
+    pipelineControlMetrics(db, campaign, cleanSource, limit)
+  ]);
+  return derivePipelineControl(campaign, cleanSource, jobs, metrics);
+}
+
+async function runPipelineControlAction(req, campaign, body) {
+  const action = cleanText(body.action || 'inspect', 80);
+  const sourceSessionId = cleanText(body.sourceSessionId || body.source_session_id || '', 180);
+  if (action === 'inspect') {
+    await requireCampaignAccess(req, campaign);
+    return buildPipelineControlPayload(campaign, sourceSessionId, body);
+  }
+  const access = await requirePermission(req, campaign, {
+    action: 'project.jobs.run',
+    scopeType: 'project',
+    scopeId: PROJECT_SCOPE_ID,
+    legacyRoles: ['owner', 'master'],
+    error: 'Controlar a esteira exige permissao project.jobs.run.'
+  });
+  const actorId = String(access.profile?.id || access.user?.id || access.user?.email || 'unknown');
+
+  if (action === 'continue_zero_cost') {
+    const payload = await runPipelineContinue(req, campaign, {
+      ...body,
+      sourceSessionId,
+      dryRun: body.dryRun === true
+    });
+    return {
+      ...payload,
+      pipeline: await buildPipelineControlPayload(campaign, payload.sourceSessionId || sourceSessionId, body)
+    };
+  }
+
+  if (action === 'dispatch_speech_slices') {
+    const write = body.write === true || body.execute === true;
+    const maxChunks = normalizeWorkflowLimit(body.maxChunks || body.max_chunks, 12, 1, 80);
+    const maxTracks = normalizeWorkflowLimit(body.maxTracks || body.max_tracks, 1, 1, 4);
+    const inputs = {
+      source_session_id: sourceSessionId,
+      campaign,
+      max_chunks: String(maxChunks),
+      max_tracks: String(maxTracks),
+      write: String(write),
+      make_compact: String(body.makeCompact !== false && body.make_compact !== false),
+      replace: String(body.replace === true)
+    };
+    const dispatch = await dispatchGithubWorkflow('speech-slices-worker.yml', inputs);
+    const db = getPool();
+    await markSpeechWorkflowDispatched(db, campaign, sourceSessionId, dispatch, actorId);
+    return {
+      ok: true,
+      action,
+      dispatched: true,
+      dryRun: !write,
+      sourceSessionId,
+      dispatch,
+      pipeline: await buildPipelineControlPayload(campaign, sourceSessionId, body)
+    };
+  }
+
+  if (action === 'dispatch_transcription') {
+    const execute = body.execute === true;
+    const limit = normalizeWorkflowLimit(body.limit || body.transcriptionLimit, DEFAULT_TRANSCRIPTION_LIMIT, 1, 100);
+    const costPerMinute = normalizeMoney(body.transcriptionCostUsdPerMinute || body.costPerMinute, DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE);
+    const metrics = await pipelineControlMetrics(getPool(), campaign, sourceSessionId, limit);
+    const minutes = Number(metrics.limitedTranscription?.billable_minutes || 0);
+    const estimatedCostUsd = Number((minutes * costPerMinute).toFixed(6));
+    const approveCostUsd = normalizeMoney(body.approveCostUsd || body.approve_cost_usd, execute ? Math.max(DEFAULT_TRANSCRIPTION_APPROVAL_USD, estimatedCostUsd) : DEFAULT_TRANSCRIPTION_APPROVAL_USD);
+    const maxEstimatedCostUsd = normalizeMoney(body.maxEstimatedCostUsd || body.max_estimated_cost_usd, approveCostUsd);
+    if (execute && estimatedCostUsd > approveCostUsd + 0.000001) {
+      throw httpError(400, `Custo estimado US$ ${estimatedCostUsd.toFixed(6)} acima da aprovacao US$ ${approveCostUsd.toFixed(6)}.`);
+    }
+    const inputs = {
+      source_session_id: sourceSessionId,
+      campaign,
+      limit: String(limit),
+      execute: String(execute),
+      transcription_cost_usd_per_minute: String(costPerMinute),
+      max_estimated_cost_usd: String(maxEstimatedCostUsd),
+      approve_cost_usd: String(approveCostUsd),
+      model: cleanText(body.model || '', 80)
+    };
+    const dispatch = await dispatchGithubWorkflow('transcription-worker.yml', inputs);
+    await recordWorkflowDispatch(getPool(), campaign, sourceSessionId, 'transcription_workflow_dispatch', inputs, dispatch, actorId);
+    return {
+      ok: true,
+      action,
+      dispatched: true,
+      dryRun: !execute,
+      sourceSessionId,
+      estimatedCostUsd,
+      billableMinutes: minutes,
+      dispatch,
+      pipeline: await buildPipelineControlPayload(campaign, sourceSessionId, { ...body, limit })
+    };
+  }
+
+  if (action === 'dispatch_storage_cleanup') {
+    const execute = body.execute === true;
+    if (execute && body.confirm !== 'DELETE_READY_R2') {
+      throw httpError(400, 'Limpeza real exige confirm="DELETE_READY_R2".');
+    }
+    const limit = normalizeWorkflowLimit(body.limit || body.maxObjects, 50, 1, 100);
+    const inputs = {
+      campaign,
+      source_session_id: sourceSessionId,
+      limit: String(limit),
+      execute: String(execute),
+      confirm: execute ? 'DELETE_READY_R2' : ''
+    };
+    const dispatch = await dispatchGithubWorkflow('storage-cleanup-worker.yml', inputs);
+    await recordWorkflowDispatch(getPool(), campaign, sourceSessionId, 'storage_cleanup_workflow_dispatch', inputs, dispatch, actorId);
+    return {
+      ok: true,
+      action,
+      dispatched: true,
+      dryRun: !execute,
+      sourceSessionId,
+      dispatch,
+      pipeline: await buildPipelineControlPayload(campaign, sourceSessionId, body)
+    };
+  }
+
+  throw httpError(400, `Acao de pipeline desconhecida: ${action}`);
 }
 
 function safeUploadFilename(value) {
@@ -4613,6 +5144,13 @@ async function handleGet(req, res, path, query) {
       note: 'Jobs de producao sao persistidos no Supabase; execucao pesada ainda depende do worker cloud.'
     });
   }
+  if (path === '/api/pipeline-control' || path === '/api/pipeline/status') {
+    await requireCampaignAccess(req, campaign);
+    const payload = await buildPipelineControlPayload(campaign, query.get('sourceSessionId') || '', {
+      limit: query.get('limit') || query.get('transcriptionLimit') || DEFAULT_TRANSCRIPTION_LIMIT
+    });
+    return sendJson(res, 200, payload);
+  }
   if (path === '/api/monitoring') {
     const access = await requirePermission(req, campaign, {
       action: 'project.monitor.read',
@@ -4790,6 +5328,14 @@ async function handlePost(req, res, path) {
     return sendJson(res, 200, {
       ...payload,
       jobs: await listJobs(campaign, jobSourceSessionId || ''),
+      sessions: await listSessions(campaign, runId)
+    });
+  }
+  if (path === '/api/pipeline-control' || path === '/api/pipeline/action') {
+    const payload = await runPipelineControlAction(req, campaign, body);
+    return sendJson(res, 200, {
+      ...payload,
+      jobs: await listJobs(campaign, payload.sourceSessionId || body.sourceSessionId || ''),
       sessions: await listSessions(campaign, runId)
     });
   }

@@ -149,6 +149,144 @@
     return badges.join('');
   }
 
+  function stageTone(stage = '', fallback = '') {
+    if (fallback) return fallback;
+    if (stage.includes('failed') || stage.includes('attention')) return 'red';
+    if (stage.includes('running')) return 'orange';
+    if (stage.includes('ready')) return 'blue';
+    return 'green';
+  }
+
+  function pipelineMetric(label, value, tone = '') {
+    return `
+      <div class="pipeline-metric ${esc(tone)}">
+        <span class="label">${esc(label)}</span>
+        <strong>${esc(value)}</strong>
+      </div>
+    `;
+  }
+
+  function renderPipelineControl(variant = 'ops') {
+    const control = window.state?.pipelineControl || null;
+    const sourceSessionId = selectedPipelineSourceSessionId();
+    if (window.state?.pipelineControlLoading) {
+      return `
+        <div class="autopilot-panel">
+          <div class="loader-line"></div>
+          <strong>Atualizando esteira...</strong>
+        </div>
+      `;
+    }
+    if (window.state?.pipelineControlError) {
+      return `
+        <div class="autopilot-panel error">
+          <div>
+            <span class="label">Esteira automatica</span>
+            <strong>Falha ao carregar</strong>
+            <small>${esc(window.state.pipelineControlError)}</small>
+          </div>
+          <button onclick="refreshPipelineControl(true)">Tentar de novo</button>
+        </div>
+      `;
+    }
+    if (!control || control.sourceSessionId !== sourceSessionId) {
+      return `
+        <div class="autopilot-panel muted">
+          <div>
+            <span class="label">Esteira automatica</span>
+            <strong>${esc(sourceSessionId || 'Selecione uma sessao')}</strong>
+            <small>Carrega upload, jobs, speech slicing, transcricao, custo e cleanup em uma visao unica.</small>
+          </div>
+          <button onclick="refreshPipelineControl(true)" ${sourceSessionId ? '' : 'disabled'}>Carregar</button>
+        </div>
+      `;
+    }
+    const metrics = control.metrics || {};
+    const work = metrics.workUnits || {};
+    const limited = metrics.limitedTranscription || {};
+    const cleanup = metrics.cleanup || {};
+    const storage = metrics.storage || {};
+    const ledger = metrics.ledger || {};
+    const github = control.workflowDispatch || {};
+    const actions = control.actions || [];
+    return `
+      <div class="autopilot-panel ${esc(stageTone(control.stage, control.tone))}">
+        <div class="autopilot-head">
+          <div>
+            <span class="label">Esteira automatica</span>
+            <strong>${esc(control.title || 'Pipeline Craig')}</strong>
+            <small>${esc(control.detail || control.sourceSessionId)}</small>
+          </div>
+          <div class="badges">
+            ${chip(control.stage || 'pipeline', stageTone(control.stage, control.tone))}
+            ${chip(github.configured ? 'GitHub Actions ok' : 'GitHub token faltando', github.configured ? 'green' : 'red')}
+            ${chip(control.sourceSessionId || '-', 'gold')}
+          </div>
+        </div>
+        <div class="pipeline-metrics">
+          ${pipelineMetric('transcrever', `${Number(work.total_candidates || 0)} un`, Number(work.total_candidates || 0) ? 'gold' : 'green')}
+          ${pipelineMetric('lote atual', `${Number(limited.billable_minutes || 0).toFixed(3)} min`, Number(limited.billable_minutes || 0) ? 'blue' : 'green')}
+          ${pipelineMetric('custo lote', `$${Number(control.estimatedBatchCostUsd || 0).toFixed(6)}`, Number(control.estimatedBatchCostUsd || 0) ? 'gold' : 'green')}
+          ${pipelineMetric('custo sessao', `$${Number(ledger.cost || 0).toFixed(6)}`, 'blue')}
+          ${pipelineMetric('limpavel', formatBytes(cleanup.delete_ready_bytes || 0), Number(cleanup.delete_ready_bytes || 0) ? 'green' : '')}
+          ${pipelineMetric('ativo R2', formatBytes(storage.active_bytes || 0), 'blue')}
+        </div>
+        ${renderPipelineActionBar(actions, variant, github.configured)}
+        ${renderPipelineControlDetail(control)}
+      </div>
+    `;
+  }
+
+  function renderPipelineControlDetail(control) {
+    const byTrack = control.metrics?.limitedByTrack || [];
+    if (!byTrack.length && !control.workflowDispatch?.missingEnv) return '';
+    return `
+      <div class="autopilot-detail">
+        ${control.workflowDispatch?.missingEnv ? `<p>Para disparar workers pelo site, configure ${esc(control.workflowDispatch.missingEnv)} na Vercel. Enquanto isso, o painel continua monitorando e as etapas locais zero-cost seguem funcionando.</p>` : ''}
+        ${byTrack.length ? `
+          <div class="badges">
+            ${byTrack.map(item => chip(`${item.track_key || 'track'} ${Number(item.minutes || 0).toFixed(2)}m`, 'blue')).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  function renderPipelineActionBar(actions, variant, githubConfigured) {
+    if (!actions.length) {
+      return `
+        <div class="job-actions">
+          <button onclick="refreshPipelineControl(true)">Atualizar</button>
+          <button onclick="loadJobs(true)">Atualizar jobs</button>
+        </div>
+      `;
+    }
+    const needsGithub = new Set(['dispatch_speech_slices', 'dispatch_transcription', 'dispatch_storage_cleanup']);
+    return `
+      <div class="autopilot-actions">
+        ${renderPipelineInputs(variant)}
+        <div class="job-actions">
+          ${actions.map(item => `
+            <button class="${esc(item.tone || '')}" onclick="runPipelineControlActionById('${esc(item.id)}', '${esc(variant)}')" ${needsGithub.has(item.action) && !githubConfigured ? 'disabled' : ''}>${esc(item.label)}</button>
+          `).join('')}
+          <button onclick="refreshPipelineControl(true)">Atualizar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderPipelineInputs(variant) {
+    return `
+      <div class="autopilot-inputs">
+        <label class="inline-job-limit"><span class="label">Faixas</span><input id="pipelineSpeechTracks_${esc(variant)}" type="number" min="1" max="4" value="1" /></label>
+        <label class="inline-job-limit"><span class="label">Chunks fala</span><input id="pipelineSpeechChunks_${esc(variant)}" type="number" min="1" max="80" value="12" /></label>
+        <label class="inline-job-limit"><span class="label">Transcr.</span><input id="pipelineTranscriptionLimit_${esc(variant)}" type="number" min="1" max="100" value="50" /></label>
+        <label class="inline-job-limit"><span class="label">Teto $</span><input id="pipelineApproveCost_${esc(variant)}" type="number" min="0" max="10" step="0.001" value="0.08" /></label>
+        <label class="inline-job-limit"><span class="label">Cleanup</span><input id="pipelineCleanupLimit_${esc(variant)}" type="number" min="1" max="100" value="50" /></label>
+      </div>
+    `;
+  }
+
   function jobActionControls(job) {
     const endpoint = jobEndpoint(job);
     const retryButton = canRetry(job)
@@ -332,6 +470,127 @@
     return payload;
   }
 
+  async function refreshPipelineControl(showToast = false) {
+    const sourceSessionId = selectedPipelineSourceSessionId();
+    if (!sourceSessionId) {
+      if (window.state) {
+        window.state.pipelineControl = null;
+        window.state.pipelineControlError = null;
+      }
+      if (showToast) toast?.('Selecione uma sessao para carregar a esteira.');
+      render?.();
+      return null;
+    }
+    try {
+      if (window.state) {
+        window.state.pipelineControlLoading = true;
+        window.state.pipelineControlError = null;
+      }
+      render?.();
+      const payload = await api(`/api/pipeline-control?sourceSessionId=${encodeURIComponent(sourceSessionId)}`);
+      if (window.state) {
+        window.state.pipelineControl = payload;
+        window.state.pipelineControlError = null;
+      }
+      if (showToast) toast?.('Esteira atualizada.');
+      return payload;
+    } catch (error) {
+      if (window.state) window.state.pipelineControlError = error.message;
+      if (showToast) toast?.(error.message);
+      return null;
+    } finally {
+      if (window.state) window.state.pipelineControlLoading = false;
+      render?.();
+    }
+  }
+
+  function numberInput(id, fallback) {
+    const value = Number(document.getElementById(id)?.value || fallback);
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function pipelineActionOptions(action, item, variant) {
+    const options = { ...item };
+    if (action === 'dispatch_speech_slices') {
+      options.maxTracks = numberInput(`pipelineSpeechTracks_${variant}`, 1);
+      options.maxChunks = numberInput(`pipelineSpeechChunks_${variant}`, 12);
+    }
+    if (action === 'dispatch_transcription') {
+      options.limit = numberInput(`pipelineTranscriptionLimit_${variant}`, 50);
+      options.approveCostUsd = numberInput(`pipelineApproveCost_${variant}`, 0.08);
+      options.maxEstimatedCostUsd = options.approveCostUsd;
+    }
+    if (action === 'dispatch_storage_cleanup') {
+      options.limit = numberInput(`pipelineCleanupLimit_${variant}`, 50);
+      if (options.execute) options.confirm = 'DELETE_READY_R2';
+    }
+    return options;
+  }
+
+  function confirmPipelineAction(action, options) {
+    if (action === 'continue_zero_cost' && !options.dryRun) {
+      return window.confirm('Continuar a proxima etapa zero-cost em producao?');
+    }
+    if (action === 'dispatch_speech_slices' && options.write) {
+      return window.confirm('Disparar GitHub Actions para gerar Opus compacto e speech slices no R2?');
+    }
+    if (action === 'dispatch_transcription' && options.execute) {
+      const estimate = Number(options.estimatedCostUsd || 0).toFixed(6);
+      const cap = Number(options.approveCostUsd || 0).toFixed(6);
+      return window.confirm(`Disparar transcricao paga deste lote? Estimado US$ ${estimate}, teto aprovado US$ ${cap}.`);
+    }
+    if (action === 'dispatch_storage_cleanup' && options.execute) {
+      return window.confirm('Apagar do R2 apenas objetos marcados delete_ready para esta sessao?');
+    }
+    return true;
+  }
+
+  async function runPipelineControlActionById(actionId, variant = 'ops') {
+    const item = (window.state?.pipelineControl?.actions || []).find(action => action.id === actionId);
+    if (!item) {
+      toast?.('Acao de esteira indisponivel. Atualize a tela.');
+      return null;
+    }
+    return runPipelineControlAction(item.action, item, variant);
+  }
+
+  async function runPipelineControlAction(action, item = {}, variant = 'ops') {
+    const sourceSessionId = selectedPipelineSourceSessionId();
+    const options = pipelineActionOptions(action, item, variant);
+    if (!sourceSessionId) {
+      toast?.('Selecione uma sessao.');
+      return null;
+    }
+    if (!confirmPipelineAction(action, options)) return null;
+    try {
+      if (typeof setBusy === 'function') setBusy(true);
+      const payload = await callApi('/api/pipeline-control', {
+        ...options,
+        action,
+        sourceSessionId
+      });
+      if (payload.pipeline && window.state) window.state.pipelineControl = payload.pipeline;
+      if (payload.jobs && window.state) window.state.jobs = payload.jobs;
+      if (payload.sessions && window.state) window.state.sessions = payload.sessions;
+      const dispatched = payload.dispatch?.run?.id ? ` run ${payload.dispatch.run.id}` : '';
+      remember?.(`Esteira: ${action}${payload.dispatched ? dispatched || ' disparado' : ' atualizado'}.`, payload);
+      toast?.(payload.message || (payload.dispatched ? 'Worker disparado.' : 'Esteira atualizada.'));
+      await loadJobs?.(true);
+      window.setTimeout(() => {
+        loadJobs?.(true);
+        refreshPipelineControl(false);
+      }, payload.dispatched ? 8000 : 2500);
+      render?.();
+      return payload;
+    } catch (error) {
+      toast?.(error.message);
+      remember?.(`Esteira falhou: ${error.message}`);
+      return null;
+    } finally {
+      if (typeof setBusy === 'function') setBusy(false);
+    }
+  }
+
   async function recoverPipeline(sourceSessionId = '', options = {}) {
     if (options.dryRun === true) return null;
     try {
@@ -512,6 +771,10 @@
   window.runCloudJob = runCloudJob;
   window.retryCloudJob = retryCloudJob;
   window.continuePipeline = continuePipeline;
+  window.refreshPipelineControl = refreshPipelineControl;
+  window.runPipelineControlAction = runPipelineControlAction;
+  window.runPipelineControlActionById = runPipelineControlActionById;
+  window.renderPipelineControl = renderPipelineControl;
   window.renderJobSteps = renderJobSteps;
   window.renderJobsList = renderJobsListWithActions;
   try { renderJobsList = renderJobsListWithActions; } catch (_error) {}

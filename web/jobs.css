@@ -20,6 +20,104 @@
   min-width: 118px;
 }
 
+.autopilot-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #081018;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.autopilot-panel.green {
+  border-color: var(--green);
+}
+
+.autopilot-panel.blue {
+  border-color: #4aa3ff;
+}
+
+.autopilot-panel.gold,
+.autopilot-panel.orange {
+  border-color: var(--gold);
+}
+
+.autopilot-panel.red,
+.autopilot-panel.error {
+  border-color: var(--red);
+  background: #1d1011;
+}
+
+.autopilot-panel.muted {
+  background: #0b0d12;
+}
+
+.autopilot-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.autopilot-head strong,
+.autopilot-head small,
+.autopilot-detail p {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.pipeline-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pipeline-metric {
+  min-height: 66px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #070a0f;
+  padding: 8px;
+}
+
+.pipeline-metric strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.pipeline-metric.green {
+  border-color: var(--green);
+}
+
+.pipeline-metric.gold {
+  border-color: var(--gold);
+}
+
+.pipeline-metric.blue {
+  border-color: #4aa3ff;
+}
+
+.autopilot-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.autopilot-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.autopilot-detail {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
 .job-step-list {
   display: grid;
   gap: 6px;
@@ -133,6 +231,11 @@
   }
 
   .job-step-row {
+    grid-template-columns: 1fr;
+  }
+
+  .autopilot-head,
+  .pipeline-metrics {
     grid-template-columns: 1fr;
   }
 
