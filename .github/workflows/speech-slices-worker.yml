@@ -1,0 +1,101 @@
+name: Speech Slices Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_session_id:
+        description: "Craig source_session_id, for example craig-BIRq3nIWB4v9"
+        required: true
+        type: string
+      campaign:
+        description: "Campaign slug"
+        required: true
+        default: "yuhara-main"
+        type: string
+      max_chunks:
+        description: "Maximum chunks to process in this run"
+        required: true
+        default: "8"
+        type: string
+      max_tracks:
+        description: "Maximum tracks to download/process in this run"
+        required: true
+        default: "1"
+        type: string
+      write:
+        description: "Write R2 objects and Supabase rows"
+        required: true
+        default: false
+        type: boolean
+      make_compact:
+        description: "Generate compact opus track before slicing"
+        required: true
+        default: true
+        type: boolean
+      replace:
+        description: "Replace existing speech slices for selected chunks"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: speech-slices-${{ github.event.inputs.source_session_id }}
+  cancel-in-progress: false
+
+jobs:
+  speech-slices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${DATABASE_URL}" || (echo "DATABASE_URL secret is missing" && exit 1)
+          test -n "${R2_BUCKET}" || (echo "R2_BUCKET secret is missing" && exit 1)
+          test -n "${R2_ACCESS_KEY_ID}" || (echo "R2_ACCESS_KEY_ID secret is missing" && exit 1)
+          test -n "${R2_SECRET_ACCESS_KEY}" || (echo "R2_SECRET_ACCESS_KEY secret is missing" && exit 1)
+          if [ -z "${R2_S3_ENDPOINT}" ] && [ -z "${R2_ENDPOINT}" ]; then
+            echo "R2_S3_ENDPOINT or R2_ENDPOINT secret is missing"
+            exit 1
+          fi
+
+      - name: Install ffmpeg and Python dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "psycopg[binary]" boto3
+
+      - name: Run speech slicing worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            --campaign "${{ github.event.inputs.campaign }}"
+            --source-session-id "${{ github.event.inputs.source_session_id }}"
+            --max-chunks "${{ github.event.inputs.max_chunks }}"
+            --max-tracks "${{ github.event.inputs.max_tracks }}"
+          )
+          if [ "${{ github.event.inputs.write }}" = "true" ]; then
+            args+=(--write)
+          fi
+          if [ "${{ github.event.inputs.make_compact }}" != "true" ]; then
+            args+=(--no-make-compact)
+          fi
+          if [ "${{ github.event.inputs.replace }}" = "true" ]; then
+            args+=(--replace)
+          fi
+          python3 tools/cloud_speech_slices_worker.py "${args[@]}"
