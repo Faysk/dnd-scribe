@@ -1705,7 +1705,7 @@ function normalizeCleanupLimit(value) {
   return Math.max(1, Math.min(20, Math.floor(limit)));
 }
 
-async function selectCleanupCandidates(db, campaign, limit) {
+async function selectCleanupCandidates(db, campaign, limit, requireLifecycleReady = true) {
   const result = await db.query(
     `
 select cleanup.*
@@ -1714,12 +1714,61 @@ join sessions s on s.id = cleanup.session_id
 join campaigns c on c.id = s.campaign_id
 where c.slug = $1
   and cleanup.readiness_status = 'delete_ready'
-  and cleanup.lifecycle_status = 'delete_ready'
+  and ($3::boolean is false or cleanup.lifecycle_status = 'delete_ready')
 order by cleanup.reclaimable_bytes desc, cleanup.updated_at asc
 limit $2::integer;`,
-    [campaign, limit]
+    [campaign, limit, requireLifecycleReady]
   );
   return result.rows;
+}
+
+async function refreshCleanupReadiness(db, campaign, actor) {
+  const result = await db.query(
+    `
+with ready as (
+  select cleanup.artifact_id, cleanup.reclaimable_bytes
+  from audio_storage_cleanup_candidates cleanup
+  join sessions s on s.id = cleanup.session_id
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1
+    and cleanup.readiness_status = 'delete_ready'
+    and cleanup.lifecycle_status in ('active', 'superseded')
+), updated as (
+  update audio_artifacts aa
+  set lifecycle_status = 'delete_ready',
+      delete_reason = coalesce(aa.delete_reason, 'cleanup_readiness_policy'),
+      metadata = coalesce(aa.metadata, '{}'::jsonb) || jsonb_build_object(
+        'marked_delete_ready_by', 'api/storage/cleanup-run',
+        'marked_delete_ready_at', now(),
+        'marked_delete_ready_actor', $2::text
+      ),
+      updated_at = now()
+  from ready
+  where aa.id = ready.artifact_id
+  returning aa.id, ready.reclaimable_bytes
+), event_rows as (
+  insert into audio_artifact_events (artifact_id, event_type, note, payload)
+  select
+    updated.id,
+    'marked_delete_ready',
+    'Marked delete_ready by cleanup runner refresh; no R2 object was deleted.',
+    jsonb_build_object(
+      'source', 'api/storage/cleanup-run',
+      'actor', $2::text,
+      'reclaimable_bytes', updated.reclaimable_bytes
+    )
+  from updated
+  returning artifact_id
+)
+select count(*)::int objects, coalesce(sum(reclaimable_bytes), 0)::bigint bytes
+from updated;`,
+    [campaign, String(actor || 'unknown')]
+  );
+  const row = result.rows[0] || {};
+  return {
+    objects: Number(row.objects || 0),
+    bytes: Number(row.bytes || 0)
+  };
 }
 
 async function runStorageCleanup(req, campaign, body) {
@@ -1736,7 +1785,11 @@ async function runStorageCleanup(req, campaign, body) {
     throw httpError(400, 'Execucao real exige confirm="DELETE_READY_R2".');
   }
   const db = getPool();
-  const candidates = await selectCleanupCandidates(db, campaign, limit);
+  const actorId = String(access.profile?.id || access.user?.id || access.user?.email || 'unknown');
+  const readinessRefresh = dryRun
+    ? { objects: 0, bytes: 0, dryRunSkipped: true }
+    : await refreshCleanupReadiness(db, campaign, actorId);
+  const candidates = await selectCleanupCandidates(db, campaign, limit, !dryRun);
   const summary = {
     ok: true,
     mode: 'storage_cleanup_delete_ready',
@@ -1744,6 +1797,7 @@ async function runStorageCleanup(req, campaign, body) {
     limit,
     candidateObjects: candidates.length,
     candidateBytes: candidates.reduce((total, item) => total + Number(item.reclaimable_bytes || item.size_bytes || 0), 0),
+    readinessRefresh,
     deletedObjects: 0,
     deletedBytes: 0,
     failedObjects: 0,
@@ -1778,7 +1832,7 @@ set lifecycle_status = 'delete_queued',
 where id = $1::uuid
   and lifecycle_status = 'delete_ready'
 returning id;`,
-      [item.artifact_id, String(access.profile?.id || access.user?.id || access.user?.email || 'unknown')]
+      [item.artifact_id, actorId]
     );
     if (!claimed.rows.length) continue;
     await db.query(
@@ -1804,7 +1858,7 @@ set lifecycle_status = 'deleted',
     ),
     updated_at = now()
 where id = $1::uuid;`,
-        [item.artifact_id, String(access.profile?.id || access.user?.id || access.user?.email || 'unknown')]
+        [item.artifact_id, actorId]
       );
       await db.query(
         `
