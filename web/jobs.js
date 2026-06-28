@@ -139,9 +139,11 @@
         await loadSessions(false);
       }
       render?.();
+      return payload;
     } catch (error) {
       toast?.(error.message);
       remember?.(`Job ${type} falhou: ${error.message}`);
+      return null;
     } finally {
       if (typeof setBusy === 'function') setBusy(false);
     }

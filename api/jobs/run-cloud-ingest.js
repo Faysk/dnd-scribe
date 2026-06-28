@@ -8,6 +8,9 @@ const { notifyDiscord } = require('../../lib/discord');
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const MAX_INFO_ENTRY_BYTES = 1024 * 1024;
 const ZIP_TAIL_BYTES = 128 * 1024;
+const FLAC_HEADER_BYTES = 64 * 1024;
+const FLAC_PROBE_BYTES = 256 * 1024;
+const SESSION_TIME_ZONE = process.env.DND_SESSION_TIME_ZONE || 'Europe/London';
 
 let pool;
 
@@ -217,17 +220,64 @@ async function readZipDirectory(bucket, key, sizeBytes) {
 async function readZipEntry(bucket, key, entry) {
   if (entry.flags & 0x0001) throw httpError(400, `ZIP entry criptografada nao suportada: ${entry.filename}`);
   if (entry.compressedSize > MAX_INFO_ENTRY_BYTES) throw httpError(400, `ZIP entry grande demais para manifest-only: ${entry.filename}`);
-  const localHeader = await fetchObjectRange(bucket, key, entry.localHeaderOffset, entry.localHeaderOffset + 30 - 1);
-  if (localHeader.readUInt32LE(0) !== 0x04034b50) throw httpError(400, `Local header invalido: ${entry.filename}`);
-  const fileNameLength = localHeader.readUInt16LE(26);
-  const extraLength = localHeader.readUInt16LE(28);
-  const dataStart = entry.localHeaderOffset + 30 + fileNameLength + extraLength;
+  const dataStart = await dataStartForEntry(bucket, key, entry);
   const compressed = entry.compressedSize
     ? await fetchObjectRange(bucket, key, dataStart, dataStart + entry.compressedSize - 1)
     : Buffer.alloc(0);
   if (entry.compressionMethod === 0) return compressed;
   if (entry.compressionMethod === 8) return zlib.inflateRawSync(compressed);
   throw httpError(400, `Metodo de compressao nao suportado em ${entry.filename}: ${entry.compressionMethod}`);
+}
+
+async function dataStartForEntry(bucket, key, entry) {
+  if (entry.flags & 0x0001) throw httpError(400, `ZIP entry criptografada nao suportada: ${entry.filename}`);
+  const localHeader = await fetchObjectRange(bucket, key, entry.localHeaderOffset, entry.localHeaderOffset + 30 - 1);
+  if (localHeader.readUInt32LE(0) !== 0x04034b50) throw httpError(400, `Local header invalido: ${entry.filename}`);
+  const fileNameLength = localHeader.readUInt16LE(26);
+  const extraLength = localHeader.readUInt16LE(28);
+  return entry.localHeaderOffset + 30 + fileNameLength + extraLength;
+}
+
+function parseFlacDurationMs(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 42) return null;
+  const marker = buffer.indexOf(Buffer.from('fLaC'));
+  if (marker < 0) return null;
+  let offset = marker + 4;
+  while (offset + 4 <= buffer.length) {
+    const header = buffer[offset];
+    const blockType = header & 0x7f;
+    const blockLength = buffer.readUIntBE(offset + 1, 3);
+    const dataOffset = offset + 4;
+    if (dataOffset + blockLength > buffer.length) return null;
+    if (blockType === 0 && blockLength >= 34) {
+      const streamInfo = buffer.subarray(dataOffset, dataOffset + blockLength);
+      const packed = streamInfo.readBigUInt64BE(10);
+      const sampleRate = Number((packed >> 44n) & 0xfffffn);
+      const totalSamples = Number(packed & 0xfffffffffn);
+      if (!sampleRate || !totalSamples) return null;
+      return Math.round((totalSamples / sampleRate) * 1000);
+    }
+    if (header & 0x80) break;
+    offset = dataOffset + blockLength;
+  }
+  return null;
+}
+
+async function readFlacDurationMs(bucket, key, entry) {
+  try {
+    const dataStart = await dataStartForEntry(bucket, key, entry);
+    const readSize = entry.compressionMethod === 0
+      ? Math.min(entry.fileSize, FLAC_HEADER_BYTES)
+      : Math.min(entry.compressedSize, FLAC_PROBE_BYTES);
+    if (!readSize) return null;
+    const probe = await fetchObjectRange(bucket, key, dataStart, dataStart + readSize - 1);
+    const header = entry.compressionMethod === 0
+      ? probe
+      : zlib.inflateRawSync(probe, { finishFlush: zlib.constants.Z_SYNC_FLUSH }).subarray(0, FLAC_HEADER_BYTES);
+    return parseFlacDurationMs(header);
+  } catch (_error) {
+    return null;
+  }
 }
 
 function baseName(filename) {
@@ -289,7 +339,7 @@ function buildParticipants(trackEntries, info, mappingData) {
   const mapping = mappingData.tracks || {};
   const infoTracks = Object.fromEntries((info.tracks || []).map(item => [item.track_key, item]));
   return trackEntries.map(entry => {
-    const key = trackKey(entry.filename);
+    const key = entry.trackKey || trackKey(entry.filename);
     const mapped = mapping[key] || {};
     const infoTrack = infoTracks[key] || {};
     const status = mapped.status || 'guest_or_unknown';
@@ -307,9 +357,47 @@ function buildParticipants(trackEntries, info, mappingData) {
       needs_review: status !== 'known',
       file_size: entry.fileSize,
       compressed_size: entry.compressedSize,
+      duration_ms: entry.durationMs || null,
       crc32: entry.crc32
     };
   });
+}
+
+function dateInTimeZone(value, timeZone = SESSION_TIME_ZONE) {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function buildSessionWindow(manifest) {
+  const startedAt = manifest.craig?.start_time || '';
+  const durations = (manifest.tracks || [])
+    .map(track => Number(track.durationMs || 0))
+    .filter(duration => Number.isFinite(duration) && duration > 0);
+  const durationMs = durations.length ? Math.max(...durations) : 0;
+  const endedAt = startedAt && durationMs
+    ? new Date(new Date(startedAt).getTime() + durationMs).toISOString()
+    : '';
+  const logicalDate = startedAt ? dateInTimeZone(startedAt) : '';
+  const endDate = endedAt ? dateInTimeZone(endedAt) : '';
+  return {
+    time_zone: SESSION_TIME_ZONE,
+    started_at: startedAt || null,
+    ended_at: endedAt || null,
+    logical_date: logicalDate || null,
+    duration_ms: durationMs || null,
+    duration_source: durations.length === (manifest.tracks || []).length ? 'flac_streaminfo_all_tracks' : (durations.length ? 'flac_streaminfo_partial_tracks' : 'pending_track_duration'),
+    duration_tracks: durations.length,
+    total_tracks: (manifest.tracks || []).length,
+    crosses_midnight: Boolean(logicalDate && endDate && logicalDate !== endDate)
+  };
 }
 
 async function selectJob(db, jobId) {
@@ -446,12 +534,14 @@ returning id;`,
 
 async function persistManifest(db, job, manifest, dryRun) {
   const participants = manifest.participants || [];
+  const sessionWindow = buildSessionWindow(manifest);
   if (dryRun) {
     return {
       dryRun: true,
       participants: participants.length,
       tracks: manifest.tracks.length,
-      zipEntries: manifest.zipEntries.length
+      zipEntries: manifest.zipEntries.length,
+      sessionWindow
     };
   }
 
@@ -474,6 +564,7 @@ async function persistManifest(db, job, manifest, dryRun) {
         tracks: manifest.tracks.length,
         info_file: manifest.infoFilename || null
       },
+      session_window: sessionWindow,
       participants: participants.map(item => ({
         track_key: item.track_key,
         person_name: item.person_name,
@@ -482,7 +573,8 @@ async function persistManifest(db, job, manifest, dryRun) {
         status: item.status,
         needs_review: item.needs_review,
         source_file: item.source_file,
-        discord_id: item.discord_id
+        discord_id: item.discord_id,
+        duration_ms: item.duration_ms || null
       }))
     }
   };
@@ -503,10 +595,19 @@ update sessions
 set status = case when status in ('planned','recording') then 'uploaded' else status end,
     metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb,
     started_at = coalesce(started_at, nullif($3, '')::timestamptz),
-    session_date = coalesce(session_date, (nullif($3, '')::timestamptz)::date),
+    session_date = coalesce(session_date, nullif($4, '')::date),
+    duration_ms = case when $5::integer > 0 then greatest(coalesce(duration_ms, 0), $5::integer) else duration_ms end,
+    ended_at = coalesce(ended_at, nullif($6, '')::timestamptz),
     updated_at = now()
 where id = $1::uuid;`,
-    [job.session_id, JSON.stringify(manifestMetadata), manifest.craig?.start_time || '']
+    [
+      job.session_id,
+      JSON.stringify(manifestMetadata),
+      sessionWindow.started_at || '',
+      sessionWindow.logical_date || '',
+      sessionWindow.duration_ms || 0,
+      sessionWindow.ended_at || ''
+    ]
   );
 
   const nextJob = await db.query(
@@ -527,7 +628,7 @@ returning id;`,
         recordingFileId: manifest.recordingFileId,
         storageBucket: manifest.storageBucket,
         storagePath: manifest.storagePath,
-        tracks: manifest.tracks.map(item => ({ filename: item.filename, sizeBytes: item.fileSize }))
+        tracks: manifest.tracks.map(item => ({ filename: item.filename, sizeBytes: item.fileSize, durationMs: item.durationMs || null }))
       }),
       JSON.stringify({
         workerStatus: 'ready_to_run',
@@ -543,6 +644,7 @@ returning id;`,
     participants: participantIds.length,
     tracks: manifest.tracks.length,
     zipEntries: manifest.zipEntries.length,
+    sessionWindow,
     nextJobId: nextJob.rows[0]?.id || null
   };
 }
@@ -564,7 +666,12 @@ async function buildManifest(job) {
   const tracks = directory.entries
     .filter(entry => entry.isFlac && !entry.isDirectory)
     .sort((a, b) => a.filename.localeCompare(b.filename));
-  const participants = buildParticipants(tracks, craig, mappingData);
+  const trackDetails = await Promise.all(tracks.map(async entry => ({
+    ...entry,
+    trackKey: trackKey(entry.filename),
+    durationMs: await readFlacDurationMs(storageBucket, storagePath, entry)
+  })));
+  const participants = buildParticipants(trackDetails, craig, mappingData);
 
   return {
     schemaVersion: 1,
@@ -585,12 +692,13 @@ async function buildManifest(job) {
       isFlac: entry.isFlac,
       isDirectory: entry.isDirectory
     })),
-    tracks: tracks.map(entry => ({
+    tracks: trackDetails.map(entry => ({
       filename: entry.filename,
       fileSize: entry.fileSize,
       compressedSize: entry.compressedSize,
       crc32: entry.crc32,
-      trackKey: trackKey(entry.filename)
+      trackKey: entry.trackKey,
+      durationMs: entry.durationMs || null
     })),
     participants,
     rules: mappingData.rules || {}
@@ -619,12 +727,13 @@ async function runCloudIngest(raw) {
         workerStatus: 'manifest_succeeded',
         paidAiCostUsd: 0,
         manifest: {
-          tracks: manifest.tracks.length,
-          participants: manifest.participants.length,
-          zipEntries: manifest.zipEntries.length,
-          infoFilename: manifest.infoFilename,
-          nextJobId: persisted.nextJobId
-        }
+        tracks: manifest.tracks.length,
+        participants: manifest.participants.length,
+        zipEntries: manifest.zipEntries.length,
+        infoFilename: manifest.infoFilename,
+        sessionWindow: persisted.sessionWindow,
+        nextJobId: persisted.nextJobId
+      }
       });
       await notifyJob({
         target: 'recordings',
@@ -654,7 +763,8 @@ async function runCloudIngest(raw) {
         tracks: manifest.tracks,
         participants: manifest.participants,
         infoFilename: manifest.infoFilename,
-        zipEntries: manifest.zipEntries.length
+        zipEntries: manifest.zipEntries.length,
+        sessionWindow: persisted.sessionWindow
       },
       cost: { paidAiCostUsd: 0 }
     };

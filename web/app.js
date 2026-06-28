@@ -144,6 +144,24 @@ function fmtDuration(ms = 0) {
   return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
 }
 
+function fmtBytes(bytes = 0) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function recordingIdFromCraigName(fileName = '') {
+  const match = String(fileName || '').match(/^craig-([a-zA-Z0-9]+)-/);
+  return match ? match[1] : '';
+}
+
 function dateTimeLocalValue(value) {
   if (!value) return '';
   const date = new Date(value);
@@ -580,6 +598,12 @@ function sessionStatusLabel(status) {
     archived: 'Arquivada',
     failed: 'Falhou'
   }[status] || status || 'Sem status';
+}
+
+function sessionTimeRange(session = {}) {
+  const start = session.startedAt ? fmtDateTime(session.startedAt) : 'sem inicio';
+  const end = session.endedAt ? fmtDateTime(session.endedAt) : 'sem fim';
+  return `${start} -> ${end}`;
 }
 
 function selectedSession() {
@@ -1088,9 +1112,11 @@ function renderSessionsManager() {
             <label><span class="label">Status</span><select id="newSessionStatus">${sessionStatusOptions('planned')}</select></label>
           </div>
           <label><span class="label">Inicio real</span><input id="newSessionStartedAt" type="datetime-local" /></label>
+          <label><span class="label">Fim real</span><input id="newSessionEndedAt" type="datetime-local" /></label>
           <div class="actions">
             <button onclick="setDateTimeNow('newSessionStartedAt')">Usar agora</button>
             <button onclick="clearDateTime('newSessionStartedAt')">Limpar inicio</button>
+            <button onclick="clearDateTime('newSessionEndedAt')">Limpar fim</button>
           </div>
           <label><span class="label">Resumo curto</span><textarea id="newSessionSummary" placeholder="Opcional"></textarea></label>
           <div class="actions">
@@ -1192,8 +1218,23 @@ function craigTrackForm(trackKey, item, editableKey) {
 }
 
 function renderCraigIngestPanel() {
+  const upload = state.ingest.result?.upload || state.ingest.planned?.upload || null;
+  const fileName = state.ingest.file?.name || upload?.originalFilename || '';
+  const recordingId = recordingIdFromCraigName(fileName);
   return `
     <div class="detail-grid">
+      <div class="upload-brief">
+        <div>
+          <span class="label">Fluxo Craig</span>
+          <strong>ZIP direto para R2, jobs em producao</strong>
+          <small>Data logica vem do inicio da gravacao em Europe/London; se acabar depois da meia-noite, continua sendo a mesma sessao.</small>
+        </div>
+        <div class="badges">
+          ${badge('OpenAI $0 nesta etapa', 'green')}
+          ${badge('R2 direto', 'blue')}
+          ${badge(recordingId ? `Craig ${recordingId}` : 'novo ZIP', 'gold')}
+        </div>
+      </div>
       <label><span class="label">Sessao alvo</span>
         <select id="ingestSessionId">
           <option value="">Criar nova sessao pelo ZIP (recomendado)</option>
@@ -1207,12 +1248,117 @@ function renderCraigIngestPanel() {
         <label><span class="label">Amostra segundos</span><input id="ingestSampleSeconds" type="number" min="0" step="30" placeholder="vazio" /></label>
       </div>
       <label class="check-row"><input id="ingestSkipChunks" type="checkbox" /> <span>Somente manifest quando o worker cloud estiver ativo</span></label>
+      ${renderIngestChecklist()}
       <div class="actions">
         <button class="primary" onclick="uploadCraigFromForm()" ${state.ingest.busy ? 'disabled' : ''}>Enviar ZIP para producao</button>
+        <button onclick="loadJobs(true)">Atualizar jobs</button>
       </div>
       ${state.ingest.busy ? renderIngestProgress() : ''}
       ${state.ingest.error ? `<div class="empty">${escapeHtml(state.ingest.error)}</div>` : ''}
       ${state.ingest.result ? renderIngestResult(state.ingest.result) : ''}
+    </div>
+  `;
+}
+
+function ingestSourceSessionId() {
+  return state.ingest.planned?.session?.sourceSessionId
+    || state.ingest.result?.session?.sourceSessionId
+    || state.ingest.result?.sourceSessionId
+    || state.ingest.lastJobResult?.sourceSessionId
+    || state.selectedSourceSessionId
+    || '';
+}
+
+function ingestJob(type) {
+  const sourceSessionId = ingestSourceSessionId();
+  return (state.jobs || []).find(job => {
+    const jobSource = job.session?.sourceSessionId || job.sourceSessionId || '';
+    return job.type === type && (!sourceSessionId || jobSource === sourceSessionId);
+  }) || null;
+}
+
+function jobStepState(job, readyLabel = 'pronto') {
+  if (!job) return { status: 'waiting', label: 'aguardando' };
+  if (job.status === 'succeeded') return { status: 'done', label: 'ok' };
+  if (job.status === 'failed') return { status: 'error', label: 'falhou' };
+  if (job.status === 'running') return { status: 'active', label: 'rodando' };
+  return { status: 'ready', label: readyLabel };
+}
+
+function sessionWindowText(windowData) {
+  const start = fmtDateTime(windowData.started_at);
+  const end = windowData.ended_at ? fmtDateTime(windowData.ended_at) : 'fim pendente';
+  const date = windowData.logical_date || 'data pendente';
+  const duration = windowData.duration_ms ? fmtDuration(windowData.duration_ms) : 'duracao pendente';
+  const midnight = windowData.crosses_midnight ? ' atravessa meia-noite.' : '';
+  return `${date} | ${start} -> ${end} | ${duration}.${midnight}`;
+}
+
+function ingestStepRows() {
+  const phase = state.ingest.phase;
+  const result = state.ingest.result || null;
+  const planned = state.ingest.planned || null;
+  const lastJob = state.ingest.lastJobResult || null;
+  const manifestJob = ingestJob('cloud_ingest_craig');
+  const extractJob = ingestJob('cloud_extract_craig_tracks');
+  const chunkJob = ingestJob('cloud_plan_audio_chunks');
+  const manifestResult = lastJob?.mode === 'cloud_manifest_only' ? lastJob : null;
+  const extractResult = lastJob?.mode === 'cloud_extract_craig_tracks' ? lastJob : null;
+  const sessionWindow = manifestResult?.summary?.sessionWindow || manifestResult?.manifest?.sessionWindow || null;
+  const manifestState = manifestResult
+    ? { status: manifestResult.dryRun ? 'ready' : 'done', label: manifestResult.dryRun ? 'simulado' : 'ok' }
+    : jobStepState(manifestJob, result?.job?.type === 'cloud_ingest_craig' ? 'pronto' : 'aguardando');
+  const extractState = extractResult
+    ? { status: extractResult.summary?.remainingTracks > 0 ? 'active' : 'done', label: extractResult.summary?.remainingTracks > 0 ? 'parcial' : 'ok' }
+    : jobStepState(extractJob, manifestState.status === 'done' ? 'pronto' : 'aguardando');
+  const chunkState = jobStepState(chunkJob, extractState.status === 'done' ? 'pronto' : 'aguardando');
+  return [
+    {
+      title: 'Sessao e metadados',
+      detail: planned?.session?.sourceSessionId || result?.session?.sourceSessionId || 'Nova sessao sera inferida pelo nome do ZIP.',
+      state: phase === 'planning' ? { status: 'active', label: 'criando' } : (planned || result ? { status: 'done', label: 'ok' } : { status: 'waiting', label: 'aguardando' })
+    },
+    {
+      title: 'Upload R2',
+      detail: state.ingest.file ? `${state.ingest.file.name} - ${fmtBytes(state.ingest.file.size)}` : 'Arquivo vai direto do navegador para o bucket.',
+      state: phase === 'uploading' ? { status: 'active', label: `${Math.round(Number(state.ingest.progress || 0))}%` } : (['confirming', 'done'].includes(phase) || result ? { status: 'done', label: 'ok' } : { status: 'waiting', label: 'aguardando' })
+    },
+    {
+      title: 'Confirmar banco e fila',
+      detail: result?.job?.id ? `Job ${result.job.type} ${String(result.job.id).slice(0, 8)}` : 'Confirma o arquivo e cria o primeiro job cloud.',
+      state: phase === 'confirming' ? { status: 'active', label: 'salvando' } : (result?.job ? { status: 'done', label: 'ok' } : { status: 'waiting', label: 'aguardando' })
+    },
+    {
+      title: 'Manifest Craig',
+      detail: sessionWindow ? sessionWindowText(sessionWindow) : 'Le info.txt, participantes, faixas e duracao FLAC quando disponivel.',
+      state: manifestState
+    },
+    {
+      title: 'Extrair faixas',
+      detail: extractResult?.summary ? `${extractResult.summary.extractedThisRun || 0} extraidas agora, ${extractResult.summary.remainingTracks || 0} restantes.` : 'Copia cada FLAC do ZIP para objeto R2 individual.',
+      state: extractState
+    },
+    {
+      title: 'Chunks e OpenAI',
+      detail: 'So entra depois de faixas extraidas; speech slicing reduz minutos pagos antes da transcricao.',
+      state: chunkState.status === 'done' ? chunkState : (chunkState.status === 'ready' ? chunkState : { status: 'waiting', label: 'depois' })
+    }
+  ];
+}
+
+function renderIngestChecklist() {
+  return `
+    <div class="upload-step-list">
+      ${ingestStepRows().map(step => `
+        <div class="upload-step ${step.state.status}">
+          <span class="upload-step-dot"></span>
+          <div>
+            <strong>${escapeHtml(step.title)}</strong>
+            <small>${escapeHtml(step.detail)}</small>
+          </div>
+          ${badge(step.state.label, step.state.status === 'done' ? 'green' : step.state.status === 'error' ? 'red' : step.state.status === 'active' ? 'orange' : step.state.status === 'ready' ? 'blue' : '')}
+        </div>
+      `).join('')}
     </div>
   `;
 }
@@ -1238,24 +1384,67 @@ function renderIngestProgress() {
         ${hasProgress ? badge(`${Math.round(width)}%`, 'blue') : badge('preparando', 'gold')}
       </div>
       <div class="progress-bar"><span style="width:${width}%"></span></div>
-      <p>O arquivo grande nao passa pela Vercel Function; o navegador envia direto para o bucket R2.</p>
+      <p>${escapeHtml(state.ingest.file ? `${state.ingest.file.name} - ${fmtBytes(state.ingest.file.size)}` : 'O arquivo grande nao passa pela Vercel Function; o navegador envia direto para o bucket R2.')}</p>
     </div>
   `;
 }
 
 function renderIngestResult(result) {
+  const lastJob = state.ingest.lastJobResult || null;
+  if (lastJob?.mode === 'cloud_manifest_only') {
+    const summary = lastJob.summary || {};
+    const sessionWindow = summary.sessionWindow || lastJob.manifest?.sessionWindow || null;
+    return `
+      <div class="ops-card upload-result-card">
+        <span class="label">Manifest Craig</span>
+        <div class="badges">
+          ${badge(lastJob.dryRun ? 'simulacao' : 'processado', lastJob.dryRun ? 'blue' : 'green')}
+          ${badge(`${summary.tracks || 0} tracks`, 'blue')}
+          ${badge(`${summary.participants || 0} participantes`, 'green')}
+          ${badge('OpenAI $0', 'green')}
+        </div>
+        ${sessionWindow ? `<div class="empty">${escapeHtml(sessionWindowText(sessionWindow))}</div>` : ''}
+        <div class="actions">
+          <button onclick="openOperations()">Abrir Operacao</button>
+          <button onclick="loadJobs(true)">Atualizar jobs</button>
+        </div>
+      </div>
+    `;
+  }
+  if (lastJob?.mode === 'cloud_extract_craig_tracks') {
+    const summary = lastJob.summary || {};
+    return `
+      <div class="ops-card upload-result-card">
+        <span class="label">Extracao Craig</span>
+        <div class="badges">
+          ${badge(summary.remainingTracks > 0 ? 'parcial' : 'processado', summary.remainingTracks > 0 ? 'orange' : 'green')}
+          ${badge(`${summary.extractedThisRun || 0} agora`, 'blue')}
+          ${badge(`${summary.remainingTracks || 0} restantes`, summary.remainingTracks > 0 ? 'orange' : 'green')}
+          ${badge('OpenAI $0', 'green')}
+        </div>
+        <div class="actions">
+          <button onclick="openOperations()">Abrir Operacao</button>
+          <button onclick="loadJobs(true)">Atualizar jobs</button>
+        </div>
+      </div>
+    `;
+  }
   if (result.job) {
     return `
-      <div class="ops-card">
-        <span class="label">Job</span>
-        <strong>${escapeHtml(result.job.type)}</strong>
-        <div class="badges">${badge(result.job.status, result.job.status === 'failed' ? 'red' : 'blue')}${badge(result.job.id.slice(0, 8), 'gold')}</div>
-        ${result.upload ? `<pre>${escapeHtml(JSON.stringify({
-          bucket: result.upload.storageBucket,
-          path: result.upload.storagePath,
-          file: result.upload.originalFilename,
-          cost: result.cost?.paidAiCostUsd ?? 0
-        }, null, 2))}</pre>` : ''}
+      <div class="ops-card upload-result-card">
+        <span class="label">Upload confirmado</span>
+        <strong>${escapeHtml(result.upload?.originalFilename || result.job.type)}</strong>
+        <div class="badges">
+          ${badge(result.job.status, result.job.status === 'failed' ? 'red' : 'blue')}
+          ${badge(result.job.id.slice(0, 8), 'gold')}
+          ${badge(fmtBytes(result.upload?.sizeBytes || state.ingest.file?.size || 0), 'blue')}
+          ${badge('OpenAI $0', 'green')}
+        </div>
+        ${result.upload ? `<div class="source-detail-grid">
+          <div><span class="label">Bucket</span><strong>${escapeHtml(result.upload.storageBucket || '-')}</strong></div>
+          <div><span class="label">Sessao</span><strong>${escapeHtml(result.session?.sourceSessionId || state.ingest.planned?.session?.sourceSessionId || '-')}</strong></div>
+          <div><span class="label">R2 path</span><strong>${escapeHtml(result.upload.storagePath || '-')}</strong></div>
+        </div>` : ''}
         <div class="actions">
           <button onclick="runUploadedCraigJob(true)">Simular job</button>
           <button class="primary" onclick="runUploadedCraigJob(false)">Executar job</button>
@@ -1267,7 +1456,7 @@ function renderIngestResult(result) {
   }
   const ingest = result.ingest || {};
   return `
-    <div class="ops-card">
+    <div class="ops-card upload-result-card">
       <span class="label">Resultado</span>
       <div class="badges">
         ${badge(`${ingest.tracks || 0} tracks`, 'blue')}
@@ -1294,14 +1483,18 @@ function editSessionForm(session) {
         <label><span class="label">Status</span><select id="editSessionStatus">${sessionStatusOptions(session.status || 'planned')}</select></label>
       </div>
       <label><span class="label">Inicio real da sessao</span><input id="editSessionStartedAt" type="datetime-local" value="${escapeHtml(dateTimeLocalValue(session.startedAt))}" /></label>
+      <label><span class="label">Fim real/estimado</span><input id="editSessionEndedAt" type="datetime-local" value="${escapeHtml(dateTimeLocalValue(session.endedAt))}" /></label>
       <div class="actions">
         <button onclick="setDateTimeNow('editSessionStartedAt')">Usar agora</button>
         <button onclick="clearDateTime('editSessionStartedAt')">Limpar inicio</button>
+        <button onclick="clearDateTime('editSessionEndedAt')">Limpar fim</button>
       </div>
       <label><span class="label">Resumo curto</span><textarea id="editSessionSummary">${escapeHtml(session.summary || '')}</textarea></label>
       <div class="badges">
         ${badge(session.sourceSystem || 'manual', 'blue')}
         ${badge(`inicio: ${fmtDateTime(session.startedAt)}`, session.startedAt ? 'green' : 'orange')}
+        ${badge(`fim: ${fmtDateTime(session.endedAt)}`, session.endedAt ? 'green' : 'orange')}
+        ${session.durationMs ? badge(`duracao: ${fmtDuration(session.durationMs)}`, 'blue') : ''}
         ${badge(`${session.segments || 0} segmentos`, 'violet')}
         ${badge(`${session.recordingFiles || 0} arquivos`, 'gold')}
       </div>
@@ -1318,7 +1511,7 @@ function sessionCatalogRow(session) {
     <button class="session-row ${session.sourceSessionId === state.selectedSourceSessionId ? 'active' : ''}" onclick="loadSession('${escapeHtml(session.sourceSessionId)}')">
       <div>
         <strong>${escapeHtml(session.title || session.sourceSessionId)}</strong>
-        <small>${escapeHtml(session.sessionDate || 'sem data')} • ${escapeHtml(fmtDateTime(session.startedAt))} • ${escapeHtml(session.sourceSessionId || '')}</small>
+        <small>${escapeHtml(session.sessionDate || 'sem data')} • ${escapeHtml(sessionTimeRange(session))} • ${escapeHtml(session.sourceSessionId || '')}</small>
       </div>
       <div class="badges">
         ${badge(sessionStatusLabel(session.status), session.status === 'failed' ? 'red' : 'blue')}
@@ -1345,6 +1538,7 @@ async function createSessionFromForm() {
         title,
         sessionDate: $('#newSessionDate')?.value || null,
         startedAt: localDateTimeToIso($('#newSessionStartedAt')?.value || ''),
+        endedAt: localDateTimeToIso($('#newSessionEndedAt')?.value || ''),
         arc: $('#newSessionArc')?.value || '',
         status: $('#newSessionStatus')?.value || 'planned',
         summary: $('#newSessionSummary')?.value || '',
@@ -1382,6 +1576,7 @@ async function updateSessionFromForm() {
         title,
         sessionDate: $('#editSessionDate')?.value || null,
         startedAt: localDateTimeToIso($('#editSessionStartedAt')?.value || ''),
+        endedAt: localDateTimeToIso($('#editSessionEndedAt')?.value || ''),
         arc: $('#editSessionArc')?.value || '',
         status: $('#editSessionStatus')?.value || 'planned',
         summary: $('#editSessionSummary')?.value || '',
@@ -1409,12 +1604,17 @@ async function uploadCraigFromForm() {
     toast('Selecione o ZIP Craig.');
     return;
   }
+  const fileInfo = {
+    name: file.name,
+    size: file.size,
+    type: file.type || 'application/zip'
+  };
   const targetSessionId = $('#ingestSessionId')?.value || '';
   if (targetSessionId) {
     const ok = window.confirm(`Anexar este ZIP Craig na sessao existente "${targetSessionId}"? Para uma nova gravacao, cancele e deixe "Criar nova sessao pelo ZIP".`);
     if (!ok) return;
   }
-  state.ingest = { busy: true, phase: 'planning', progress: null, error: null, result: null };
+  state.ingest = { busy: true, phase: 'planning', progress: null, error: null, result: null, planned: null, lastJobResult: null, file: fileInfo };
   setBusy(true);
   render();
   try {
@@ -1433,7 +1633,7 @@ async function uploadCraigFromForm() {
       })
     });
     remember(`URL R2 criada: ${planned.upload?.storagePath || file.name}`);
-    state.ingest = { busy: true, phase: 'uploading', progress: 0, error: null, result: null };
+    state.ingest = { ...state.ingest, busy: true, phase: 'uploading', progress: 0, error: null, result: null, planned, file: fileInfo };
     render();
     const uploadResponse = await uploadFileToSignedUrl(
       planned.upload.signedUrl,
@@ -1443,7 +1643,7 @@ async function uploadCraigFromForm() {
     if (!uploadResponse.ok) {
       throw new Error(`Upload R2 falhou (${uploadResponse.status}). Verifique CORS do bucket e tente novamente.`);
     }
-    state.ingest = { busy: true, phase: 'confirming', progress: 100, error: null, result: null };
+    state.ingest = { ...state.ingest, busy: true, phase: 'confirming', progress: 100, error: null, result: null, planned, file: fileInfo };
     render();
     const payload = await api('/api/uploads/craig-complete', {
       method: 'POST',
@@ -1455,7 +1655,7 @@ async function uploadCraigFromForm() {
         runId: DEFAULT_RUN
       })
     });
-    state.ingest = { busy: false, phase: 'done', progress: 100, error: null, result: payload };
+    state.ingest = { ...state.ingest, busy: false, phase: 'done', progress: 100, error: null, result: payload, planned, file: fileInfo };
     if (payload.sessions) state.sessions = payload.sessions;
     if (payload.jobs) state.jobs = payload.jobs;
     state.selectedSourceSessionId = planned.session.sourceSessionId || state.selectedSourceSessionId;
@@ -1469,7 +1669,7 @@ async function uploadCraigFromForm() {
       toast('ZIP Craig enviado.');
     }
   } catch (error) {
-    state.ingest = { busy: false, phase: null, progress: null, error: error.message, result: null };
+    state.ingest = { ...state.ingest, busy: false, phase: null, progress: null, error: error.message, result: null, file: fileInfo };
     toast(error.message);
   } finally {
     setBusy(false);
@@ -1527,7 +1727,12 @@ async function runUploadedCraigJob(dryRun = false) {
     toast('Abra Operacao para executar este job.');
     return;
   }
-  await window.runCloudJob(job.id, job.type, dryRun);
+  const payload = await window.runCloudJob(job.id, job.type, dryRun);
+  if (payload) {
+    state.ingest = { ...state.ingest, lastJobResult: payload };
+    if (payload.sourceSessionId) state.selectedSourceSessionId = payload.sourceSessionId;
+    render();
+  }
 }
 
 async function saveCraigTrack(trackKey, editableKey = false) {

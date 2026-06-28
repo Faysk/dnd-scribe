@@ -257,6 +257,65 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   background: linear-gradient(90deg, var(--blue), var(--green));
   transition: width .2s ease;
 }
+.upload-brief {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 12px;
+}
+.upload-brief strong {
+  display: block;
+  margin-top: 3px;
+}
+.upload-step-list {
+  display: grid;
+  gap: 8px;
+}
+.upload-step {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 9px 10px;
+}
+.upload-step strong,
+.upload-step small {
+  display: block;
+}
+.upload-step-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--faint);
+  box-shadow: 0 0 0 4px rgba(116,128,147,.12);
+}
+.upload-step.done .upload-step-dot {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(118,211,155,.14);
+}
+.upload-step.active .upload-step-dot {
+  background: var(--orange);
+  box-shadow: 0 0 0 4px rgba(242,155,97,.16);
+}
+.upload-step.ready .upload-step-dot {
+  background: var(--blue);
+  box-shadow: 0 0 0 4px rgba(128,191,255,.15);
+}
+.upload-step.error .upload-step-dot {
+  background: var(--red);
+  box-shadow: 0 0 0 4px rgba(255,123,119,.15);
+}
+.upload-result-card {
+  display: grid;
+  gap: 10px;
+}
 
 .toolbar {
   display: grid;
@@ -611,8 +670,15 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .workspace { padding: 12px 12px 118px; }
   .rail { padding: 12px; }
-  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row {
+  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief {
     grid-template-columns: 1fr;
+  }
+  .upload-step {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+  .upload-step .badge {
+    grid-column: 2;
+    justify-self: start;
   }
   .top-actions {
     display: grid;

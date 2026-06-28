@@ -18,6 +18,7 @@ const CRAIG_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
 const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_SYNC_MAX_MESSAGES = 100;
+const SESSION_TIME_ZONE = process.env.DND_SESSION_TIME_ZONE || 'Europe/London';
 
 const SESSION_STATUSES = new Set([
   'planned',
@@ -146,6 +147,21 @@ function normalizeDate(value) {
   if (!text) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw httpError(400, 'sessionDate precisa estar em YYYY-MM-DD.');
   return text;
+}
+
+function dateOnly(value) {
+  if (!value) return null;
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SESSION_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
 }
 
 function normalizeDateTime(value, fieldName = 'datetime') {
@@ -2021,11 +2037,16 @@ where id = $1::uuid;`,
   return {
     ok: true,
     mode: 'prod_upload_confirmed',
+    session: {
+      sourceSessionId: context.source_session_id,
+      title: context.session_title
+    },
     upload: {
       recordingFileId,
       storageBucket: context.storage_bucket,
       storagePath: context.storage_path,
-      originalFilename: context.original_filename
+      originalFilename: context.original_filename,
+      sizeBytes: raw.sizeBytes || context.size_bytes || null
     },
     job: jobResponse(ingestJobResult.rows[0]),
     cost: {
@@ -2041,8 +2062,9 @@ function sessionResponse(row) {
     title: row.title,
     sourceSessionId: row.source_session_id,
     sourceSystem: row.source_system,
-    sessionDate: row.session_date,
+    sessionDate: dateOnly(row.session_date),
     startedAt: row.started_at,
+    endedAt: row.ended_at,
     arc: row.arc,
     status: row.status,
     durationMs: row.duration_ms,
@@ -2057,6 +2079,7 @@ async function createSession(db, campaign, raw) {
   if (!title) throw httpError(400, 'title obrigatorio.');
   const sessionDate = normalizeDate(raw.sessionDate || raw.session_date);
   const startedAt = normalizeDateTime(raw.startedAt || raw.started_at, 'startedAt');
+  const endedAt = normalizeDateTime(raw.endedAt || raw.ended_at, 'endedAt');
   const status = normalizeStatus(raw.status, 'planned');
   const arc = cleanText(raw.arc, 120) || null;
   const summary = cleanText(raw.summary || raw.summaryShort || raw.summary_short, 2000) || null;
@@ -2074,16 +2097,22 @@ with campaign_row as (
   select id from campaigns where slug = $1
 ), inserted as (
   insert into sessions (
-    id, campaign_id, title, slug, session_date, started_at, arc, status, summary_short,
+    id, campaign_id, title, slug, session_date, started_at, ended_at, duration_ms, arc, status, summary_short,
     source_system, source_session_id, metadata, created_at, updated_at
   )
-  select gen_random_uuid(), campaign_row.id, $2, $3, $4::date, $5::timestamptz, $6, $7, $8,
-         'manual', $9, $10::jsonb, now(), now()
+  select gen_random_uuid(), campaign_row.id, $2, $3, $4::date, $5::timestamptz, $6::timestamptz,
+         case
+           when $5::timestamptz is not null and $6::timestamptz is not null and $6::timestamptz > $5::timestamptz
+             then floor(extract(epoch from ($6::timestamptz - $5::timestamptz)) * 1000)::integer
+           else null
+         end,
+         $7, $8, $9,
+         'manual', $10, $11::jsonb, now(), now()
   from campaign_row
   returning *
 )
 select * from inserted;`,
-    [campaign, title, slug, sessionDate, startedAt, arc, status, summary, sourceSessionId, JSON.stringify(metadata)]
+    [campaign, title, slug, sessionDate, startedAt, endedAt, arc, status, summary, sourceSessionId, JSON.stringify(metadata)]
   );
   if (!result.rows.length) throw httpError(404, `Campanha nao encontrada: ${campaign}`);
   return sessionResponse(result.rows[0]);
@@ -2096,6 +2125,7 @@ async function updateSession(db, campaign, sourceSessionId, raw) {
   if (!title) throw httpError(400, 'title obrigatorio.');
   const sessionDate = normalizeDate(raw.sessionDate || raw.session_date);
   const startedAt = normalizeDateTime(raw.startedAt || raw.started_at, 'startedAt');
+  const endedAt = normalizeDateTime(raw.endedAt || raw.ended_at, 'endedAt');
   const status = normalizeStatus(raw.status, 'planned');
   const arc = cleanText(raw.arc, 120) || null;
   const summary = cleanText(raw.summary || raw.summaryShort || raw.summary_short, 2000) || null;
@@ -2110,17 +2140,24 @@ update sessions s
 set title = $3,
     session_date = $4::date,
     started_at = $5::timestamptz,
-    arc = $6,
-    status = $7,
-    summary_short = $8,
-    metadata = coalesce(s.metadata, '{}'::jsonb) || $9::jsonb,
+    ended_at = $6::timestamptz,
+    duration_ms = case
+      when $5::timestamptz is not null and $6::timestamptz is not null and $6::timestamptz > $5::timestamptz
+        then floor(extract(epoch from ($6::timestamptz - $5::timestamptz)) * 1000)::integer
+      when $6::timestamptz is null then null
+      else null
+    end,
+    arc = $7,
+    status = $8,
+    summary_short = $9,
+    metadata = coalesce(s.metadata, '{}'::jsonb) || $10::jsonb,
     updated_at = now()
 from campaigns c
 where c.id = s.campaign_id
   and c.slug = $1
   and s.source_session_id = $2
 returning s.*;`,
-    [campaign, sourceId, title, sessionDate, startedAt, arc, status, summary, JSON.stringify(metadataPatch)]
+    [campaign, sourceId, title, sessionDate, startedAt, endedAt, arc, status, summary, JSON.stringify(metadataPatch)]
   );
   if (!result.rows.length) throw httpError(404, `Sessao nao encontrada: ${sourceId}`);
   return sessionResponse(result.rows[0]);
@@ -2131,7 +2168,7 @@ function targetCte() {
 with target as (
   select c.id campaign_id, c.slug campaign_slug, c.name campaign_name,
          s.id session_id, s.title session_title, s.source_session_id,
-         s.session_date, s.arc, s.status, s.duration_ms, s.summary_short, s.started_at
+         s.session_date, s.arc, s.status, s.duration_ms, s.summary_short, s.started_at, s.ended_at
   from sessions s join campaigns c on c.id = s.campaign_id
   where c.slug = $1 and s.source_session_id = $2
 )`;
@@ -2146,8 +2183,9 @@ select coalesce(json_agg(item order by item->>'sessionDate' desc nulls last, ite
     'title', s.title,
     'sourceSessionId', s.source_session_id,
     'sourceSystem', s.source_system,
-    'sessionDate', s.session_date,
+    'sessionDate', to_char(s.session_date, 'YYYY-MM-DD'),
     'startedAt', s.started_at,
+    'endedAt', s.ended_at,
     'arc', s.arc,
     'status', s.status,
     'durationMs', s.duration_ms,
@@ -2513,11 +2551,12 @@ select coalesce(json_agg(item order by item->>'source_publication_id'), '[]'::js
       id: session.session_id,
       sourceSessionId: session.source_session_id,
       title: session.session_title,
-      date: session.session_date,
+      date: dateOnly(session.session_date),
       arc: session.arc,
       status: session.status,
       durationMs: session.duration_ms,
       startedAt: session.started_at,
+      endedAt: session.ended_at,
       summary: session.summary_short
     },
     participants: participants || [],
@@ -2845,8 +2884,9 @@ select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483
       id: session.session_id,
       title: session.session_title,
       sourceSessionId: session.source_session_id,
-      sessionDate: session.session_date,
+      sessionDate: dateOnly(session.session_date),
       startedAt: session.started_at,
+      endedAt: session.ended_at,
       arc: session.arc,
       status: session.status,
       durationMs
@@ -3276,7 +3316,7 @@ function buildReviewPacket(context) {
     '',
     `- Campanha: \`${session.campaign_name}\``,
     `- Session source: \`${session.source_session_id}\``,
-    `- Data: \`${session.session_date || 'sem data'}\``,
+    `- Data: \`${dateOnly(session.session_date) || 'sem data'}\``,
     `- Run IA: \`${context.source_run_id}\``,
     '',
     '## Trava de publicação',

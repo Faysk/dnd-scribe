@@ -406,11 +406,11 @@ async function upsertTrackFile(db, job, track, participantId) {
     `
 insert into recording_files (
   id, session_id, participant_id, file_type, storage_bucket, storage_path,
-  original_filename, mime_type, size_bytes, source_system, source_file_role, metadata, created_at
+  original_filename, mime_type, size_bytes, duration_ms, source_system, source_file_role, metadata, created_at
 )
 values (
   gen_random_uuid(), $1::uuid, $2::uuid, 'craig_track', $3, $4,
-  $5, 'audio/flac', $6::bigint, 'craig', $7, $8::jsonb, now()
+  $5, 'audio/flac', $6::bigint, $7::integer, 'craig', $8, $9::jsonb, now()
 )
 on conflict (session_id, storage_bucket, storage_path)
 do update set
@@ -419,6 +419,7 @@ do update set
   original_filename = excluded.original_filename,
   mime_type = excluded.mime_type,
   size_bytes = excluded.size_bytes,
+  duration_ms = coalesce(excluded.duration_ms, recording_files.duration_ms),
   source_system = 'craig',
   source_file_role = excluded.source_file_role,
   metadata = coalesce(recording_files.metadata, '{}'::jsonb) || excluded.metadata
@@ -430,6 +431,7 @@ returning id;`,
       track.targetPath,
       baseName(track.filename),
       track.fileSize,
+      track.durationMs || null,
       `craig_track_${track.trackKey}`,
       JSON.stringify({
         imported_from: 'cloud_extract_craig_tracks',
@@ -440,6 +442,7 @@ returning id;`,
         track_key: track.trackKey,
         compressed_size: track.compressedSize,
         compression_method: track.compressionMethod,
+        duration_ms: track.durationMs || null,
         crc32: track.crc32,
         extracted_at: new Date().toISOString()
       })
@@ -519,12 +522,16 @@ async function buildPlan(db, job) {
   const directory = await readZipDirectory(sourceBucket, sourcePath, sizeBytes);
   const expected = Array.isArray(input.tracks) && input.tracks.length ? input.tracks : null;
   const expectedNames = expected ? new Set(expected.map(item => String(item.filename || '').replace(/\\/g, '/'))) : null;
+  const expectedByName = expected
+    ? new Map(expected.map(item => [String(item.filename || '').replace(/\\/g, '/'), item]))
+    : new Map();
   const entries = directory.entries
     .filter(entry => entry.isFlac && !entry.isDirectory)
     .filter(entry => !expectedNames || expectedNames.has(entry.filename.replace(/\\/g, '/')))
     .sort((a, b) => a.filename.localeCompare(b.filename));
   const tracks = entries.map(entry => {
     const key = trackKey(entry.filename);
+    const expectedTrack = expectedByName.get(entry.filename.replace(/\\/g, '/')) || {};
     const targetPath = targetTrackPath(job, { trackKey: key });
     return {
       entry,
@@ -533,6 +540,7 @@ async function buildPlan(db, job) {
       fileSize: entry.fileSize,
       compressedSize: entry.compressedSize,
       compressionMethod: entry.compressionMethod,
+      durationMs: Number(expectedTrack.durationMs || 0) || null,
       crc32: entry.crc32,
       sourceBucket,
       sourcePath,
@@ -602,7 +610,8 @@ async function runCloudExtract(raw) {
         trackKey: track.trackKey,
         storageBucket: track.storageBucket,
         storagePath: track.targetPath,
-        sizeBytes: track.fileSize
+        sizeBytes: track.fileSize,
+        durationMs: track.durationMs || null
       });
     }
 
@@ -640,7 +649,8 @@ async function runCloudExtract(raw) {
         trackKey: item.trackKey,
         storageBucket: item.storageBucket,
         storagePath: item.targetPath,
-        sizeBytes: item.fileSize
+        sizeBytes: item.fileSize,
+        durationMs: item.durationMs || null
       })).filter(item => item.recordingFileId);
       const nextJobId = await insertNextChunkJob(db, job, finalFiles);
       await finishJob(db, job.id, {
