@@ -21,6 +21,19 @@
     return String(value || '').slice(0, 8);
   }
 
+  function formatBytes(bytes = 0) {
+    const value = Number(bytes || 0);
+    if (!Number.isFinite(value) || value <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = value;
+    let unit = 0;
+    while (size >= 1024 && unit < units.length - 1) {
+      size /= 1024;
+      unit += 1;
+    }
+    return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+  }
+
   function jobTone(status = '') {
     if (status === 'failed') return 'red';
     if (status === 'blocked') return 'red';
@@ -84,6 +97,7 @@
     if (progress.workerStatus) parts.push(progress.workerStatus);
     if (progress.extractedThisRun !== undefined) parts.push(`${progress.extractedThisRun} extraida(s)`);
     if (progress.remainingTracks !== undefined) parts.push(`${progress.remainingTracks} restante(s)`);
+    if (progress.trackProgress?.extraction_status) parts.push(`faixas: ${progress.trackProgress.extraction_status}`);
     if (progress.tracks !== undefined) parts.push(`${progress.tracks} faixa(s)`);
     if (progress.participants !== undefined) parts.push(`${progress.participants} participante(s)`);
     if (progress.paidAiCostUsd !== undefined) parts.push(`IA $${Number(progress.paidAiCostUsd || 0).toFixed(4)}`);
@@ -112,6 +126,46 @@
     `;
   }
 
+  function renderTrackSummary(job) {
+    const summary = job.trackSummary;
+    if (!summary || !summary.total) return '';
+    const succeeded = Number(summary.succeeded || 0);
+    const total = Math.max(1, Number(summary.total || 0));
+    const percent = Math.max(0, Math.min(100, Math.round((succeeded / total) * 100)));
+    const tracks = Array.isArray(summary.tracks) ? summary.tracks : [];
+    const visibleTracks = tracks.filter(track => track.status !== 'succeeded' || track.error).slice(0, 8);
+    const hidden = Math.max(0, tracks.length - visibleTracks.length);
+    return `
+      <div class="track-progress">
+        <div class="track-progress-head">
+          <strong>Faixas Craig</strong>
+          <div class="badges">
+            ${chip(summary.status || 'pending', jobTone(summary.status || 'pending'))}
+            ${chip(`${succeeded}/${total}`, 'green')}
+            ${summary.failed ? chip(`${summary.failed} falha(s)`, 'red') : ''}
+            ${summary.pending ? chip(`${summary.pending} pendente(s)`, 'gold') : ''}
+          </div>
+        </div>
+        <div class="track-progress-bar" aria-label="Progresso das faixas Craig">
+          <span style="width:${percent}%"></span>
+        </div>
+        <small>${esc(formatBytes(summary.extractedBytes))} extraidos de ${esc(formatBytes(summary.sourceCompressedBytes))} comprimidos no ZIP</small>
+        ${visibleTracks.length ? `
+          <div class="track-list">
+            ${visibleTracks.map(track => `
+              <div class="track-row ${esc(track.status || '')}">
+                <span>${esc(track.trackKey || track.filename || 'faixa')}</span>
+                <span>${esc(track.status || 'pending')} · ${esc(track.attempts || 0)}x · ${esc(formatBytes(track.sizeBytes))}</span>
+                ${track.error ? `<small>${esc(String(track.error).slice(0, 160))}</small>` : ''}
+              </div>
+            `).join('')}
+            ${hidden > 0 ? `<small>${hidden} faixa(s) concluida(s) ocultas nesta visao compacta.</small>` : ''}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
   function renderJobRow(job) {
     const status = job.status || 'unknown';
     const workerStatus = job.output?.workerStatus || job.output?.uploadStatus || '';
@@ -132,6 +186,7 @@
           </div>
         </div>
         ${renderJobSteps(job)}
+        ${renderTrackSummary(job)}
         ${jobActionControls(job)}
         ${job.error ? `<p>${esc(String(job.error).slice(0, 240))}</p>` : ''}
         ${job.output ? `<pre>${esc(JSON.stringify(job.output, null, 2).slice(0, 900))}</pre>` : ''}

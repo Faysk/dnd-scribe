@@ -62,6 +62,70 @@
   border-color: var(--green);
 }
 
+.track-progress {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #080c12;
+  padding: 10px;
+}
+
+.track-progress-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.track-progress-bar {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #141922;
+}
+
+.track-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), #71d6ff);
+}
+
+.track-list {
+  display: grid;
+  gap: 5px;
+}
+
+.track-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  align-items: start;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+
+.track-row span,
+.track-row small {
+  overflow-wrap: anywhere;
+}
+
+.track-row small {
+  grid-column: 1 / -1;
+}
+
+.track-row.failed {
+  color: var(--red);
+}
+
+.track-row.running {
+  color: var(--gold);
+}
+
 @media (max-width: 760px) {
   .job-actions {
     display: grid;
@@ -76,5 +140,11 @@
   .job-actions button {
     width: 100%;
     min-width: 0;
+  }
+
+  .track-progress-head,
+  .track-row {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }

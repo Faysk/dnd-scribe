@@ -1743,6 +1743,18 @@ function jobResponse(row) {
       blocked: row.blocked_steps || 0
     } : null,
     steps: row.job_steps || [],
+    trackSummary: row.extraction_status ? {
+      status: row.extraction_status,
+      total: row.extraction_total_tracks || 0,
+      pending: row.extraction_pending_tracks || 0,
+      running: row.extraction_running_tracks || 0,
+      succeeded: row.extraction_succeeded_tracks || 0,
+      failed: row.extraction_failed_tracks || 0,
+      skipped: row.extraction_skipped_tracks || 0,
+      extractedBytes: row.extraction_extracted_bytes || 0,
+      sourceCompressedBytes: row.extraction_source_compressed_bytes || 0,
+      tracks: row.extraction_tracks || []
+    } : null,
     session: row.source_session_id ? {
       sourceSessionId: row.source_session_id,
       title: row.session_title || null,
@@ -1761,11 +1773,22 @@ select pj.id, pj.job_type, pj.status, pj.attempts, pj.input, pj.output, pj.error
        pj.started_at, pj.finished_at, pj.created_at,
        s.source_session_id, s.title session_title, s.status session_status,
        jss.step_status, jss.total_steps, jss.succeeded_steps, jss.failed_steps,
-       jss.running_steps, jss.retrying_steps, jss.blocked_steps, jss.steps job_steps
+       jss.running_steps, jss.retrying_steps, jss.blocked_steps, jss.steps job_steps,
+       ctes.extraction_status,
+       ctes.total_tracks extraction_total_tracks,
+       ctes.pending_tracks extraction_pending_tracks,
+       ctes.running_tracks extraction_running_tracks,
+       ctes.succeeded_tracks extraction_succeeded_tracks,
+       ctes.failed_tracks extraction_failed_tracks,
+       ctes.skipped_tracks extraction_skipped_tracks,
+       ctes.extracted_bytes extraction_extracted_bytes,
+       ctes.source_compressed_bytes extraction_source_compressed_bytes,
+       ctes.tracks extraction_tracks
 from processing_jobs pj
 left join sessions s on s.id = pj.session_id
 left join campaigns c on c.id = s.campaign_id
 left join processing_job_step_summary jss on jss.job_id = pj.id
+left join craig_track_extraction_summary ctes on ctes.job_id = pj.id
 where c.slug = $1 ${sourceFilter}
 order by pj.created_at desc
 limit 50;`,

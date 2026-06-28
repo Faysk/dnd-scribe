@@ -28,6 +28,7 @@ DEFAULT_SCHEMA_FILES = [
     Path("schemas/20260628_016_processing_job_steps.sql"),
     Path("schemas/20260628_017_craig_manifest_contract.sql"),
     Path("schemas/20260628_018_craig_manifest_temporal_quality.sql"),
+    Path("schemas/20260628_019_craig_track_extraction_steps.sql"),
 ]
 
 

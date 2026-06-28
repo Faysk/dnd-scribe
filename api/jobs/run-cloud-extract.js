@@ -389,6 +389,29 @@ where session_id = $1::uuid
   return new Map(result.rows.map(row => [row.storage_path, row.id]));
 }
 
+function sourceRecordingFileId(job) {
+  const input = job?.input || {};
+  const value = cleanText(input.recordingFileId || input.recording_file_id, 80);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+    ? value
+    : null;
+}
+
+async function existingExtractionSteps(db, sessionId, bucket, paths) {
+  if (!paths.length) return new Map();
+  const result = await db.query(
+    `
+select id, target_storage_path, status, attempts, error, recording_file_id,
+       started_at, finished_at, updated_at
+from craig_track_extraction_steps
+where session_id = $1::uuid
+  and target_storage_bucket = $2
+  and target_storage_path = any($3::text[]);`,
+    [sessionId, bucket, paths]
+  );
+  return new Map(result.rows.map(row => [row.target_storage_path, row]));
+}
+
 async function participantMap(db, sessionId, trackKeys) {
   if (!trackKeys.length) return new Map();
   const result = await db.query(
@@ -400,6 +423,188 @@ where session_id = $1::uuid
     [sessionId, trackKeys]
   );
   return new Map(result.rows.map(row => [row.source_track_key, row.id]));
+}
+
+async function syncPlannedExtractionStep(db, job, track) {
+  const recordingFileId = track.existingRecordingFileId || track.extractionStep?.recording_file_id || null;
+  const status = recordingFileId ? 'succeeded' : 'pending';
+  await db.query(
+    `
+insert into craig_track_extraction_steps (
+  id, session_id, job_id, source_recording_file_id, recording_file_id,
+  track_key, source_filename, source_storage_bucket, source_storage_path,
+  target_storage_bucket, target_storage_path, status, attempts,
+  size_bytes, compressed_size_bytes, duration_ms, compression_method, crc32,
+  metadata, started_at, finished_at, created_at, updated_at
+)
+values (
+  gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, $4::uuid,
+  $5, $6, $7, $8,
+  $9, $10, $11, 0,
+  $12::bigint, $13::bigint, $14::integer, $15::integer, $16::bigint,
+  $17::jsonb,
+  case when $11 = 'succeeded' then now() else null end,
+  case when $11 = 'succeeded' then now() else null end,
+  now(), now()
+)
+on conflict (session_id, target_storage_bucket, target_storage_path) do update set
+  job_id = excluded.job_id,
+  source_recording_file_id = coalesce(excluded.source_recording_file_id, craig_track_extraction_steps.source_recording_file_id),
+  recording_file_id = coalesce(excluded.recording_file_id, craig_track_extraction_steps.recording_file_id),
+  track_key = excluded.track_key,
+  source_filename = excluded.source_filename,
+  source_storage_bucket = excluded.source_storage_bucket,
+  source_storage_path = excluded.source_storage_path,
+  size_bytes = excluded.size_bytes,
+  compressed_size_bytes = excluded.compressed_size_bytes,
+  duration_ms = coalesce(excluded.duration_ms, craig_track_extraction_steps.duration_ms),
+  compression_method = excluded.compression_method,
+  crc32 = excluded.crc32,
+  status = case
+    when excluded.status = 'succeeded' then 'succeeded'
+    when craig_track_extraction_steps.status in ('failed', 'running') then craig_track_extraction_steps.status
+    else excluded.status
+  end,
+  error = case when excluded.status = 'succeeded' then null else craig_track_extraction_steps.error end,
+  metadata = coalesce(craig_track_extraction_steps.metadata, '{}'::jsonb) || excluded.metadata,
+  started_at = case
+    when excluded.status = 'succeeded' then coalesce(craig_track_extraction_steps.started_at, now())
+    else craig_track_extraction_steps.started_at
+  end,
+  finished_at = case
+    when excluded.status = 'succeeded' then now()
+    else craig_track_extraction_steps.finished_at
+  end,
+  updated_at = now();`,
+    [
+      job.session_id,
+      job.id,
+      sourceRecordingFileId(job),
+      recordingFileId,
+      track.trackKey,
+      track.filename,
+      track.sourceBucket,
+      track.sourcePath,
+      track.storageBucket,
+      track.targetPath,
+      status,
+      track.fileSize,
+      track.compressedSize,
+      track.durationMs || null,
+      track.compressionMethod,
+      track.crc32,
+      JSON.stringify({
+        planned_from: 'cloud_extract_craig_tracks',
+        source_job_id: job.id,
+        source_recording_file_id: sourceRecordingFileId(job),
+        planned_at: new Date().toISOString()
+      })
+    ]
+  );
+}
+
+async function markExtractionStep(db, job, track, status, detail = {}) {
+  const error = detail.error ? String(detail.error).slice(0, 4000) : null;
+  const recordingFileId = detail.recordingFileId || track.existingRecordingFileId || null;
+  await db.query(
+    `
+insert into craig_track_extraction_steps (
+  id, session_id, job_id, source_recording_file_id, recording_file_id,
+  track_key, source_filename, source_storage_bucket, source_storage_path,
+  target_storage_bucket, target_storage_path, status, attempts,
+  size_bytes, compressed_size_bytes, duration_ms, compression_method, crc32,
+  error, metadata, started_at, finished_at, created_at, updated_at
+)
+values (
+  gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, $4::uuid,
+  $5, $6, $7, $8,
+  $9, $10, $11,
+  case when $11 = 'running' then 1 else 0 end,
+  $12::bigint, $13::bigint, $14::integer, $15::integer, $16::bigint,
+  $17, $18::jsonb,
+  case when $11 in ('running','succeeded','failed') then now() else null end,
+  case when $11 in ('succeeded','failed','skipped') then now() else null end,
+  now(), now()
+)
+on conflict (session_id, target_storage_bucket, target_storage_path) do update set
+  job_id = excluded.job_id,
+  source_recording_file_id = coalesce(excluded.source_recording_file_id, craig_track_extraction_steps.source_recording_file_id),
+  recording_file_id = coalesce(excluded.recording_file_id, craig_track_extraction_steps.recording_file_id),
+  track_key = excluded.track_key,
+  source_filename = excluded.source_filename,
+  source_storage_bucket = excluded.source_storage_bucket,
+  source_storage_path = excluded.source_storage_path,
+  status = excluded.status,
+  attempts = case
+    when excluded.status = 'running'
+     and craig_track_extraction_steps.status <> 'running'
+      then craig_track_extraction_steps.attempts + 1
+    else craig_track_extraction_steps.attempts
+  end,
+  size_bytes = excluded.size_bytes,
+  compressed_size_bytes = excluded.compressed_size_bytes,
+  duration_ms = coalesce(excluded.duration_ms, craig_track_extraction_steps.duration_ms),
+  compression_method = excluded.compression_method,
+  crc32 = excluded.crc32,
+  error = excluded.error,
+  metadata = coalesce(craig_track_extraction_steps.metadata, '{}'::jsonb) || excluded.metadata,
+  started_at = case
+    when excluded.status in ('running','succeeded','failed') then coalesce(craig_track_extraction_steps.started_at, now())
+    else craig_track_extraction_steps.started_at
+  end,
+  finished_at = case
+    when excluded.status in ('succeeded','failed','skipped') then now()
+    when excluded.status = 'running' then null
+    else craig_track_extraction_steps.finished_at
+  end,
+  updated_at = now();`,
+    [
+      job.session_id,
+      job.id,
+      sourceRecordingFileId(job),
+      recordingFileId,
+      track.trackKey,
+      track.filename,
+      track.sourceBucket,
+      track.sourcePath,
+      track.storageBucket,
+      track.targetPath,
+      status,
+      track.fileSize,
+      track.compressedSize,
+      track.durationMs || null,
+      track.compressionMethod,
+      track.crc32,
+      error,
+      JSON.stringify({
+        marked_from: 'cloud_extract_craig_tracks',
+        marked_at: new Date().toISOString(),
+        ...detail.metadata
+      })
+    ]
+  );
+}
+
+async function fetchExtractionSummary(db, job) {
+  try {
+    const result = await db.query(
+      `
+select row_to_json(summary) data
+from craig_track_extraction_summary summary
+where summary.job_id = $1::uuid
+   or (
+     summary.session_id = $2::uuid
+     and summary.source_recording_file_id is not distinct from $3::uuid
+   )
+order by case when summary.job_id = $1::uuid then 0 else 1 end
+limit 1;`,
+      [job.id, job.session_id, sourceRecordingFileId(job)]
+    );
+    return result.rows[0]?.data || null;
+  } catch (error) {
+    console.warn('craig_track_extraction_summary_failed', error.message || String(error));
+    return null;
+  }
 }
 
 async function upsertTrackFile(db, job, track, participantId) {
@@ -551,6 +756,7 @@ async function buildPlan(db, job) {
   });
 
   const existing = await existingTrackFiles(db, job.session_id, r2Config().bucket || sourceBucket, tracks.map(item => item.targetPath));
+  const extractionSteps = await existingExtractionSteps(db, job.session_id, r2Config().bucket || sourceBucket, tracks.map(item => item.targetPath));
   const participants = await participantMap(db, job.session_id, tracks.map(item => item.trackKey));
   return {
     objectSize: directory.objectSize,
@@ -558,6 +764,7 @@ async function buildPlan(db, job) {
     tracks: tracks.map(item => ({
       ...item,
       existingRecordingFileId: existing.get(item.targetPath) || null,
+      extractionStep: extractionSteps.get(item.targetPath) || null,
       participantId: participants.get(item.trackKey) || null
     }))
   };
@@ -585,6 +792,11 @@ async function runCloudExtract(raw) {
       });
     }
     const plan = await buildPlan(db, job);
+    if (!dryRun) {
+      for (const track of plan.tracks) {
+        await syncPlannedExtractionStep(db, job, track);
+      }
+    }
     const pending = plan.tracks.filter(item => !item.existingRecordingFileId);
     const selected = pending.slice(0, maxTracks);
     if (dryRun) {
@@ -602,15 +814,39 @@ async function runCloudExtract(raw) {
           selected: selected.length,
           maxTracks
         },
-        selected: selected.map(item => ({ trackKey: item.trackKey, filename: item.filename, sizeBytes: item.fileSize, targetPath: item.targetPath })),
+        selected: selected.map(item => ({
+          trackKey: item.trackKey,
+          filename: item.filename,
+          sizeBytes: item.fileSize,
+          targetPath: item.targetPath,
+          status: item.extractionStep?.status || (item.existingRecordingFileId ? 'succeeded' : 'pending'),
+          attempts: item.extractionStep?.attempts || 0,
+          error: item.extractionStep?.error || null
+        })),
         cost: { paidAiCostUsd: 0 }
       };
     }
 
     const extracted = [];
     for (const track of selected) {
-      await extractEntryToR2(track);
-      const recordingFileId = await upsertTrackFile(db, job, track, track.participantId);
+      await markExtractionStep(db, job, track, 'running', {
+        metadata: { selected_in_run: true }
+      });
+      let recordingFileId;
+      try {
+        await extractEntryToR2(track);
+        recordingFileId = await upsertTrackFile(db, job, track, track.participantId);
+        await markExtractionStep(db, job, track, 'succeeded', {
+          recordingFileId,
+          metadata: { target_written: true }
+        });
+      } catch (error) {
+        await markExtractionStep(db, job, track, 'failed', {
+          error: error.message || String(error),
+          metadata: { target_written: false }
+        });
+        throw error;
+      }
       extracted.push({
         recordingFileId,
         trackKey: track.trackKey,
@@ -622,6 +858,7 @@ async function runCloudExtract(raw) {
     }
 
     const remaining = pending.length - extracted.length;
+    const trackProgress = await fetchExtractionSummary(db, job);
     const progress = {
       workerStatus: remaining > 0 ? 'partially_extracted' : 'extract_succeeded',
       paidAiCostUsd: 0,
@@ -630,6 +867,7 @@ async function runCloudExtract(raw) {
       totalTracks: plan.tracks.length,
       remainingTracks: remaining,
       maxTracks,
+      trackProgress,
       lastRunAt: new Date().toISOString()
     };
 
@@ -715,10 +953,11 @@ where id = $1::uuid;`,
     };
   } catch (error) {
     if (!dryRun) {
-      await failJob(db, job.id, error, { workerStatus: 'extract_failed', paidAiCostUsd: 0 });
+      const trackProgress = await fetchExtractionSummary(db, job);
+      await failJob(db, job.id, error, { workerStatus: 'extract_failed', paidAiCostUsd: 0, trackProgress });
       await markJobStep(db, job, 'failed', {
         error: error.message || String(error),
-        progress: { workerStatus: 'extract_failed', paidAiCostUsd: 0 }
+        progress: { workerStatus: 'extract_failed', paidAiCostUsd: 0, trackProgress }
       });
       await notifyJob({
         target: 'ops',
