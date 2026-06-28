@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node scripts/sync-public.js",
     "check:web": "node --check web/app.js && node --check web/jobs.js && node --check web/storage-inventory.js && node --check web/costs.js && node --check web/ui-bridge.js && node --check web/auth-fetch.js && node --check web/access.js && node --check web/notes.js && node --check web/roll20.js",
-    "check:api": "node --check lib/discord.js && node --check lib/discord-interactions.js && node --check lib/roll20-commands.js && node --check lib/monitoring.js && node --check lib/job-steps.js && node --check api/[...path].js && node --check api/ai-cost.js && node --check scripts/register-discord-commands.js",
+    "check:api": "node --check lib/discord.js && node --check lib/discord-interactions.js && node --check lib/pipeline-recovery.js && node --check lib/roll20-commands.js && node --check lib/monitoring.js && node --check lib/job-steps.js && node --check api/[...path].js && node --check api/ai-cost.js && node --check scripts/register-discord-commands.js",
     "check:workers": "node --check api/jobs/run-cloud-ingest.js && node --check api/jobs/run-cloud-extract.js",
     "check:roll20": "node --check lib/roll20-commands.js && node --check tools/roll20_chat_to_events.js && node --check web/roll20.js",
     "discord:register": "node scripts/register-discord-commands.js",
