@@ -1,9 +1,14 @@
 (function () {
   const endpointByType = {
-    cloud_ingest_craig: '/api/jobs/run-cloud-ingest',
-    cloud_extract_craig_tracks: '/api/jobs/run-cloud-extract',
-    cloud_plan_audio_chunks: '/api/run-cloud-plan-chunks'
+    cloud_ingest_craig: '/api/pipeline-continue',
+    cloud_extract_craig_tracks: '/api/pipeline-continue',
+    cloud_plan_audio_chunks: '/api/pipeline-continue'
   };
+  const zeroCostPipelineTypes = new Set([
+    'cloud_ingest_craig',
+    'cloud_extract_craig_tracks',
+    'cloud_plan_audio_chunks'
+  ]);
 
   function esc(value = '') {
     return String(value)
@@ -54,6 +59,15 @@
 
   function canDryRun(job) {
     return Boolean(jobEndpoint(job)) && ['queued', 'retrying', 'running'].includes(job.status);
+  }
+
+  function selectedPipelineSourceSessionId() {
+    return window.state?.ingest?.planned?.session?.sourceSessionId
+      || window.state?.ingest?.result?.session?.sourceSessionId
+      || window.state?.ingest?.result?.sourceSessionId
+      || window.state?.ingest?.lastJobResult?.sourceSessionId
+      || window.state?.selectedSourceSessionId
+      || '';
   }
 
   function canRetry(job) {
@@ -201,7 +215,21 @@
   function renderJobsListWithActions() {
     const jobs = window.state?.jobs || [];
     if (!jobs.length) return `<div class="empty">Nenhum job de producao registrado.</div>`;
+    const next = jobs.find(job => zeroCostPipelineTypes.has(job.type) && ['queued', 'retrying'].includes(job.status));
+    const running = jobs.find(job => zeroCostPipelineTypes.has(job.type) && job.status === 'running');
+    const sourceSessionId = selectedPipelineSourceSessionId();
     return `
+      <div class="pipeline-control">
+        <div>
+          <span class="label">Pipeline Craig</span>
+          <strong>${esc(next ? `Proxima etapa: ${next.type}` : running ? `Rodando: ${running.type}` : 'Sem etapa zero-cost pendente')}</strong>
+          <small>${esc(sourceSessionId || 'Use uma sessao ou job especifico para filtrar a continuidade.')}</small>
+        </div>
+        <div class="job-actions">
+          <button onclick="continuePipeline('${esc(sourceSessionId)}', { dryRun: true, maxRuns: 1 })">Simular proxima</button>
+          <button class="primary" onclick="continuePipeline('${esc(sourceSessionId)}')" ${next ? '' : 'disabled'}>Continuar pipeline</button>
+        </div>
+      </div>
       <div class="job-list">
         ${jobs.slice(0, 12).map(renderJobRow).join('')}
       </div>
@@ -245,10 +273,15 @@
     try {
       if (typeof setBusy === 'function') setBusy(true);
       const payload = await callApi(endpoint, body);
-      remember?.(`Job ${type}: ${dryRun ? 'simulado' : 'executado'}.`, payload.summary || payload.message || payload);
+      if (payload.jobs) window.state.jobs = payload.jobs;
+      if (payload.sessions) window.state.sessions = payload.sessions;
+      if (payload.jobResult && window.state?.ingest) {
+        window.state.ingest = { ...window.state.ingest, lastJobResult: payload.jobResult };
+      }
+      remember?.(`Job ${type}: ${dryRun ? 'simulado' : 'executado'}.`, payload.jobResult?.summary || payload.summary || payload.message || payload);
       toast?.(dryRun ? 'Simulacao concluida.' : 'Job executado.');
       await loadJobs?.(true);
-      if (!dryRun && payload.sourceSessionId && typeof loadSessions === 'function') {
+      if (!dryRun && (payload.sourceSessionId || payload.jobResult?.sourceSessionId) && typeof loadSessions === 'function') {
         await loadSessions(false);
       }
       render?.();
@@ -259,6 +292,78 @@
       return null;
     } finally {
       if (typeof setBusy === 'function') setBusy(false);
+    }
+  }
+
+  async function continuePipeline(sourceSessionId = '', options = {}) {
+    const resolvedSourceSessionId = sourceSessionId || selectedPipelineSourceSessionId();
+    const dryRun = options.dryRun === true;
+    const maxRuns = dryRun ? 1 : Math.max(1, Math.min(20, Number(options.maxRuns || 12)));
+    const maxTracksInput = Number(document.getElementById('pipelineMaxTracks')?.value || options.maxTracks || 1);
+    const maxTracks = Math.max(1, Math.min(3, Number.isFinite(maxTracksInput) ? Math.floor(maxTracksInput) : 1));
+    const chunkInput = Number(document.getElementById('ingestChunkSeconds')?.value || options.chunkSeconds || 600);
+    const chunkSeconds = Math.max(60, Math.min(1800, Number.isFinite(chunkInput) ? Math.floor(chunkInput) : 600));
+    if (!dryRun && !options.auto && !window.confirm('Continuar a esteira zero-cost em producao? A etapa atual nao chama OpenAI paga.')) return null;
+    let lastPayload = null;
+    try {
+      if (typeof setBusy === 'function') setBusy(true);
+      if (window.state?.ingest) {
+        window.state.ingest = {
+          ...window.state.ingest,
+          busy: true,
+          phase: dryRun ? 'pipeline-dry-run' : 'pipeline-running',
+          progress: null,
+          error: null
+        };
+      }
+      render?.();
+      for (let index = 0; index < maxRuns; index += 1) {
+        const payload = await callApi('/api/pipeline-continue', {
+          sourceSessionId: resolvedSourceSessionId,
+          dryRun,
+          maxTracks,
+          chunkSeconds
+        });
+        lastPayload = payload;
+        if (payload.jobs) window.state.jobs = payload.jobs;
+        if (payload.sessions) window.state.sessions = payload.sessions;
+        if (window.state?.ingest) {
+          window.state.ingest = {
+            ...window.state.ingest,
+            busy: !dryRun && Boolean(payload.continueRecommended) && index < maxRuns - 1,
+            phase: dryRun ? 'pipeline-dry-run' : 'pipeline-running',
+            progress: Math.round(((index + 1) / maxRuns) * 100),
+            error: null,
+            lastJobResult: payload.jobResult || payload
+          };
+        }
+        remember?.(payload.message || 'Pipeline Craig atualizado.', payload.jobResult?.summary || payload.snapshot || payload);
+        render?.();
+        if (dryRun || !payload.continueRecommended) break;
+      }
+      if (lastPayload?.continueRecommended) {
+        toast?.('Pipeline pausado para proteger o tempo da Function. Clique em continuar de novo.');
+      } else {
+        toast?.(lastPayload?.message || (dryRun ? 'Simulacao concluida.' : 'Pipeline atualizado.'));
+      }
+      await loadJobs?.(true);
+      if (typeof loadSessions === 'function') await loadSessions(false);
+      render?.();
+      return lastPayload;
+    } catch (error) {
+      if (window.state?.ingest) {
+        window.state.ingest = { ...window.state.ingest, busy: false, phase: null, error: error.message };
+      }
+      toast?.(error.message);
+      remember?.(`Pipeline Craig falhou: ${error.message}`);
+      render?.();
+      return null;
+    } finally {
+      if (window.state?.ingest) {
+        window.state.ingest = { ...window.state.ingest, busy: false };
+      }
+      if (typeof setBusy === 'function') setBusy(false);
+      render?.();
     }
   }
 
@@ -284,6 +389,7 @@
 
   window.runCloudJob = runCloudJob;
   window.retryCloudJob = retryCloudJob;
+  window.continuePipeline = continuePipeline;
   window.renderJobSteps = renderJobSteps;
   window.renderJobsList = renderJobsListWithActions;
   try { renderJobsList = renderJobsListWithActions; } catch (_error) {}

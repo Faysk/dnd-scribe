@@ -7,6 +7,10 @@ const { notifyDiscord } = require('../../lib/discord');
 const { markJobStep } = require('../../lib/job-steps');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
+
+function legacyJobEndpointEnabled() {
+  return process.env.DND_ALLOW_LEGACY_JOB_ENDPOINTS === 'true';
+}
 const MAX_INFO_ENTRY_BYTES = 1024 * 1024;
 const ZIP_TAIL_BYTES = 128 * 1024;
 const FLAC_HEADER_BYTES = 64 * 1024;
@@ -889,7 +893,7 @@ async function runCloudIngest(raw) {
   }
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       return sendJson(res, 200, {
@@ -901,9 +905,18 @@ module.exports = async function handler(req, res) {
       });
     }
     if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    if (!legacyJobEndpointEnabled()) {
+      return sendJson(res, 410, {
+        ok: false,
+        error: 'Endpoint legado desativado. Use /api/pipeline-continue autenticado.'
+      });
+    }
     const body = await readBody(req);
     return sendJson(res, 200, await runCloudIngest(body));
   } catch (error) {
     return sendJson(res, error.statusCode || 500, { ok: false, error: error.message || String(error) });
   }
-};
+}
+
+module.exports = handler;
+module.exports.runCloudIngest = runCloudIngest;

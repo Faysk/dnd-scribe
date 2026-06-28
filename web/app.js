@@ -1223,7 +1223,7 @@ function renderUploadSessionCard(session) {
 
 function uploadRelevantJobs() {
   const sourceSessionId = ingestSourceSessionId();
-  const uploadTypes = new Set(['craig_direct_upload', 'cloud_ingest_craig', 'cloud_extract_craig_tracks', 'cloud_plan_audio_chunks']);
+  const uploadTypes = new Set(['craig_direct_upload', 'cloud_ingest_craig', 'cloud_extract_craig_tracks', 'cloud_plan_audio_chunks', 'cloud_detect_speech_slices']);
   return (state.jobs || [])
     .filter(job => uploadTypes.has(job.type))
     .filter(job => !sourceSessionId || job.session?.sourceSessionId === sourceSessionId)
@@ -1232,6 +1232,9 @@ function uploadRelevantJobs() {
 
 function renderUploadJobsCard() {
   const jobs = uploadRelevantJobs();
+  const sourceSessionId = ingestSourceSessionId();
+  const runnable = jobs.find(job => ['cloud_ingest_craig', 'cloud_extract_craig_tracks', 'cloud_plan_audio_chunks'].includes(job.type) && ['queued', 'retrying'].includes(job.status));
+  const blocked = jobs.find(job => job.type === 'cloud_detect_speech_slices' && ['queued', 'retrying', 'running', 'failed'].includes(job.status));
   return `
     <section class="panel">
       <div class="panel-head">
@@ -1239,6 +1242,18 @@ function renderUploadJobsCard() {
         <button onclick="loadJobs(true)">Atualizar</button>
       </div>
       <div class="panel-body">
+        <div class="pipeline-control upload-pipeline-control">
+          <div>
+            <span class="label">Continuacao zero-cost</span>
+            <strong>${escapeHtml(runnable ? `Proxima: ${runnable.type}` : blocked ? 'Aguardando worker de fala' : 'Sem etapa pendente')}</strong>
+            <small>${escapeHtml(sourceSessionId || 'Selecione ou envie um ZIP Craig para acompanhar a esteira.')}</small>
+          </div>
+          <div class="job-actions">
+            <label class="inline-job-limit"><span class="label">Faixas/vez</span><input id="pipelineMaxTracks" type="number" min="1" max="3" value="1" /></label>
+            <button onclick="continueUploadPipeline(true)" ${sourceSessionId ? '' : 'disabled'}>Simular</button>
+            <button class="primary" onclick="continueUploadPipeline(false)" ${runnable ? '' : 'disabled'}>Continuar</button>
+          </div>
+        </div>
         ${jobs.length ? `<div class="job-list">${jobs.map(renderUploadJobRow).join('')}</div>` : `<div class="empty">Sem jobs para esta sessao ainda.</div>`}
       </div>
     </section>
@@ -1428,6 +1443,7 @@ function renderCraigIngestPanel() {
       ${renderIngestChecklist()}
       <div class="actions">
         <button class="primary" onclick="uploadCraigFromForm()" ${state.ingest.busy ? 'disabled' : ''}>Enviar ZIP para producao</button>
+        <button onclick="continueUploadPipeline(false)" ${ingestSourceSessionId() ? '' : 'disabled'}>Continuar pipeline</button>
         <button onclick="loadJobs(true)">Atualizar jobs</button>
       </div>
       ${state.ingest.busy ? renderIngestProgress() : ''}
@@ -1545,6 +1561,8 @@ function ingestPhaseLabel(phase) {
     planning: 'Criando URL segura no R2...',
     uploading: 'Enviando ZIP direto para o R2...',
     confirming: 'Confirmando upload e criando job cloud...',
+    'pipeline-dry-run': 'Simulando proxima etapa do pipeline...',
+    'pipeline-running': 'Continuando pipeline Craig em producao...',
     done: 'Upload confirmado.'
   }[phase] || 'Preparando upload Craig...';
 }
@@ -1908,6 +1926,15 @@ async function uploadCraigFromForm() {
       remember(`Upload Craig confirmado: ${payload.upload?.storagePath || file.name}`);
       toast('ZIP salvo no R2. Job de ingestao cloud criado.');
       await loadJobs(true);
+      if (typeof window.continuePipeline === 'function') {
+        const chunkSeconds = Number($('#ingestChunkSeconds')?.value || 600);
+        await window.continuePipeline(planned.session.sourceSessionId, {
+          auto: true,
+          maxRuns: 12,
+          maxTracks: 1,
+          chunkSeconds
+        });
+      }
     } else {
       remember(`Upload Craig: ${file.name}`);
       toast('ZIP Craig enviado.');
@@ -1917,7 +1944,7 @@ async function uploadCraigFromForm() {
     toast(error.message);
   } finally {
     setBusy(false);
-    state.tab = 'sessions';
+    state.tab = 'upload';
     render();
   }
 }
@@ -1977,6 +2004,21 @@ async function runUploadedCraigJob(dryRun = false) {
     if (payload.sourceSessionId) state.selectedSourceSessionId = payload.sourceSessionId;
     render();
   }
+}
+
+async function continueUploadPipeline(dryRun = false) {
+  if (typeof window.continuePipeline !== 'function') {
+    await openOperations();
+    toast('Modulo de jobs ainda esta carregando. Tente novamente em instantes.');
+    return null;
+  }
+  const payload = await window.continuePipeline(ingestSourceSessionId(), {
+    dryRun,
+    maxRuns: dryRun ? 1 : 12
+  });
+  if (payload?.sourceSessionId) state.selectedSourceSessionId = payload.sourceSessionId;
+  render();
+  return payload;
 }
 
 async function saveCraigTrack(trackKey, editableKey = false) {
@@ -3364,6 +3406,7 @@ window.updateSessionFromForm = updateSessionFromForm;
 window.setSessionArchived = setSessionArchived;
 window.uploadCraigFromForm = uploadCraigFromForm;
 window.rememberCraigFileSelection = rememberCraigFileSelection;
+window.continueUploadPipeline = continueUploadPipeline;
 window.saveCraigTrack = saveCraigTrack;
 window.initAuth = initAuth;
 window.loadAuthProfile = loadAuthProfile;

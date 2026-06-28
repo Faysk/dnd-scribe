@@ -383,6 +383,25 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 .upload-job-row .job-actions {
   margin-top: 2px;
 }
+.pipeline-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.pipeline-control strong,
+.pipeline-control small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.upload-pipeline-control {
+  background: #101722;
+}
 
 .toolbar {
   display: grid;
@@ -738,7 +757,7 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .workspace { padding: 12px 12px 118px; }
   .rail { padding: 12px; }
-  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-page-head, .upload-summary-grid {
+  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-page-head, .upload-summary-grid, .pipeline-control {
     grid-template-columns: 1fr;
   }
   .upload-step {

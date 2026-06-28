@@ -21,6 +21,15 @@ const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_SYNC_MAX_MESSAGES = 100;
 const SESSION_TIME_ZONE = process.env.DND_SESSION_TIME_ZONE || 'Europe/London';
 const DEFAULT_CHUNK_SECONDS = 600;
+const PIPELINE_RUNNABLE_JOB_TYPES = [
+  'cloud_ingest_craig',
+  'cloud_extract_craig_tracks',
+  'cloud_plan_audio_chunks'
+];
+const PIPELINE_KNOWN_NEXT_JOB_TYPES = [
+  ...PIPELINE_RUNNABLE_JOB_TYPES,
+  'cloud_detect_speech_slices'
+];
 
 const SESSION_STATUSES = new Set([
   'planned',
@@ -74,6 +83,8 @@ const CANDIDATE_STATUS = {
 };
 
 let pool;
+let cloudIngestRunner;
+let cloudExtractRunner;
 
 function getPool() {
   if (pool) return pool;
@@ -88,6 +99,26 @@ function getPool() {
     ssl: { rejectUnauthorized: false }
   });
   return pool;
+}
+
+function getCloudIngestRunner() {
+  if (!cloudIngestRunner) {
+    cloudIngestRunner = require('./jobs/run-cloud-ingest').runCloudIngest;
+  }
+  if (typeof cloudIngestRunner !== 'function') {
+    throw httpError(500, 'Worker cloud_ingest_craig indisponivel neste deploy.');
+  }
+  return cloudIngestRunner;
+}
+
+function getCloudExtractRunner() {
+  if (!cloudExtractRunner) {
+    cloudExtractRunner = require('./jobs/run-cloud-extract').runCloudExtract;
+  }
+  if (typeof cloudExtractRunner !== 'function') {
+    throw httpError(500, 'Worker cloud_extract_craig_tracks indisponivel neste deploy.');
+  }
+  return cloudExtractRunner;
 }
 
 function sendJson(res, status, value) {
@@ -2023,6 +2054,198 @@ limit 50;`,
     params
   );
   return result.rows.map(jobResponse);
+}
+
+async function selectPipelineJobRows(db, campaign, options = {}) {
+  const jobId = options.jobId || null;
+  const sourceSessionId = cleanText(options.sourceSessionId || '', 180);
+  const statuses = options.statuses?.length ? options.statuses : ['queued', 'retrying'];
+  const types = options.types?.length ? options.types : PIPELINE_RUNNABLE_JOB_TYPES;
+  const limit = Math.max(1, Math.min(50, Number(options.limit || 12)));
+  const result = await db.query(
+    `
+select pj.id, pj.job_type, pj.status, pj.attempts, pj.input, pj.output, pj.error,
+       pj.started_at, pj.finished_at, pj.created_at,
+       s.source_session_id, s.title session_title, s.status session_status,
+       jss.step_status, jss.total_steps, jss.succeeded_steps, jss.failed_steps,
+       jss.running_steps, jss.retrying_steps, jss.blocked_steps, jss.steps job_steps,
+       ctes.extraction_status,
+       ctes.total_tracks extraction_total_tracks,
+       ctes.pending_tracks extraction_pending_tracks,
+       ctes.running_tracks extraction_running_tracks,
+       ctes.succeeded_tracks extraction_succeeded_tracks,
+       ctes.failed_tracks extraction_failed_tracks,
+       ctes.skipped_tracks extraction_skipped_tracks,
+       ctes.extracted_bytes extraction_extracted_bytes,
+       ctes.source_compressed_bytes extraction_source_compressed_bytes,
+       ctes.tracks extraction_tracks
+from processing_jobs pj
+left join sessions s on s.id = pj.session_id
+left join campaigns c on c.id = s.campaign_id
+left join processing_job_step_summary jss on jss.job_id = pj.id
+left join craig_track_extraction_summary ctes on ctes.job_id = pj.id
+where c.slug = $1
+  and ($2::uuid is null or pj.id = $2::uuid)
+  and ($3::text = '' or s.source_session_id = $3)
+  and pj.status = any($4::text[])
+  and pj.job_type = any($5::text[])
+order by case pj.job_type
+    when 'cloud_ingest_craig' then 10
+    when 'cloud_extract_craig_tracks' then 20
+    when 'cloud_plan_audio_chunks' then 30
+    when 'cloud_detect_speech_slices' then 40
+    else 99
+  end,
+  pj.created_at
+limit $6::int;`,
+    [campaign, jobId, sourceSessionId, statuses, types, limit]
+  );
+  return result.rows.map(jobResponse);
+}
+
+async function pipelineSnapshot(db, campaign, sourceSessionId = '') {
+  const jobs = await selectPipelineJobRows(db, campaign, {
+    sourceSessionId,
+    statuses: ['queued', 'retrying', 'running', 'failed'],
+    types: PIPELINE_KNOWN_NEXT_JOB_TYPES,
+    limit: 20
+  });
+  const byStatus = jobs.reduce((summary, job) => {
+    const status = job.status || 'unknown';
+    summary[status] = (summary[status] || 0) + 1;
+    return summary;
+  }, {});
+  return {
+    sourceSessionId: cleanText(sourceSessionId || '', 180) || null,
+    byStatus,
+    jobs
+  };
+}
+
+async function selectNextPipelineJob(db, campaign, options = {}) {
+  const rows = await selectPipelineJobRows(db, campaign, {
+    ...options,
+    statuses: ['queued', 'retrying'],
+    types: PIPELINE_RUNNABLE_JOB_TYPES,
+    limit: 1
+  });
+  return rows[0] || null;
+}
+
+async function selectPipelineBlockedJob(db, campaign, sourceSessionId = '') {
+  const rows = await selectPipelineJobRows(db, campaign, {
+    sourceSessionId,
+    statuses: ['queued', 'retrying', 'running', 'failed'],
+    types: ['cloud_detect_speech_slices'],
+    limit: 1
+  });
+  return rows[0] || null;
+}
+
+function normalizePipelineMaxTracks(value) {
+  const maxTracks = Number(value || 1);
+  if (!Number.isFinite(maxTracks) || maxTracks <= 0) return 1;
+  return Math.max(1, Math.min(3, Math.floor(maxTracks)));
+}
+
+function pipelineBlockedMessage(job) {
+  if (!job) return '';
+  if (job.type === 'cloud_detect_speech_slices') {
+    return 'Pipeline chegou na etapa de renderizar audio compacto e detectar fala. Esta etapa ainda precisa do worker cloud dedicado antes de transcrever.';
+  }
+  return `Pipeline aguardando etapa ${job.type}.`;
+}
+
+async function runPipelineContinue(req, campaign, body) {
+  await requirePermission(req, campaign, {
+    action: 'project.jobs.run',
+    scopeType: 'project',
+    scopeId: PROJECT_SCOPE_ID,
+    legacyRoles: ['owner', 'master'],
+    error: 'Continuar pipeline exige permissao project.jobs.run.'
+  });
+  const rawJobId = cleanText(body.jobId || body.job_id, 80);
+  const jobId = rawJobId ? uuidOrNull(rawJobId) : null;
+  if (rawJobId && !jobId) throw httpError(400, 'jobId invalido para continuar pipeline.');
+  const sourceSessionId = cleanText(body.sourceSessionId || body.source_session_id, 180);
+  const dryRun = body.dryRun === true || body.dry_run === true;
+  const maxTracks = normalizePipelineMaxTracks(body.maxTracks || body.max_tracks);
+  const chunkSeconds = normalizeChunkSeconds(body.chunkSeconds || body.chunk_seconds);
+  const db = getPool();
+  const nextJob = await selectNextPipelineJob(db, campaign, { jobId, sourceSessionId });
+  const snapshot = await pipelineSnapshot(db, campaign, sourceSessionId);
+
+  if (dryRun) {
+    const blockedJob = nextJob ? null : await selectPipelineBlockedJob(db, campaign, sourceSessionId);
+    return {
+      ok: true,
+      processed: false,
+      dryRun: true,
+      mode: 'pipeline_continue',
+      sourceSessionId: nextJob?.session?.sourceSessionId || sourceSessionId || null,
+      nextJob,
+      blockedJob,
+      continueRecommended: Boolean(nextJob),
+      message: nextJob
+        ? `Proxima etapa zero-cost: ${nextJob.type}.`
+        : (blockedJob ? pipelineBlockedMessage(blockedJob) : 'Nenhuma etapa zero-cost pendente para continuar.'),
+      snapshot
+    };
+  }
+
+  if (!nextJob) {
+    const blockedJob = await selectPipelineBlockedJob(db, campaign, sourceSessionId);
+    return {
+      ok: true,
+      processed: false,
+      dryRun: false,
+      mode: 'pipeline_continue',
+      sourceSessionId: sourceSessionId || blockedJob?.session?.sourceSessionId || null,
+      blockedJob,
+      continueRecommended: false,
+      message: blockedJob ? pipelineBlockedMessage(blockedJob) : 'Nenhuma etapa zero-cost pendente para continuar.',
+      snapshot
+    };
+  }
+
+  let jobResult;
+  if (nextJob.type === 'cloud_ingest_craig') {
+    jobResult = await getCloudIngestRunner()({ jobId: nextJob.id, dryRun: false });
+  } else if (nextJob.type === 'cloud_extract_craig_tracks') {
+    jobResult = await getCloudExtractRunner()({ jobId: nextJob.id, dryRun: false, maxTracks });
+  } else if (nextJob.type === 'cloud_plan_audio_chunks') {
+    jobResult = await runCloudPlanChunks(req, campaign, {
+      jobId: nextJob.id,
+      dryRun: false,
+      chunkSeconds
+    });
+  } else {
+    throw httpError(409, `Worker ainda nao integrado ao continuador: ${nextJob.type}`);
+  }
+
+  const resolvedSourceSessionId = jobResult?.sourceSessionId || nextJob.session?.sourceSessionId || sourceSessionId || '';
+  const nextRunnableJob = await selectNextPipelineJob(db, campaign, {
+    sourceSessionId: resolvedSourceSessionId
+  });
+  const blockedJob = nextRunnableJob ? null : await selectPipelineBlockedJob(db, campaign, resolvedSourceSessionId);
+  const nextSnapshot = await pipelineSnapshot(db, campaign, resolvedSourceSessionId);
+  return {
+    ok: true,
+    processed: true,
+    dryRun: false,
+    mode: 'pipeline_continue',
+    sourceSessionId: resolvedSourceSessionId || null,
+    executedJob: nextJob,
+    jobResult,
+    nextJob: nextRunnableJob,
+    blockedJob,
+    continueRecommended: Boolean(nextRunnableJob),
+    message: nextRunnableJob
+      ? `Etapa ${nextJob.type} concluida. Proxima etapa: ${nextRunnableJob.type}.`
+      : (blockedJob ? pipelineBlockedMessage(blockedJob) : `Etapa ${nextJob.type} concluida. Nao ha proxima etapa zero-cost pendente.`),
+    snapshot: nextSnapshot,
+    cost: { paidAiCostUsd: 0 }
+  };
 }
 
 async function retryProcessingJob(req, campaign, body) {
@@ -4560,6 +4783,15 @@ async function handlePost(req, res, path) {
   if (path === '/api/jobs/retry') {
     const payload = await retryProcessingJob(req, campaign, body);
     return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
+  }
+  if (path === '/api/pipeline-continue' || path === '/api/jobs/pipeline-continue') {
+    const payload = await runPipelineContinue(req, campaign, body);
+    const jobSourceSessionId = payload.sourceSessionId || cleanText(body.sourceSessionId || body.source_session_id, 180);
+    return sendJson(res, 200, {
+      ...payload,
+      jobs: await listJobs(campaign, jobSourceSessionId || ''),
+      sessions: await listSessions(campaign, runId)
+    });
   }
   if (path === '/api/run-cloud-plan-chunks' || path === '/api/jobs/run-cloud-plan-chunks') {
     const payload = await runCloudPlanChunks(req, campaign, body);

@@ -10,6 +10,10 @@ const MAX_TRACKS_PER_RUN = 3;
 const DEFAULT_TRACKS_PER_RUN = 1;
 const SIGNED_URL_SECONDS = 1800;
 
+function legacyJobEndpointEnabled() {
+  return process.env.DND_ALLOW_LEGACY_JOB_ENDPOINTS === 'true';
+}
+
 let pool;
 
 function getPool() {
@@ -1124,7 +1128,7 @@ where id = $1::uuid;`,
   }
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       return sendJson(res, 200, {
@@ -1138,9 +1142,18 @@ module.exports = async function handler(req, res) {
       });
     }
     if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    if (!legacyJobEndpointEnabled()) {
+      return sendJson(res, 410, {
+        ok: false,
+        error: 'Endpoint legado desativado. Use /api/pipeline-continue autenticado.'
+      });
+    }
     const body = await readBody(req);
     return sendJson(res, 200, await runCloudExtract(body));
   } catch (error) {
     return sendJson(res, error.statusCode || 500, { ok: false, error: error.message || String(error) });
   }
-};
+}
+
+module.exports = handler;
+module.exports.runCloudExtract = runCloudExtract;
