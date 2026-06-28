@@ -151,7 +151,7 @@ def run_validator(args: argparse.Namespace, execute_mode: bool) -> None:
         str(args.limit),
     ]
     if execute_mode:
-        cmd.extend(["--require-openai-key", "--require-prices"])
+        cmd.extend(["--require-openai-key", "--required-cost-key", "transcriptionAudioMinute"])
     subprocess.check_call(cmd)
 
 

@@ -154,7 +154,12 @@ def policy_model(policy: dict[str, Any], override: str | None) -> str:
     return (((policy.get("modelRouting") or {}).get("transcription") or {}).get("defaultModel") or "gpt-4o-mini-transcribe")
 
 
-def validate_policy(policy: dict[str, Any], issues: list[dict[str, Any]], require_prices: bool) -> None:
+def validate_policy(
+    policy: dict[str, Any],
+    issues: list[dict[str, Any]],
+    require_prices: bool,
+    required_cost_keys: list[str] | None = None,
+) -> None:
     guards = policy.get("guards") or {}
     preprocessing = policy.get("audioPreprocessing") or {}
     unit_costs = ((policy.get("estimation") or {}).get("unitCostsUsd") or {})
@@ -173,6 +178,19 @@ def validate_policy(policy: dict[str, Any], issues: list[dict[str, Any]], requir
         add_issue(issues, "warning", "silence_skip_disabled", "Pular silencio reduz custo e deveria estar ativo.")
 
     missing_prices = [key for key, value in unit_costs.items() if value is None]
+    required_missing_prices = [
+        key
+        for key in (required_cost_keys or [])
+        if unit_costs.get(key) is None
+    ]
+    if required_missing_prices:
+        add_issue(
+            issues,
+            "error",
+            "missing_required_unit_costs",
+            "Custos unitarios obrigatorios para esta execucao ainda estao vazios.",
+            keys=required_missing_prices,
+        )
     if missing_prices:
         level = "error" if require_prices else "warning"
         add_issue(
@@ -442,6 +460,12 @@ def main() -> int:
     parser.add_argument("--policy-only", action="store_true", help="Skip database checks")
     parser.add_argument("--require-openai-key", action="store_true")
     parser.add_argument("--require-prices", action="store_true", help="Treat missing local price config as an error")
+    parser.add_argument(
+        "--required-cost-key",
+        action="append",
+        default=[],
+        help="Treat a specific unitCostsUsd key as required for this run. Can be repeated.",
+    )
     parser.add_argument("--strict", action="store_true", help="Return non-zero for warnings too")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -452,7 +476,7 @@ def main() -> int:
     apply_env_cost_overrides(policy, env, issues)
     model = policy_model(policy, args.model)
 
-    validate_policy(policy, issues, args.require_prices)
+    validate_policy(policy, issues, args.require_prices, args.required_cost_key)
 
     if args.require_openai_key and not env.get("OPENAI_API_KEY"):
         add_issue(issues, "error", "missing_openai_key", f"OPENAI_API_KEY nao encontrado em {args.env_file}.")
