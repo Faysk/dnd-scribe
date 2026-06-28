@@ -73,7 +73,7 @@
   }
 
   function canExecute(job) {
-    return Boolean(jobEndpoint(job)) && ['queued', 'retrying'].includes(job.status);
+    return Boolean(jobEndpoint(job)) && (['queued', 'retrying'].includes(job.status) || isStaleRunning(job));
   }
 
   function canDryRun(job) {
@@ -130,7 +130,7 @@
 
   function pipelineDetail(status, sourceSessionId) {
     if (status.next) return `${sourceSessionId || status.next.session?.sourceSessionId || 'sessao'} pronta para continuar sem OpenAI paga.`;
-    if (status.stale) return `Rodando ha ${jobAgeMinutes(status.stale)} min. O continuador ja envia sinal de recovery quando o backend suportar.`;
+    if (status.stale) return `Rodando ha ${jobAgeMinutes(status.stale)} min. Use Recuperar pipeline para voltar o job para retry e continuar com auditoria.`;
     if (status.running) return `Rodando ha ${jobAgeMinutes(status.running) ?? '-'} min. Atualize antes de disparar outra etapa.`;
     if (status.failed.length) return 'Use Tentar novamente no job falho antes de continuar a esteira.';
     if (status.blocked) return 'ZIP, manifest, extracao e chunks chegaram ao limite atual; falta o worker cloud de fala.';
@@ -166,11 +166,12 @@
     const inspectButton = job.status === 'running'
       ? `<button onclick="continuePipeline('${esc(job.session?.sourceSessionId || '')}', { dryRun: true, maxRuns: 1 })">Inspecionar</button>`
       : '';
+    const primaryLabel = isStaleRunning(job) ? 'Recuperar' : actionLabel(job.type);
     return `
       <div class="job-actions">
         ${limit}
         <button onclick="runCloudJob('${esc(job.id)}', '${esc(job.type)}', true)" ${canDryRun(job) ? '' : 'disabled'}>Simular</button>
-        <button class="primary" onclick="runCloudJob('${esc(job.id)}', '${esc(job.type)}', false)" ${canExecute(job) ? '' : 'disabled'}>${esc(actionLabel(job.type))}</button>
+        <button class="primary" onclick="runCloudJob('${esc(job.id)}', '${esc(job.type)}', false)" ${canExecute(job) ? '' : 'disabled'}>${esc(primaryLabel)}</button>
         ${inspectButton}
         ${retryButton}
       </div>
@@ -275,7 +276,7 @@
         </div>
         ${renderJobSteps(job)}
         ${renderTrackSummary(job)}
-        ${isStaleRunning(job) ? `<p>Este job esta rodando ha mais de ${STALE_RUNNING_MINUTES} minutos. Atualize e use retry se ele aparecer como falha; o continuador ja envia sinal de recovery para o backend.</p>` : ''}
+        ${isStaleRunning(job) ? `<p>Este job esta rodando ha mais de ${STALE_RUNNING_MINUTES} minutos. Use Recuperar para voltar a etapa a retry com trilha de auditoria e continuar sem OpenAI paga.</p>` : ''}
         ${jobActionControls(job)}
         ${job.error ? `<p>${esc(String(job.error).slice(0, 240))}</p>` : ''}
         ${job.output ? `<pre>${esc(JSON.stringify(job.output, null, 2).slice(0, 900))}</pre>` : ''}
@@ -288,17 +289,24 @@
     if (!jobs.length) return `<div class="empty">Nenhum job de producao registrado.</div>`;
     const status = pipelineStatus(jobs);
     const sourceSessionId = selectedPipelineSourceSessionId();
+    const controlSourceSessionId = sourceSessionId
+      || status.next?.session?.sourceSessionId
+      || status.stale?.session?.sourceSessionId
+      || status.running?.session?.sourceSessionId
+      || '';
+    const canContinue = Boolean(status.next || status.stale);
+    const controlLabel = status.stale && !status.next ? 'Recuperar pipeline' : 'Continuar pipeline';
     return `
       <div class="pipeline-control">
         <div>
           <span class="label">Pipeline Craig</span>
           <strong>${esc(pipelineTitle(status))}</strong>
-          <small>${esc(pipelineDetail(status, sourceSessionId))}</small>
+          <small>${esc(pipelineDetail(status, controlSourceSessionId))}</small>
           <div class="badges">${pipelineBadges(status)}</div>
         </div>
         <div class="job-actions">
-          <button onclick="continuePipeline('${esc(sourceSessionId)}', { dryRun: true, maxRuns: 1 })">Simular proxima</button>
-          <button class="primary" onclick="continuePipeline('${esc(sourceSessionId)}')" ${status.next ? '' : 'disabled'}>Continuar pipeline</button>
+          <button onclick="continuePipeline('${esc(controlSourceSessionId)}', { dryRun: true, maxRuns: 1 })">Simular proxima</button>
+          <button class="primary" onclick="continuePipeline('${esc(controlSourceSessionId)}')" ${canContinue ? '' : 'disabled'}>${esc(controlLabel)}</button>
         </div>
       </div>
       <div class="job-list">
@@ -324,6 +332,28 @@
     return payload;
   }
 
+  async function recoverPipeline(sourceSessionId = '', options = {}) {
+    if (options.dryRun === true) return null;
+    try {
+      const payload = await callApi('/api/pipeline-recover', {
+        sourceSessionId: sourceSessionId || selectedPipelineSourceSessionId(),
+        jobId: options.jobId || '',
+        dryRun: false,
+        staleMinutes: STALE_RUNNING_MINUTES
+      });
+      const recovered = payload?.staleRecovery?.recovered?.length || 0;
+      if (recovered) {
+        remember?.(`${recovered} job(s) travado(s) recuperado(s).`, payload.staleRecovery);
+        toast?.(`${recovered} job(s) recuperado(s).`);
+        await loadJobs?.(true);
+      }
+      return payload;
+    } catch (error) {
+      remember?.(`Recovery de pipeline nao aplicado: ${error.message}`);
+      return null;
+    }
+  }
+
   async function runCloudJob(jobId, type, dryRun = false) {
     const endpoint = endpointByType[type];
     if (!endpoint) {
@@ -343,7 +373,11 @@
 
     try {
       if (typeof setBusy === 'function') setBusy(true);
+      const recovery = dryRun ? null : await recoverPipeline(selectedPipelineSourceSessionId(), { jobId });
       const payload = await callApi(endpoint, body);
+      if (recovery?.staleRecovery?.recovered?.length && !payload.staleRecovery) {
+        payload.staleRecovery = recovery.staleRecovery;
+      }
       if (payload.jobs) window.state.jobs = payload.jobs;
       if (payload.sessions) window.state.sessions = payload.sessions;
       if (payload.jobResult && window.state?.ingest) {
@@ -384,6 +418,7 @@
     const chunkSeconds = Math.max(60, Math.min(1800, Number.isFinite(chunkInput) ? Math.floor(chunkInput) : 600));
     if (!dryRun && !options.auto && !window.confirm('Continuar a esteira zero-cost em producao? A etapa atual nao chama OpenAI paga.')) return null;
     let lastPayload = null;
+    let preflightRecovery = null;
     try {
       if (typeof setBusy === 'function') setBusy(true);
       if (window.state?.ingest) {
@@ -396,6 +431,9 @@
         };
       }
       render?.();
+      if (!dryRun) {
+        preflightRecovery = await recoverPipeline(resolvedSourceSessionId, { dryRun: false });
+      }
       for (let index = 0; index < maxRuns; index += 1) {
         const payload = await callApi('/api/pipeline-continue', {
           sourceSessionId: resolvedSourceSessionId,
@@ -405,6 +443,9 @@
           recoverStale: true,
           staleMinutes: STALE_RUNNING_MINUTES
         });
+        if (preflightRecovery?.staleRecovery?.recovered?.length && !payload.staleRecovery) {
+          payload.staleRecovery = preflightRecovery.staleRecovery;
+        }
         lastPayload = payload;
         if (payload.jobs) window.state.jobs = payload.jobs;
         if (payload.sessions) window.state.sessions = payload.sessions;
@@ -425,12 +466,12 @@
       if (lastPayload?.continueRecommended) {
         toast?.('Pipeline pausado para proteger o tempo da Function. Clique em continuar de novo.');
       } else {
-        toast?.(pipelineCompletionToast(lastPayload, dryRun));
+        toast?.(pipelineCompletionToast(lastPayload || preflightRecovery, dryRun));
       }
       await loadJobs?.(true);
       if (typeof loadSessions === 'function') await loadSessions(false);
       render?.();
-      return lastPayload;
+      return lastPayload || preflightRecovery;
     } catch (error) {
       if (window.state?.ingest) {
         window.state.ingest = { ...window.state.ingest, busy: false, phase: null, error: error.message };
