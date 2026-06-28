@@ -195,6 +195,7 @@ where auth_user_id = $1::uuid;`,
 
 async function profileForUser(db, userId) {
   return await data(
+    db,
     `
 select row_to_json(profile_row) data
 from (
