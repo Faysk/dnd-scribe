@@ -4548,7 +4548,7 @@ async function handlePost(req, res, path) {
     const payload = await retryProcessingJob(req, campaign, body);
     return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
   }
-  if (path === '/api/jobs/run-cloud-plan-chunks') {
+  if (path === '/api/run-cloud-plan-chunks' || path === '/api/jobs/run-cloud-plan-chunks') {
     const payload = await runCloudPlanChunks(req, campaign, body);
     return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
   }

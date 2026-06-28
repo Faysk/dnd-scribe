@@ -2,7 +2,7 @@
   const endpointByType = {
     cloud_ingest_craig: '/api/jobs/run-cloud-ingest',
     cloud_extract_craig_tracks: '/api/jobs/run-cloud-extract',
-    cloud_plan_audio_chunks: '/api/jobs/run-cloud-plan-chunks'
+    cloud_plan_audio_chunks: '/api/run-cloud-plan-chunks'
   };
 
   function esc(value = '') {

@@ -6,7 +6,8 @@ Ativar `cloud_plan_audio_chunks` em producao sem criar uma nova Vercel Function 
 
 ## Entregas
 
-- Nova rota consolidada no catch-all: `POST /api/jobs/run-cloud-plan-chunks`.
+- Nova rota consolidada no catch-all: `POST /api/run-cloud-plan-chunks`.
+- A rota profunda `/api/jobs/run-cloud-plan-chunks` fica aceita no codigo, mas a Vercel Hobby deste projeto nao entrega caminhos profundos ao catch-all atual.
 - Permissao exigida: `project.jobs.run`.
 - Le faixas `craig_track` ja extraidas em R2.
 - Faz range request pequeno no FLAC para ler `STREAMINFO`.
