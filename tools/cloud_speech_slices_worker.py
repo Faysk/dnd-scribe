@@ -1019,7 +1019,7 @@ def main() -> int:
     args = parse_args()
     try:
         payload = run(args)
-        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str))
         return 0
     except Exception as error:  # noqa: BLE001
         print(
@@ -1027,6 +1027,7 @@ def main() -> int:
                 {"ok": False, "error": str(error), "traceback": traceback.format_exc().splitlines()},
                 ensure_ascii=False,
                 indent=2,
+                default=str,
             ),
             flush=True,
         )
