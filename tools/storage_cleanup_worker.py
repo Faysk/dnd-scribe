@@ -66,7 +66,12 @@ def r2_client(env: dict[str, str]):
     )
 
 
-def refresh_readiness(conn: psycopg.Connection, campaign: str, actor: str) -> dict[str, Any]:
+def refresh_readiness(
+    conn: psycopg.Connection,
+    campaign: str,
+    actor: str,
+    source_session_id: str | None,
+) -> dict[str, Any]:
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
@@ -76,6 +81,7 @@ with ready as (
   join sessions s on s.id = cleanup.session_id
   join campaigns c on c.id = s.campaign_id
   where c.slug = %s
+    and (%s::text is null or cleanup.source_session_id = %s::text)
     and cleanup.readiness_status = 'delete_ready'
     and cleanup.lifecycle_status in ('active', 'superseded')
 ), updated as (
@@ -108,7 +114,7 @@ with ready as (
 select count(*)::int objects, coalesce(sum(reclaimable_bytes), 0)::bigint bytes
 from updated;
 """,
-            (campaign, actor, actor),
+            (campaign, source_session_id, source_session_id, actor, actor),
         )
         row = cur.fetchone() or {}
     return {"objects": int(row.get("objects") or 0), "bytes": int(row.get("bytes") or 0)}
@@ -259,7 +265,9 @@ def main() -> int:
         raise SystemExit(f"--execute requires --confirm {CONFIRM_TOKEN}")
 
     with psycopg.connect(database_url, autocommit=False) as conn:
-        readiness = refresh_readiness(conn, args.campaign, args.actor) if args.execute else {"objects": 0, "bytes": 0, "dryRunSkipped": True}
+        readiness = refresh_readiness(conn, args.campaign, args.actor, args.source_session_id)
+        if not args.execute:
+            readiness["dryRunRollback"] = True
         candidates = select_candidates(conn, args.campaign, args.source_session_id, limit)
         output: dict[str, Any] = {
             "execute": args.execute,
