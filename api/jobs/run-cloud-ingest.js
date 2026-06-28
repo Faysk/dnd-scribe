@@ -502,9 +502,11 @@ where id = $1::uuid;`,
 update sessions
 set status = case when status in ('planned','recording') then 'uploaded' else status end,
     metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb,
+    started_at = coalesce(started_at, nullif($3, '')::timestamptz),
+    session_date = coalesce(session_date, (nullif($3, '')::timestamptz)::date),
     updated_at = now()
 where id = $1::uuid;`,
-    [job.session_id, JSON.stringify(manifestMetadata)]
+    [job.session_id, JSON.stringify(manifestMetadata), manifest.craig?.start_time || '']
   );
 
   const nextJob = await db.query(

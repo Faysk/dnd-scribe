@@ -168,6 +168,11 @@ function generatedSourceSessionId(title, sessionDate) {
   return `manual-${date}-${slugify(title)}-${stamp.slice(9, 15)}`;
 }
 
+function craigRecordingIdFromFilename(fileName = '') {
+  const match = String(fileName || '').match(/^craig-([a-zA-Z0-9]+)-/);
+  return match ? match[1] : '';
+}
+
 function authPublicConfig() {
   return {
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
@@ -1752,6 +1757,13 @@ function loadCraigMapConfig() {
 async function ensureCraigUploadSession(db, campaign, raw) {
   const sourceSessionId = cleanText(raw.sourceSessionId || raw.source_session_id, 180);
   if (sourceSessionId) {
+    const attachToExisting = raw.attachToExisting === true
+      || raw.attach_to_existing === true
+      || raw.confirmExistingSession === true
+      || raw.confirm_existing_session === true;
+    if (!attachToExisting) {
+      throw httpError(409, 'Upload Craig em sessao existente exige confirmacao explicita. Deixe a sessao alvo vazia para criar uma sessao nova pelo ZIP.');
+    }
     const existing = await data(
       `
 select row_to_json(s) data
@@ -1767,15 +1779,17 @@ limit 1;`,
   }
 
   const fileName = safeUploadFilename(raw.fileName || raw.file_name || 'craig-session.zip');
-  const inferredTitle = cleanText(raw.title, 180) || fileName.replace(/(\.flac)?\.zip$/i, '');
+  const recordingId = craigRecordingIdFromFilename(fileName);
+  const inferredTitle = cleanText(raw.title, 180)
+    || (recordingId ? `Sessao Craig ${recordingId}` : fileName.replace(/(\.flac)?\.zip$/i, ''));
   const sessionDate = normalizeDate(raw.sessionDate || raw.session_date);
-  const generatedSourceId = generatedSourceSessionId(inferredTitle, sessionDate);
+  const generatedSourceId = recordingId ? `craig-${recordingId}` : generatedSourceSessionId(inferredTitle, sessionDate);
   const slug = slugify(`${sessionDate || 'sem-data'}-${inferredTitle}`);
   const result = await db.query(
     `
 with campaign_row as (
   select id from campaigns where slug = $1
-), inserted as (
+), upserted as (
   insert into sessions (
     id, campaign_id, title, slug, session_date, arc, status, summary_short,
     source_system, source_session_id, metadata, created_at, updated_at
@@ -1783,9 +1797,14 @@ with campaign_row as (
   select gen_random_uuid(), campaign_row.id, $2, $3, $4::date, $5, 'uploaded', $6,
          'craig', $7, $8::jsonb, now(), now()
   from campaign_row
+  on conflict (campaign_id, source_system, source_session_id)
+  where source_system is not null and source_session_id is not null
+  do update set
+    updated_at = now(),
+    metadata = coalesce(sessions.metadata, '{}'::jsonb) || excluded.metadata
   returning *
 )
-select * from inserted;`,
+select * from upserted;`,
     [
       campaign,
       inferredTitle,
@@ -1794,7 +1813,12 @@ select * from inserted;`,
       cleanText(raw.arc, 120) || null,
       cleanText(raw.summary || raw.summaryShort || raw.summary_short, 2000) || null,
       generatedSourceId,
-      JSON.stringify({ created_by: 'api/vercel', created_from: 'craig_direct_upload', auth_required: true })
+      JSON.stringify({
+        created_by: 'api/vercel',
+        created_from: 'craig_direct_upload',
+        auth_required: true,
+        inferred_recording_id: recordingId || null
+      })
     ]
   );
   if (!result.rows.length) throw httpError(404, `Campanha nao encontrada: ${campaign}`);

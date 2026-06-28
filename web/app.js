@@ -1196,9 +1196,10 @@ function renderCraigIngestPanel() {
     <div class="detail-grid">
       <label><span class="label">Sessao alvo</span>
         <select id="ingestSessionId">
-          <option value="">Criar sessao pelo nome do ZIP</option>
-          ${state.sessions.map(session => `<option value="${escapeHtml(session.sourceSessionId)}" ${session.sourceSessionId === state.selectedSourceSessionId ? 'selected' : ''}>${escapeHtml(session.title || session.sourceSessionId)}</option>`).join('')}
+          <option value="">Criar nova sessao pelo ZIP (recomendado)</option>
+          ${state.sessions.map(session => `<option value="${escapeHtml(session.sourceSessionId)}">${escapeHtml(session.title || session.sourceSessionId)}</option>`).join('')}
         </select>
+        <small>Use uma sessao existente apenas para corrigir/reprocessar um upload ja conhecido.</small>
       </label>
       <label><span class="label">ZIP Craig</span><input id="craigZipFile" type="file" accept=".zip,application/zip" /></label>
       <div class="field-grid">
@@ -1408,6 +1409,11 @@ async function uploadCraigFromForm() {
     toast('Selecione o ZIP Craig.');
     return;
   }
+  const targetSessionId = $('#ingestSessionId')?.value || '';
+  if (targetSessionId) {
+    const ok = window.confirm(`Anexar este ZIP Craig na sessao existente "${targetSessionId}"? Para uma nova gravacao, cancele e deixe "Criar nova sessao pelo ZIP".`);
+    if (!ok) return;
+  }
   state.ingest = { busy: true, phase: 'planning', progress: null, error: null, result: null };
   setBusy(true);
   render();
@@ -1415,7 +1421,8 @@ async function uploadCraigFromForm() {
     const planned = await api('/api/uploads/craig-url', {
       method: 'POST',
       body: JSON.stringify({
-        sourceSessionId: $('#ingestSessionId')?.value || '',
+        sourceSessionId: targetSessionId,
+        attachToExisting: Boolean(targetSessionId),
         fileName: file.name,
         sizeBytes: file.size,
         contentType: file.type || 'application/zip',
