@@ -898,6 +898,8 @@ async function loadSession(sourceSessionId) {
         result: null,
         limit: 50,
         channel: 'dnd',
+        cursorMode: 'latest',
+        cursorMessageId: '',
         includeBeforeStart: false
       }
     };
@@ -1253,6 +1255,10 @@ function renderIngestResult(result) {
           file: result.upload.originalFilename,
           cost: result.cost?.paidAiCostUsd ?? 0
         }, null, 2))}</pre>` : ''}
+        <div class="actions">
+          <button onclick="openOperations()">Abrir Operacao</button>
+          <button onclick="copyText(state.ingest.result?.upload?.storagePath || '', 'Caminho R2 copiado.')">Copiar caminho R2</button>
+        </div>
       </div>
     `;
   }
@@ -1490,6 +1496,15 @@ function uploadFileToSignedUrl(url, file, contentType) {
     request.onabort = () => reject(new Error('Upload R2 cancelado.'));
     request.send(file);
   });
+}
+
+async function openOperations() {
+  state.tab = 'ops';
+  if (state.selectedSourceSessionId && !state.review) {
+    await loadSession(state.selectedSourceSessionId);
+  }
+  await loadJobs(true);
+  render();
 }
 
 async function saveCraigTrack(trackKey, editableKey = false) {
@@ -2889,5 +2904,6 @@ window.setDateTimeNow = setDateTimeNow;
 window.clearDateTime = clearDateTime;
 window.setDiscordCursor = setDiscordCursor;
 window.syncDiscordTimelineWithCursor = syncDiscordTimelineWithCursor;
+window.openOperations = openOperations;
 
 boot();

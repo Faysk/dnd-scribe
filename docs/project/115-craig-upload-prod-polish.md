@@ -13,8 +13,10 @@ Deixar o upload real do ZIP Craig mais confiavel e legivel para teste em produca
   - criacao do job cloud.
 - Upload direto para R2 usa `XMLHttpRequest` para exibir progresso real do PUT.
 - Mensagem da tela deixa explicito que o ZIP grande nao passa pela Vercel Function.
+- Resultado do upload ganhou botao para abrir a aba Operacao e copiar o caminho R2.
 - Jobs criados depois do upload agora aparecem como `ready_to_run` quando ja existe worker implementado.
 - Polling da lista de jobs acompanha apenas `running`/`retrying`, evitando loop infinito em job manual `queued`.
+- Recarregar uma sessao preserva os campos novos de cursor da sincronizacao Discord.
 
 ## Como testar
 
