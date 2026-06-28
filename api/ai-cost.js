@@ -3,6 +3,7 @@ const {
   handleDiscordInteraction,
   verifyDiscordSignature
 } = require('../lib/discord-interactions');
+const { handlePipelineRecovery } = require('../lib/pipeline-recovery');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
@@ -250,6 +251,9 @@ module.exports = async function handler(req, res) {
     } catch (error) {
       return sendJson(res, error.statusCode || 500, { ok: false, error: error.message || String(error) });
     }
+  }
+  if (url.searchParams.get('pipelineRecover') === '1') {
+    return handlePipelineRecovery(req, res);
   }
   if (req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
   try {
