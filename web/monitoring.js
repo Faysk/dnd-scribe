@@ -124,6 +124,52 @@
     `;
   }
 
+  function readinessTitle(readiness = {}) {
+    if (!readiness.ready) return 'Bloqueado para teste real';
+    if (Number(readiness.attention || 0) > 0) return 'Pronto com atencoes';
+    return 'Pronto para sessao';
+  }
+
+  function readinessCopy(readiness = {}) {
+    if (!readiness.ready) return `${num(readiness.blocking)} bloqueio(s) precisam ser resolvidos antes de usar em mesa.`;
+    if (Number(readiness.attention || 0) > 0) return `${num(readiness.attention)} ponto(s) merecem conferencia, mas sem bloqueio critico.`;
+    return 'Servicos essenciais, dados e operacao estao verdes no snapshot atual.';
+  }
+
+  function readinessItem(item = {}) {
+    return `
+      <div class="monitor-readiness-item ${tone(item.status)}">
+        <div class="row between">
+          <strong>${esc(item.label || item.id)}</strong>
+          ${chip(statusLabel(item.status), tone(item.status))}
+        </div>
+        <p>${esc(item.detail || '')}</p>
+      </div>
+    `;
+  }
+
+  function renderReadiness(readiness = {}) {
+    const items = readiness.items || [];
+    return `
+      <section class="monitor-readiness ${tone(readiness.status)}">
+        <div class="monitor-readiness-head">
+          <div>
+            <span class="label">Prontidao operacional</span>
+            <h2>${esc(readinessTitle(readiness))}</h2>
+            <p>${esc(readinessCopy(readiness))}</p>
+          </div>
+          <div class="badges">
+            ${chip(`${num(readiness.blocking)} bloqueios`, readiness.blocking ? 'red' : 'green')}
+            ${chip(`${num(readiness.attention)} atencoes`, readiness.attention ? 'orange' : 'green')}
+          </div>
+        </div>
+        <div class="monitor-readiness-grid">
+          ${items.map(readinessItem).join('') || '<div class="empty">Sem dados de prontidao neste snapshot.</div>'}
+        </div>
+      </section>
+    `;
+  }
+
   function jsonDetails(label, status, description, data, open = false) {
     return `
       <details class="monitor-detail" ${open ? 'open' : ''}>
@@ -225,6 +271,8 @@
           ${summaryMetric(money(ai.estimatedCostUsd), 'IA estimada')}
           ${summaryMetric(num(jobs.failedLast24h), 'falhas 24h', Number(jobs.failedLast24h || 0) ? 'critical' : '')}
         </div>
+
+        ${renderReadiness(data.readiness || {})}
 
         <section class="monitor-section">
           <div class="panel-head">
