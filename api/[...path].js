@@ -8,6 +8,7 @@ const {
   summarizeRoll20Events
 } = require('../lib/roll20-commands');
 const { buildMonitoringPayload } = require('../lib/monitoring');
+const { markJobStep } = require('../lib/job-steps');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
@@ -19,6 +20,7 @@ const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
 const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_SYNC_MAX_MESSAGES = 100;
 const SESSION_TIME_ZONE = process.env.DND_SESSION_TIME_ZONE || 'Europe/London';
+const DEFAULT_CHUNK_SECONDS = 600;
 
 const SESSION_STATUSES = new Set([
   'planned',
@@ -2109,6 +2111,501 @@ on conflict (job_id, step_key) do update set
   };
 }
 
+function normalizeChunkSeconds(value) {
+  const seconds = Number(value || DEFAULT_CHUNK_SECONDS);
+  if (!Number.isFinite(seconds) || seconds <= 0) return DEFAULT_CHUNK_SECONDS;
+  return Math.max(60, Math.min(1800, Math.floor(seconds)));
+}
+
+function uuidOrNull(value) {
+  const text = cleanText(value, 80);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)
+    ? text
+    : null;
+}
+
+async function selectPlanChunksJob(db, campaign, jobId) {
+  const params = [campaign, jobId || null];
+  const result = await db.query(
+    `
+select pj.*, s.source_session_id, s.title session_title, c.slug campaign_slug
+from processing_jobs pj
+join sessions s on s.id = pj.session_id
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1
+  and pj.job_type = 'cloud_plan_audio_chunks'
+  and ($2::uuid is null or pj.id = $2::uuid)
+  and pj.status in ('queued','retrying','running','succeeded')
+order by case when $2::uuid is not null and pj.id = $2::uuid then 0 else 1 end, pj.created_at asc
+limit 1;`,
+    params
+  );
+  return result.rows[0] || null;
+}
+
+async function claimPlanChunksJob(db, campaign, jobId) {
+  const result = await db.query(
+    `
+with candidate as (
+  select pj.id
+  from processing_jobs pj
+  join sessions s on s.id = pj.session_id
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1
+    and pj.job_type = 'cloud_plan_audio_chunks'
+    and ($2::uuid is null or pj.id = $2::uuid)
+    and pj.status in ('queued','retrying')
+  order by case when $2::uuid is not null and pj.id = $2::uuid then 0 else 1 end, pj.created_at asc
+  limit 1
+  for update skip locked
+), updated as (
+  update processing_jobs pj
+  set status = 'running',
+      attempts = coalesce(pj.attempts, 0) + 1,
+      started_at = now(),
+      finished_at = null,
+      error = null,
+      output = coalesce(pj.output, '{}'::jsonb) || jsonb_build_object(
+        'workerStatus', 'chunk_plan_running',
+        'worker', 'vercel_cloud_plan_chunks',
+        'paidAiCostUsd', 0
+      )
+  from candidate
+  where pj.id = candidate.id
+  returning pj.*
+)
+select updated.*, s.source_session_id, s.title session_title, c.slug campaign_slug
+from updated
+join sessions s on s.id = updated.session_id
+join campaigns c on c.id = s.campaign_id;`,
+    [campaign, jobId || null]
+  );
+  return result.rows[0] || null;
+}
+
+async function failPlanChunksJob(db, job, error, extra = {}) {
+  await db.query(
+    `
+update processing_jobs
+set status = 'failed',
+    output = coalesce(output, '{}'::jsonb) || $3::jsonb,
+    finished_at = now(),
+    error = $2
+where id = $1::uuid;`,
+    [
+      job.id,
+      String(error.message || error).slice(0, 4000),
+      JSON.stringify({
+        workerStatus: 'chunk_plan_failed',
+        paidAiCostUsd: 0,
+        failedAt: new Date().toISOString(),
+        ...extra
+      })
+    ]
+  );
+  await markJobStep(db, job, 'failed', {
+    error: error.message || String(error),
+    progress: { workerStatus: 'chunk_plan_failed', paidAiCostUsd: 0 },
+    retryable: true
+  });
+}
+
+function trackKeyFromRecordingFile(file) {
+  const metadata = file.metadata || {};
+  const fromMetadata = cleanText(metadata.track_key || metadata.source_track_key, 120);
+  if (fromMetadata) return fromMetadata;
+  const fromRole = cleanText(file.source_file_role, 160).replace(/^craig_track_/, '');
+  if (fromRole) return fromRole;
+  return cleanText(file.original_filename, 160)
+    .replace(/\\/g, '/')
+    .split('/')
+    .pop()
+    .replace(/^\d+-/, '')
+    .replace(/\.[^.]+$/, '')
+    .toLowerCase();
+}
+
+async function recordingFilesForChunkPlan(db, job) {
+  const inputFiles = Array.isArray(job.input?.trackFiles) ? job.input.trackFiles : [];
+  const ids = inputFiles.map(item => uuidOrNull(item.recordingFileId || item.recording_file_id)).filter(Boolean);
+  const paths = inputFiles.map(item => cleanText(item.storagePath || item.storage_path, 1200)).filter(Boolean);
+  const result = await db.query(
+    `
+select rf.id, rf.session_id, rf.storage_bucket, rf.storage_path, rf.original_filename,
+       rf.mime_type, rf.size_bytes, rf.duration_ms, rf.source_file_role, rf.metadata
+from recording_files rf
+where rf.session_id = $1::uuid
+  and rf.file_type = 'craig_track'
+  and nullif(rf.storage_bucket, '') is not null
+  and nullif(rf.storage_path, '') is not null
+  and (
+    (cardinality($2::uuid[]) = 0 and cardinality($3::text[]) = 0)
+    or rf.id = any($2::uuid[])
+    or rf.storage_path = any($3::text[])
+  )
+order by rf.source_file_role nulls last, rf.original_filename nulls last, rf.created_at asc;`,
+    [job.session_id, ids, paths]
+  );
+  return result.rows.map(file => ({
+    ...file,
+    recordingFileId: file.id,
+    trackKey: trackKeyFromRecordingFile(file)
+  }));
+}
+
+async function fetchR2RangeBuffer(bucket, key, start, end) {
+  const response = await fetch(createR2SignedUrl(key, 300, bucket, 'GET'), {
+    headers: { Range: `bytes=${start}-${end}` }
+  });
+  if (response.status !== 206) {
+    const message = await response.text().catch(() => '');
+    throw httpError(502, `R2 range falhou (${response.status}) para ${key}: ${message.slice(0, 200)}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+function parseFlacStreamInfo(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 42) return null;
+  if (buffer.subarray(0, 4).toString('ascii') !== 'fLaC') return null;
+  let offset = 4;
+  while (offset + 4 <= buffer.length) {
+    const header = buffer[offset];
+    const type = header & 0x7f;
+    const length = buffer.readUIntBE(offset + 1, 3);
+    const blockStart = offset + 4;
+    const blockEnd = blockStart + length;
+    if (blockEnd > buffer.length) return null;
+    if (type === 0 && length >= 34) {
+      const packedBytes = buffer.subarray(blockStart + 10, blockStart + 18);
+      let packed = 0n;
+      for (const byte of packedBytes) packed = (packed << 8n) | BigInt(byte);
+      const sampleRateHz = Number((packed >> 44n) & 0xfffffn);
+      const channels = Number((packed >> 41n) & 0x7n) + 1;
+      const bitsPerSample = Number((packed >> 36n) & 0x1fn) + 1;
+      const totalSamples = Number(packed & 0xfffffffffn);
+      const durationMs = sampleRateHz > 0 && totalSamples > 0
+        ? Math.round((totalSamples * 1000) / sampleRateHz)
+        : null;
+      return {
+        sampleRateHz,
+        channels,
+        bitsPerSample,
+        totalSamples,
+        durationMs
+      };
+    }
+    offset = blockEnd;
+    if ((header & 0x80) !== 0) break;
+  }
+  return null;
+}
+
+async function enrichTrackDuration(track) {
+  if (Number(track.duration_ms || 0) > 0) {
+    return {
+      ...track,
+      durationMs: Number(track.duration_ms),
+      streamInfo: null,
+      durationSource: 'recording_files'
+    };
+  }
+  const header = await fetchR2RangeBuffer(track.storage_bucket, track.storage_path, 0, 65535);
+  const streamInfo = parseFlacStreamInfo(header);
+  if (!streamInfo?.durationMs) {
+    throw httpError(422, `Nao foi possivel ler duracao FLAC de ${track.storage_path}.`);
+  }
+  return {
+    ...track,
+    durationMs: streamInfo.durationMs,
+    streamInfo,
+    durationSource: 'flac_streaminfo'
+  };
+}
+
+async function updateTrackAudioMetadata(db, track) {
+  if (!track.streamInfo?.durationMs) return;
+  const metadata = {
+    duration_source: 'flac_streaminfo',
+    duration_scanned_at: new Date().toISOString(),
+    sample_rate_hz: track.streamInfo.sampleRateHz,
+    channels: track.streamInfo.channels,
+    bits_per_sample: track.streamInfo.bitsPerSample,
+    total_samples: track.streamInfo.totalSamples
+  };
+  await db.query(
+    `
+update recording_files
+set duration_ms = coalesce(duration_ms, $2::integer),
+    metadata = coalesce(metadata, '{}'::jsonb) || $3::jsonb
+where id = $1::uuid;`,
+    [track.recordingFileId, track.durationMs, JSON.stringify(metadata)]
+  );
+  await db.query(
+    `
+update audio_artifacts
+set duration_ms = coalesce(duration_ms, $2::integer),
+    sample_rate_hz = coalesce(sample_rate_hz, $3::integer),
+    channels = coalesce(channels, $4::integer),
+    codec = coalesce(codec, 'flac'),
+    metadata = coalesce(metadata, '{}'::jsonb) || $5::jsonb,
+    updated_at = now()
+where source_file_id = $1::uuid
+   or (storage_bucket = $6 and storage_path = $7);`,
+    [
+      track.recordingFileId,
+      track.durationMs,
+      track.streamInfo.sampleRateHz,
+      track.streamInfo.channels,
+      JSON.stringify(metadata),
+      track.storage_bucket,
+      track.storage_path
+    ]
+  );
+}
+
+function buildTrackChunkRows(track, chunkSeconds) {
+  const chunkMs = chunkSeconds * 1000;
+  const durationMs = Number(track.durationMs || 0);
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    throw httpError(422, `Duracao invalida para track ${track.trackKey || track.recordingFileId}.`);
+  }
+  const rows = [];
+  const count = Math.max(1, Math.ceil(durationMs / chunkMs));
+  for (let index = 0; index < count; index += 1) {
+    const startMs = index * chunkMs;
+    const endMs = Math.min(durationMs, (index + 1) * chunkMs);
+    rows.push({
+      sourceFileId: track.recordingFileId,
+      trackKey: track.trackKey,
+      chunkIndex: index,
+      startMs,
+      endMs,
+      durationMs: Math.max(0, endMs - startMs),
+      sourceChunkName: `${track.trackKey || 'track'}_chunk_${String(index).padStart(3, '0')}`,
+      metadata: {
+        planned_from: 'cloud_plan_audio_chunks',
+        planned_only: true,
+        requires_render: true,
+        source_track_bucket: track.storage_bucket,
+        source_track_path: track.storage_path,
+        source_track_size_bytes: track.size_bytes || null,
+        chunk_seconds: chunkSeconds,
+        duration_source: track.durationSource,
+        stream_info: track.streamInfo || null
+      }
+    });
+  }
+  return rows;
+}
+
+async function upsertPlannedChunk(db, job, row) {
+  const result = await db.query(
+    `
+insert into audio_chunks (
+  id, session_id, source_file_id, chunk_index, start_ms, end_ms,
+  storage_bucket, storage_path, transcription_status, track_key, source_chunk_name,
+  duration_ms, size_bytes, metadata, created_at, updated_at
+)
+values (
+  gen_random_uuid(), $1::uuid, $2::uuid, $3::integer, $4::integer, $5::integer,
+  null, null, 'planned_cloud_chunk', $6, $7,
+  $8::integer, null, $9::jsonb, now(), now()
+)
+on conflict (session_id, track_key, chunk_index) where track_key is not null
+do update set
+  source_file_id = excluded.source_file_id,
+  start_ms = excluded.start_ms,
+  end_ms = excluded.end_ms,
+  storage_bucket = null,
+  storage_path = null,
+  transcription_status = case
+    when audio_chunks.transcription_status in ('transcribed','cached') then audio_chunks.transcription_status
+    else excluded.transcription_status
+  end,
+  source_chunk_name = excluded.source_chunk_name,
+  duration_ms = excluded.duration_ms,
+  metadata = coalesce(audio_chunks.metadata, '{}'::jsonb) || excluded.metadata,
+  updated_at = now()
+returning id;`,
+    [
+      job.session_id,
+      row.sourceFileId,
+      row.chunkIndex,
+      row.startMs,
+      row.endMs,
+      row.trackKey,
+      row.sourceChunkName,
+      row.durationMs,
+      JSON.stringify(row.metadata)
+    ]
+  );
+  return result.rows[0]?.id || null;
+}
+
+async function insertDetectSpeechJob(db, job, chunkSummary) {
+  const result = await db.query(
+    `
+insert into processing_jobs (id, session_id, job_type, status, attempts, input, output, created_at)
+select gen_random_uuid(), $1::uuid, 'cloud_detect_speech_slices', 'queued', 0, $2::jsonb, $3::jsonb, now()
+where not exists (
+  select 1 from processing_jobs
+  where session_id = $1::uuid
+    and job_type = 'cloud_detect_speech_slices'
+    and input->>'sourcePlanJobId' = $4
+    and status in ('queued','retrying','running','succeeded')
+)
+returning id;`,
+    [
+      job.session_id,
+      JSON.stringify({
+        sourcePlanJobId: job.id,
+        sourceSessionId: job.source_session_id,
+        chunks: chunkSummary.chunks,
+        chunkSeconds: chunkSummary.chunkSeconds
+      }),
+      JSON.stringify({
+        workerStatus: 'pending_worker_implementation',
+        nextAction: 'Renderizar audio compacto/chunks e detectar fala antes de qualquer transcricao paga.',
+        paidAiCostUsd: 0
+      }),
+      job.id
+    ]
+  );
+  return result.rows[0]?.id || null;
+}
+
+async function runCloudPlanChunks(req, campaign, body) {
+  await requirePermission(req, campaign, {
+    action: 'project.jobs.run',
+    scopeType: 'project',
+    scopeId: PROJECT_SCOPE_ID,
+    legacyRoles: ['owner', 'master'],
+    error: 'Planejar chunks exige permissao project.jobs.run.'
+  });
+  const dryRun = body.dryRun !== false;
+  const jobId = uuidOrNull(body.jobId || body.job_id);
+  const chunkSeconds = normalizeChunkSeconds(body.chunkSeconds || body.chunk_seconds);
+  const db = getPool();
+  const job = dryRun
+    ? await selectPlanChunksJob(db, campaign, jobId)
+    : await claimPlanChunksJob(db, campaign, jobId);
+  if (!job) {
+    return {
+      ok: true,
+      processed: false,
+      dryRun,
+      mode: 'cloud_plan_audio_chunks',
+      message: jobId ? `Job nao encontrado ou nao elegivel: ${jobId}` : 'Nenhum job cloud_plan_audio_chunks pendente.'
+    };
+  }
+  try {
+    if (!dryRun) {
+      await markJobStep(db, job, 'running', {
+        progress: { workerStatus: 'chunk_plan_running', paidAiCostUsd: 0, chunkSeconds }
+      });
+    }
+    const rawTracks = await recordingFilesForChunkPlan(db, job);
+    if (!rawTracks.length) throw httpError(422, 'Nenhuma faixa craig_track encontrada para planejar chunks.');
+    const tracks = [];
+    const chunks = [];
+    for (const rawTrack of rawTracks) {
+      const track = await enrichTrackDuration(rawTrack);
+      if (!dryRun) await updateTrackAudioMetadata(db, track);
+      const trackChunks = buildTrackChunkRows(track, chunkSeconds);
+      tracks.push({
+        recordingFileId: track.recordingFileId,
+        trackKey: track.trackKey,
+        durationMs: track.durationMs,
+        chunkCount: trackChunks.length,
+        durationSource: track.durationSource,
+        storagePath: track.storage_path
+      });
+      chunks.push(...trackChunks);
+    }
+    const summary = {
+      workerStatus: 'chunk_plan_succeeded',
+      paidAiCostUsd: 0,
+      chunkSeconds,
+      tracks: tracks.length,
+      chunks: chunks.length,
+      audioMinutes: Math.round((chunks.reduce((total, item) => total + item.durationMs, 0) / 60000) * 1000) / 1000,
+      trackPlan: tracks
+    };
+    if (dryRun) {
+      return {
+        ok: true,
+        processed: true,
+        dryRun: true,
+        mode: 'cloud_plan_audio_chunks',
+        jobId: job.id,
+        sourceSessionId: job.source_session_id,
+        summary,
+        cost: { paidAiCostUsd: 0 }
+      };
+    }
+    for (const chunk of chunks) {
+      await upsertPlannedChunk(db, job, chunk);
+    }
+    const nextJobId = await insertDetectSpeechJob(db, job, {
+      chunks: chunks.length,
+      chunkSeconds
+    });
+    await db.query(
+      `
+update processing_jobs
+set status = 'succeeded',
+    output = coalesce(output, '{}'::jsonb) || $2::jsonb,
+    finished_at = now(),
+    error = null
+where id = $1::uuid;`,
+      [
+        job.id,
+        JSON.stringify({
+          ...summary,
+          nextJobId,
+          completedAt: new Date().toISOString()
+        })
+      ]
+    );
+    await markJobStep(db, job, 'succeeded', {
+      retryable: false,
+      progress: { ...summary, nextJobId }
+    });
+    await db.query(
+      `
+update sessions
+set status = case when status in ('uploaded','processing') then 'processing' else status end,
+    metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb,
+    updated_at = now()
+where id = $1::uuid;`,
+      [
+        job.session_id,
+        JSON.stringify({
+          cloud_plan_audio_chunks: {
+            source_job_id: job.id,
+            completed_at: new Date().toISOString(),
+            chunks: chunks.length,
+            chunk_seconds: chunkSeconds
+          }
+        })
+      ]
+    );
+    return {
+      ok: true,
+      processed: true,
+      dryRun: false,
+      mode: 'cloud_plan_audio_chunks',
+      jobId: job.id,
+      sourceSessionId: job.source_session_id,
+      summary: { ...summary, nextJobId },
+      cost: { paidAiCostUsd: 0 }
+    };
+  } catch (error) {
+    if (!dryRun) await failPlanChunksJob(db, job, error, { chunkSeconds });
+    throw error;
+  }
+}
+
 function loadCraigMapConfig() {
   const mapPath = path.join(process.cwd(), 'config', 'craig_user_map.json');
   try {
@@ -4049,6 +4546,10 @@ async function handlePost(req, res, path) {
   }
   if (path === '/api/jobs/retry') {
     const payload = await retryProcessingJob(req, campaign, body);
+    return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
+  }
+  if (path === '/api/jobs/run-cloud-plan-chunks') {
+    const payload = await runCloudPlanChunks(req, campaign, body);
     return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
   }
   if (path === '/api/storage/cleanup-run') {

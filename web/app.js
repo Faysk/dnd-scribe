@@ -1246,7 +1246,7 @@ function renderUploadJobsCard() {
 }
 
 function renderUploadJobRow(job) {
-  const canRun = ['cloud_ingest_craig', 'cloud_extract_craig_tracks'].includes(job.type);
+  const canRun = ['cloud_ingest_craig', 'cloud_extract_craig_tracks', 'cloud_plan_audio_chunks'].includes(job.type);
   const canExecute = canRun && ['queued', 'retrying'].includes(job.status);
   const canDryRun = canRun && ['queued', 'retrying', 'running'].includes(job.status);
   const canRetry = ['failed', 'cancelled'].includes(job.status);
@@ -1255,7 +1255,14 @@ function renderUploadJobRow(job) {
   const stepRows = window.renderJobSteps ? window.renderJobSteps(job) : '';
   const limit = job.type === 'cloud_extract_craig_tracks'
     ? `<label class="inline-job-limit"><span class="label">Faixas</span><input id="jobLimit_${escapeHtml(job.id)}" type="number" min="1" max="3" value="1" /></label>`
+    : job.type === 'cloud_plan_audio_chunks'
+      ? `<label class="inline-job-limit"><span class="label">Chunk s</span><input id="jobChunkSeconds_${escapeHtml(job.id)}" type="number" min="60" max="1800" step="60" value="600" /></label>`
     : '';
+  const actionText = {
+    cloud_ingest_craig: 'Ler manifest',
+    cloud_extract_craig_tracks: 'Extrair',
+    cloud_plan_audio_chunks: 'Planejar chunks'
+  }[job.type] || 'Executar';
   return `
     <div class="job-row upload-job-row">
       <div class="row between">
@@ -1274,7 +1281,7 @@ function renderUploadJobRow(job) {
       ${canRun ? `<div class="job-actions">
         ${limit}
         <button onclick="runCloudJob('${escapeHtml(job.id)}', '${escapeHtml(job.type)}', true)" ${canDryRun ? '' : 'disabled'}>Simular</button>
-        <button class="primary" onclick="runCloudJob('${escapeHtml(job.id)}', '${escapeHtml(job.type)}', false)" ${canExecute ? '' : 'disabled'}>${job.type === 'cloud_extract_craig_tracks' ? 'Extrair' : 'Ler manifest'}</button>
+        <button class="primary" onclick="runCloudJob('${escapeHtml(job.id)}', '${escapeHtml(job.type)}', false)" ${canExecute ? '' : 'disabled'}>${escapeHtml(actionText)}</button>
         ${canRetry ? `<button onclick="retryCloudJob('${escapeHtml(job.id)}')">Tentar novamente</button>` : ''}
       </div>` : ''}
       ${!canRun && canRetry ? `<div class="job-actions"><button class="primary" onclick="retryCloudJob('${escapeHtml(job.id)}')">Tentar novamente</button></div>` : ''}
