@@ -41,6 +41,9 @@ jobs:
       - name: Check frontend syntax
         run: npm run check:web
 
+      - name: Check monitoring syntax
+        run: node --check lib/monitoring.js && node --check web/monitoring.js
+
       - name: Build static frontend
         run: npm run build
 
@@ -50,6 +53,8 @@ jobs:
           test -s public/app.js
           test -s public/jobs.js
           test -s public/costs.js
+          test -s public/monitoring.js
+          test -s public/monitoring.css
 
   python-syntax:
     name: Python syntax
