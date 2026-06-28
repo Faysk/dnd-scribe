@@ -698,7 +698,7 @@ body.auth-locked .music-dock { display: none; }
   gap: 10px;
 }
 .timeline-toolbar {
-  grid-template-columns: minmax(180px, 260px) minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(150px, 220px) minmax(220px, 1fr) minmax(180px, 260px) auto;
   align-items: end;
   padding: 0 14px 14px;
 }
@@ -727,7 +727,7 @@ body.auth-locked .music-dock { display: none; }
 }
 .timeline-discord-sync {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px minmax(150px, auto) auto;
+  grid-template-columns: minmax(0, 1fr) 140px 120px minmax(150px, auto) auto;
   gap: 10px;
   align-items: end;
   margin: 0 14px 14px;
@@ -880,6 +880,27 @@ body.auth-locked .music-dock { display: none; }
 .timeline-inspector .panel-body {
   display: grid;
   gap: 12px;
+}
+.source-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.source-detail-grid div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 8px;
+}
+.source-detail-grid strong {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+.attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 @media (max-width: 1100px) {
   .timeline-layout {

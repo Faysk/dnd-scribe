@@ -63,12 +63,14 @@ const state = {
     data: null,
     selectedItemId: null,
     filter: 'all',
+    query: '',
     zoom: 1,
     discord: {
       busy: false,
       error: null,
       result: null,
       limit: 50,
+      channel: 'dnd',
       includeBeforeStart: false
     }
   },
@@ -456,12 +458,14 @@ function resetCampaignData() {
     data: null,
     selectedItemId: null,
     filter: 'all',
+    query: '',
     zoom: 1,
     discord: {
       busy: false,
       error: null,
       result: null,
       limit: 50,
+      channel: 'dnd',
       includeBeforeStart: false
     }
   };
@@ -885,12 +889,14 @@ async function loadSession(sourceSessionId) {
       data: null,
       selectedItemId: null,
       filter: 'all',
+      query: '',
       zoom: 1,
       discord: {
         busy: false,
         error: null,
         result: null,
         limit: 50,
+        channel: 'dnd',
         includeBeforeStart: false
       }
     };
@@ -1562,6 +1568,7 @@ function renderTimeline() {
           <select onchange="state.timeline.filter=this.value; render();">
             ${['all', 'speech', 'roll20', 'discord'].map(value => `<option value="${value}" ${state.timeline.filter === value ? 'selected' : ''}>${escapeHtml(timelineFilterLabel(value))}</option>`).join('')}
           </select>
+          <input value="${escapeHtml(state.timeline.query || '')}" placeholder="Buscar fala, jogador, Discord, Roll20..." oninput="state.timeline.query=this.value; render();" />
           <label><span class="label">Zoom</span><input type="range" min="1" max="6" step="1" value="${Number(state.timeline.zoom || 1)}" oninput="state.timeline.zoom=Number(this.value); render();" /></label>
           <button onclick="loadTimelineData(true)">Atualizar</button>
         </div>
@@ -1602,6 +1609,16 @@ function renderDiscordSyncControls() {
         <small>${escapeHtml(discord.error || summary)}</small>
       </div>
       <label>
+        <span class="label">Canal</span>
+        <select onchange="state.timeline.discord.channel=this.value">
+          ${[
+            ['dnd', 'Mesa DnD'],
+            ['recording', 'Gravacoes'],
+            ['ops', 'Logs/Ops']
+          ].map(([value, label]) => `<option value="${value}" ${(discord.channel || 'dnd') === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+        </select>
+      </label>
+      <label>
         <span class="label">Mensagens</span>
         <input type="number" min="1" max="100" value="${Number(discord.limit || 50)}" oninput="state.timeline.discord.limit=Number(this.value || 50)" />
       </label>
@@ -1617,7 +1634,26 @@ function renderDiscordSyncControls() {
 function filteredTimelineItems() {
   const data = state.timeline.data;
   const filter = state.timeline.filter || 'all';
-  return (data?.items || []).filter(item => filter === 'all' || item.kind === filter);
+  const query = String(state.timeline.query || '').trim().toLowerCase();
+  return (data?.items || []).filter(item => {
+    const sourceOk = filter === 'all' || item.kind === filter;
+    if (!sourceOk) return false;
+    if (!query) return true;
+    const text = [
+      item.kind,
+      item.title,
+      item.subtitle,
+      item.text,
+      item.raw?.sourceId,
+      item.raw?.sourceEventId,
+      item.raw?.authorName,
+      item.raw?.authorDiscordId,
+      item.raw?.eventType,
+      item.raw?.characterName,
+      item.raw?.speaker
+    ].filter(Boolean).join(' ').toLowerCase();
+    return text.includes(query);
+  });
 }
 
 function timelineSelectedItem() {
@@ -1756,6 +1792,8 @@ function renderTimelineInspector(item) {
           <span class="label">${item.kind === 'speech' ? 'Fala' : 'Evento'}</span>
           <p>${escapeHtml(item.text || '-')}</p>
         </div>
+        ${timelineSourceDetails(item)}
+        ${timelineAttachmentLinks(item)}
         ${item.subtitle ? `<small>${escapeHtml(item.subtitle)}</small>` : ''}
         ${canPlay ? timelineAudioPanel(item) : '<div class="audio-card"><span class="label">Audio</span><p>Item sem faixa de audio direta.</p></div>'}
         <div class="actions">
@@ -1764,6 +1802,41 @@ function renderTimelineInspector(item) {
         </div>
       </div>
     </aside>
+  `;
+}
+
+function timelineSourceDetails(item) {
+  const raw = item.raw || {};
+  const rows = [
+    ['Fonte', raw.sourceSystem || item.kind],
+    ['Source ID', raw.sourceId || raw.sourceEventId],
+    ['Autor Discord', raw.authorName || raw.authorDiscordId],
+    ['Status', raw.reviewStatus || raw.visibility],
+    ['Criado', raw.createdAt || raw.createdAtRoll20]
+  ].filter(([, value]) => value !== null && value !== undefined && value !== '');
+  if (!rows.length) return '';
+  return `
+    <div class="source-detail-grid">
+      ${rows.map(([label, value]) => `<div><span class="label">${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}
+    </div>
+  `;
+}
+
+function timelineAttachmentLinks(item) {
+  const attachments = item.raw?.metadata?.discord?.attachments || [];
+  const valid = attachments.filter(attachment => attachment?.url);
+  if (!valid.length) return '';
+  return `
+    <div class="audio-card">
+      <span class="label">Anexos Discord</span>
+      <div class="attachment-list">
+        ${valid.map(attachment => `
+          <a class="button-link" href="${escapeHtml(attachment.url)}" target="_blank" rel="noreferrer">
+            ${escapeHtml(attachment.filename || attachment.id || 'Anexo')}
+          </a>
+        `).join('')}
+      </div>
+    </div>
   `;
 }
 
@@ -1826,7 +1899,7 @@ async function syncDiscordTimeline() {
         sourceSessionId: state.selectedSourceSessionId,
         limit: Math.min(100, Math.max(1, Number(state.timeline.discord.limit || 50))),
         includeBeforeStart: Boolean(state.timeline.discord.includeBeforeStart),
-        channel: 'dnd'
+        channel: state.timeline.discord.channel || 'dnd'
       })
     });
     state.timeline.discord = {
