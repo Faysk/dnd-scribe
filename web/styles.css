@@ -706,9 +706,28 @@ body.auth-locked .music-dock { display: none; }
   display: grid;
   gap: 5px;
 }
+.timeline-anchor-warning,
+.timeline-anchor-ok {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 14px 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #111827;
+}
+.timeline-anchor-warning {
+  border-color: #8d6834;
+  background: #1a160d;
+}
+.timeline-anchor-warning strong {
+  color: var(--gold);
+}
 .timeline-discord-sync {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px auto;
+  grid-template-columns: minmax(0, 1fr) 120px minmax(150px, auto) auto;
   gap: 10px;
   align-items: end;
   margin: 0 14px 14px;

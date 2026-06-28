@@ -148,6 +148,14 @@ function normalizeDate(value) {
   return text;
 }
 
+function normalizeDateTime(value, fieldName = 'datetime') {
+  const text = cleanText(value, 80);
+  if (!text) return null;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) throw httpError(400, `${fieldName} precisa ser uma data/hora valida.`);
+  return date.toISOString();
+}
+
 function normalizeStatus(value, fallback = 'planned') {
   const status = cleanText(value || fallback, 40);
   if (!SESSION_STATUSES.has(status)) throw httpError(400, `status invalido: ${status}`);
@@ -1291,7 +1299,7 @@ function discordAttachmentSummary(message = {}) {
     .join('\n');
 }
 
-function normalizedDiscordMessage(message = {}, { sessionStartedAt = null } = {}) {
+function normalizedDiscordMessage(message = {}, { sessionStartedAt = null, includeBeforeStart = false } = {}) {
   const id = cleanText(message.id, 80);
   const createdAt = cleanText(message.timestamp || message.created_at || message.createdAt, 80);
   const author = message.author || {};
@@ -1303,9 +1311,11 @@ function normalizedDiscordMessage(message = {}, { sessionStartedAt = null } = {}
   if (!id || !createdAt || !content) return null;
 
   const createdMs = dateMs(createdAt);
-  const startMs = createdMs !== null && sessionStartedAt !== null
-    ? Math.max(0, Math.round(createdMs - sessionStartedAt))
+  const offsetMs = createdMs !== null && sessionStartedAt !== null
+    ? Math.round(createdMs - sessionStartedAt)
     : null;
+  if (offsetMs !== null && offsetMs < 0 && !includeBeforeStart) return null;
+  const startMs = offsetMs !== null && offsetMs >= 0 ? offsetMs : null;
 
   return {
     id,
@@ -1334,7 +1344,9 @@ function normalizedDiscordMessage(message = {}, { sessionStartedAt = null } = {}
       },
       timeline: {
         startMs,
-        timingMode: startMs === null ? 'discord_timestamp_unsynced' : 'discord_timestamp_from_session_start'
+        timingMode: startMs === null
+          ? (offsetMs !== null && offsetMs < 0 ? 'discord_timestamp_before_session_start' : 'discord_timestamp_unsynced')
+          : 'discord_timestamp_from_session_start'
       },
       source: 'discord_channel_sync'
     }
@@ -1390,8 +1402,9 @@ async function persistDiscordMessages(db, campaign, sourceSessionId, body, acces
   });
 
   const sessionStartedAt = dateMs(body.sessionStartedAt || body.session_started_at || session.started_at);
+  const includeBeforeStart = body.includeBeforeStart === true || body.include_before_start === true;
   const messages = rawMessages
-    .map(message => normalizedDiscordMessage({ ...message, channel_id: message.channel_id || channelId }, { sessionStartedAt }))
+    .map(message => normalizedDiscordMessage({ ...message, channel_id: message.channel_id || channelId }, { sessionStartedAt, includeBeforeStart }))
     .filter(Boolean)
     .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 
@@ -1411,6 +1424,7 @@ async function persistDiscordMessages(db, campaign, sourceSessionId, body, acces
     persisted: 0,
     updated: 0,
     sessionStartedAt: session.started_at || null,
+    includeBeforeStart,
     timing: sessionStartedAt === null ? 'unsynced' : 'synced_from_session_started_at',
     warning: rawMessages.length && !messages.length
       ? 'Discord retornou mensagens sem texto/anexo. Valide Message Content Intent ou use o comando de contexto para salvar mensagens importantes.'
@@ -1952,6 +1966,7 @@ async function createSession(db, campaign, raw) {
   const title = cleanText(raw.title, 180);
   if (!title) throw httpError(400, 'title obrigatorio.');
   const sessionDate = normalizeDate(raw.sessionDate || raw.session_date);
+  const startedAt = normalizeDateTime(raw.startedAt || raw.started_at, 'startedAt');
   const status = normalizeStatus(raw.status, 'planned');
   const arc = cleanText(raw.arc, 120) || null;
   const summary = cleanText(raw.summary || raw.summaryShort || raw.summary_short, 2000) || null;
@@ -1969,16 +1984,16 @@ with campaign_row as (
   select id from campaigns where slug = $1
 ), inserted as (
   insert into sessions (
-    id, campaign_id, title, slug, session_date, arc, status, summary_short,
+    id, campaign_id, title, slug, session_date, started_at, arc, status, summary_short,
     source_system, source_session_id, metadata, created_at, updated_at
   )
-  select gen_random_uuid(), campaign_row.id, $2, $3, $4::date, $5, $6, $7,
-         'manual', $8, $9::jsonb, now(), now()
+  select gen_random_uuid(), campaign_row.id, $2, $3, $4::date, $5::timestamptz, $6, $7, $8,
+         'manual', $9, $10::jsonb, now(), now()
   from campaign_row
   returning *
 )
 select * from inserted;`,
-    [campaign, title, slug, sessionDate, arc, status, summary, sourceSessionId, JSON.stringify(metadata)]
+    [campaign, title, slug, sessionDate, startedAt, arc, status, summary, sourceSessionId, JSON.stringify(metadata)]
   );
   if (!result.rows.length) throw httpError(404, `Campanha nao encontrada: ${campaign}`);
   return sessionResponse(result.rows[0]);
@@ -1990,6 +2005,7 @@ async function updateSession(db, campaign, sourceSessionId, raw) {
   const title = cleanText(raw.title, 180);
   if (!title) throw httpError(400, 'title obrigatorio.');
   const sessionDate = normalizeDate(raw.sessionDate || raw.session_date);
+  const startedAt = normalizeDateTime(raw.startedAt || raw.started_at, 'startedAt');
   const status = normalizeStatus(raw.status, 'planned');
   const arc = cleanText(raw.arc, 120) || null;
   const summary = cleanText(raw.summary || raw.summaryShort || raw.summary_short, 2000) || null;
@@ -2003,17 +2019,18 @@ async function updateSession(db, campaign, sourceSessionId, raw) {
 update sessions s
 set title = $3,
     session_date = $4::date,
-    arc = $5,
-    status = $6,
-    summary_short = $7,
-    metadata = coalesce(s.metadata, '{}'::jsonb) || $8::jsonb,
+    started_at = $5::timestamptz,
+    arc = $6,
+    status = $7,
+    summary_short = $8,
+    metadata = coalesce(s.metadata, '{}'::jsonb) || $9::jsonb,
     updated_at = now()
 from campaigns c
 where c.id = s.campaign_id
   and c.slug = $1
   and s.source_session_id = $2
 returning s.*;`,
-    [campaign, sourceId, title, sessionDate, arc, status, summary, JSON.stringify(metadataPatch)]
+    [campaign, sourceId, title, sessionDate, startedAt, arc, status, summary, JSON.stringify(metadataPatch)]
   );
   if (!result.rows.length) throw httpError(404, `Sessao nao encontrada: ${sourceId}`);
   return sessionResponse(result.rows[0]);
@@ -2701,6 +2718,7 @@ select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483
       endMs: event.startMs,
       durationMs: 0,
       text: event.text || event.sourceId || 'Mensagem Discord',
+      timingMode: event.metadata?.timeline?.timingMode || null,
       raw: event
     }))
   ].sort((a, b) => {
@@ -2738,6 +2756,7 @@ select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483
       title: session.session_title,
       sourceSessionId: session.source_session_id,
       sessionDate: session.session_date,
+      startedAt: session.started_at,
       arc: session.arc,
       status: session.status,
       durationMs

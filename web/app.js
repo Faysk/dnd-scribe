@@ -68,7 +68,8 @@ const state = {
       busy: false,
       error: null,
       result: null,
-      limit: 50
+      limit: 50,
+      includeBeforeStart: false
     }
   },
   jobs: [],
@@ -135,6 +136,39 @@ function fmtDuration(ms = 0) {
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
   return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
+}
+
+function dateTimeLocalValue(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function localDateTimeToIso(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function fmtDateTime(value) {
+  if (!value) return 'sem ancora';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'data invalida';
+  return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function setDateTimeNow(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.value = dateTimeLocalValue(new Date().toISOString());
+}
+
+function clearDateTime(inputId) {
+  const input = document.getElementById(inputId);
+  if (input) input.value = '';
 }
 
 function toast(message) {
@@ -427,7 +461,8 @@ function resetCampaignData() {
       busy: false,
       error: null,
       result: null,
-      limit: 50
+      limit: 50,
+      includeBeforeStart: false
     }
   };
   state.jobs = [];
@@ -855,7 +890,8 @@ async function loadSession(sourceSessionId) {
         busy: false,
         error: null,
         result: null,
-        limit: 50
+        limit: 50,
+        includeBeforeStart: false
       }
     };
     state.audio = {
@@ -1042,6 +1078,11 @@ function renderSessionsManager() {
             <label><span class="label">Arco</span><input id="newSessionArc" placeholder="Arco atual" /></label>
             <label><span class="label">Status</span><select id="newSessionStatus">${sessionStatusOptions('planned')}</select></label>
           </div>
+          <label><span class="label">Inicio real</span><input id="newSessionStartedAt" type="datetime-local" /></label>
+          <div class="actions">
+            <button onclick="setDateTimeNow('newSessionStartedAt')">Usar agora</button>
+            <button onclick="clearDateTime('newSessionStartedAt')">Limpar inicio</button>
+          </div>
           <label><span class="label">Resumo curto</span><textarea id="newSessionSummary" placeholder="Opcional"></textarea></label>
           <div class="actions">
             <button class="primary" onclick="createSessionFromForm()">Criar sessao</button>
@@ -1210,9 +1251,15 @@ function editSessionForm(session) {
         <label><span class="label">Arco</span><input id="editSessionArc" value="${escapeHtml(session.arc || '')}" /></label>
         <label><span class="label">Status</span><select id="editSessionStatus">${sessionStatusOptions(session.status || 'planned')}</select></label>
       </div>
+      <label><span class="label">Inicio real da sessao</span><input id="editSessionStartedAt" type="datetime-local" value="${escapeHtml(dateTimeLocalValue(session.startedAt))}" /></label>
+      <div class="actions">
+        <button onclick="setDateTimeNow('editSessionStartedAt')">Usar agora</button>
+        <button onclick="clearDateTime('editSessionStartedAt')">Limpar inicio</button>
+      </div>
       <label><span class="label">Resumo curto</span><textarea id="editSessionSummary">${escapeHtml(session.summary || '')}</textarea></label>
       <div class="badges">
         ${badge(session.sourceSystem || 'manual', 'blue')}
+        ${badge(`inicio: ${fmtDateTime(session.startedAt)}`, session.startedAt ? 'green' : 'orange')}
         ${badge(`${session.segments || 0} segmentos`, 'violet')}
         ${badge(`${session.recordingFiles || 0} arquivos`, 'gold')}
       </div>
@@ -1229,10 +1276,11 @@ function sessionCatalogRow(session) {
     <button class="session-row ${session.sourceSessionId === state.selectedSourceSessionId ? 'active' : ''}" onclick="loadSession('${escapeHtml(session.sourceSessionId)}')">
       <div>
         <strong>${escapeHtml(session.title || session.sourceSessionId)}</strong>
-        <small>${escapeHtml(session.sessionDate || 'sem data')} • ${escapeHtml(session.sourceSessionId || '')}</small>
+        <small>${escapeHtml(session.sessionDate || 'sem data')} • ${escapeHtml(fmtDateTime(session.startedAt))} • ${escapeHtml(session.sourceSessionId || '')}</small>
       </div>
       <div class="badges">
         ${badge(sessionStatusLabel(session.status), session.status === 'failed' ? 'red' : 'blue')}
+        ${badge(session.startedAt ? 'ancorada' : 'sem inicio', session.startedAt ? 'green' : 'orange')}
         ${badge(`${session.participants || 0} participantes`, 'green')}
         ${badge(`${session.segments || 0} seg`, 'violet')}
         ${badge(`${session.roll20Events || 0} Roll20`, 'green')}
@@ -1254,6 +1302,7 @@ async function createSessionFromForm() {
       body: JSON.stringify({
         title,
         sessionDate: $('#newSessionDate')?.value || null,
+        startedAt: localDateTimeToIso($('#newSessionStartedAt')?.value || ''),
         arc: $('#newSessionArc')?.value || '',
         status: $('#newSessionStatus')?.value || 'planned',
         summary: $('#newSessionSummary')?.value || '',
@@ -1290,6 +1339,7 @@ async function updateSessionFromForm() {
         sourceSessionId: session.sourceSessionId,
         title,
         sessionDate: $('#editSessionDate')?.value || null,
+        startedAt: localDateTimeToIso($('#editSessionStartedAt')?.value || ''),
         arc: $('#editSessionArc')?.value || '',
         status: $('#editSessionStatus')?.value || 'planned',
         summary: $('#editSessionSummary')?.value || '',
@@ -1489,6 +1539,9 @@ function renderTimeline() {
   }
   const selected = timelineSelectedItem();
   const stats = data.stats || {};
+  const anchorNotice = data.session?.startedAt
+    ? `<div class="timeline-anchor-ok">${badge('ancora ativa', 'green')}<small>Inicio real: ${escapeHtml(fmtDateTime(data.session.startedAt))}</small></div>`
+    : '<div class="timeline-anchor-warning"><strong>Defina o inicio real da sessao</strong><small>Sem essa ancora, mensagens do Discord e eventos externos podem ficar sem tempo confiavel.</small></div>';
   return `
     <section class="timeline-workbench">
       <div class="panel timeline-command">
@@ -1504,6 +1557,7 @@ function renderTimeline() {
             ${badge(`${stats.discordEvents || 0} Discord`, 'green')}
           </div>
         </div>
+        ${anchorNotice}
         <div class="timeline-toolbar">
           <select onchange="state.timeline.filter=this.value; render();">
             ${['all', 'speech', 'roll20', 'discord'].map(value => `<option value="${value}" ${state.timeline.filter === value ? 'selected' : ''}>${escapeHtml(timelineFilterLabel(value))}</option>`).join('')}
@@ -1550,6 +1604,10 @@ function renderDiscordSyncControls() {
       <label>
         <span class="label">Mensagens</span>
         <input type="number" min="1" max="100" value="${Number(discord.limit || 50)}" oninput="state.timeline.discord.limit=Number(this.value || 50)" />
+      </label>
+      <label class="check-row">
+        <input type="checkbox" ${discord.includeBeforeStart ? 'checked' : ''} onchange="state.timeline.discord.includeBeforeStart=this.checked" />
+        <span>Incluir antes do inicio</span>
       </label>
       <button ${discord.busy ? 'disabled' : ''} onclick="syncDiscordTimeline()">${discord.busy ? 'Sincronizando...' : 'Sincronizar Discord'}</button>
     </div>
@@ -1767,6 +1825,7 @@ async function syncDiscordTimeline() {
       body: JSON.stringify({
         sourceSessionId: state.selectedSourceSessionId,
         limit: Math.min(100, Math.max(1, Number(state.timeline.discord.limit || 50))),
+        includeBeforeStart: Boolean(state.timeline.discord.includeBeforeStart),
         channel: 'dnd'
       })
     });
@@ -2597,5 +2656,7 @@ window.signInGoogle = signInGoogle;
 window.signOutAuth = signOutAuth;
 window.signOutGoogle = signOutAuth;
 window.confirmClearDraft = confirmClearDraft;
+window.setDateTimeNow = setDateTimeNow;
+window.clearDateTime = clearDateTime;
 
 boot();
