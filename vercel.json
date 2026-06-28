@@ -7,6 +7,10 @@
       "destination": "/api/ai-cost?discordInteractions=1"
     },
     {
+      "source": "/api/pipeline-recover",
+      "destination": "/api/ai-cost?pipelineRecover=1"
+    },
+    {
       "source": "/terms",
       "destination": "/terms.html"
     },
