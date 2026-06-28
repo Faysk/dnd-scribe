@@ -14,8 +14,9 @@ Sem esse modelo, o R2 vira apenas um balde de objetos. Com esse modelo, cada obj
 
 ## Entrega versionada
 
-- Nova migracao: `schemas/20260628_014_audio_artifacts_retention.sql`.
-- `tools/apply_supabase_schema.py` passa a aplicar a migracao 014 por padrao.
+- Migracao base: `schemas/20260628_014_audio_artifacts_retention.sql`.
+- Migracao corretiva: `schemas/20260628_015_audio_artifact_reclassify.sql`.
+- `tools/apply_supabase_schema.py` aplica as migracoes 014 e 015 por padrao.
 - Novas tabelas:
   - `audio_artifacts`;
   - `audio_artifact_events`;
@@ -23,6 +24,22 @@ Sem esse modelo, o R2 vira apenas um balde de objetos. Com esse modelo, cada obj
 - Nova view:
   - `audio_artifact_inventory`.
 - Backfill inicial a partir de `recording_files`.
+- Reclassificacao de artefatos conhecidos que entraram como `other`, como ZIP Craig e transcript markdown/json.
+
+## Status em producao
+
+As migracoes 014 e 015 foram aplicadas com sucesso no Supabase.
+
+Snapshot apos a 015:
+
+| Artefato | Retencao | Objetos | Bytes |
+| --- | --- | ---: | ---: |
+| `craig_zip` | `delete_after_success` | 2 | 889141420 |
+| `raw_track_flac` | `work_temp` | 5 | 122839777 |
+| `transcript_source` | `permanent` | 8 | 308686 |
+| `craig_info` | `permanent` | 1 | 371 |
+
+A esteira agora enxerga aproximadamente 1.01 GB rastreados, sendo cerca de 889 MB em ZIP Craig temporario. Nada foi apagado ou movido em producao.
 
 ## Tabela `audio_artifacts`
 
@@ -82,6 +99,17 @@ Delecao real deve ficar para a etapa 129 e precisa passar por:
 3. marcacao `delete_ready`;
 4. job de limpeza com log;
 5. atualizacao `deleted` apenas depois da confirmacao do storage.
+
+## Consulta de conferencia
+
+```sql
+select artifact_type, retention_class, lifecycle_status,
+       count(*)::int objects,
+       coalesce(sum(size_bytes), 0)::bigint bytes
+from audio_artifacts
+group by artifact_type, retention_class, lifecycle_status
+order by bytes desc;
+```
 
 ## Proximo passo
 
