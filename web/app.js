@@ -71,6 +71,8 @@ const state = {
       result: null,
       limit: 50,
       channel: 'dnd',
+      cursorMode: 'latest',
+      cursorMessageId: '',
       includeBeforeStart: false
     }
   },
@@ -1599,34 +1601,105 @@ function renderDiscordSyncControls() {
   }
   const result = discord.result;
   const summary = result
-    ? (result.warning || `${result.persisted || 0} novas, ${result.updated || 0} atualizadas, ${result.skipped || 0} ignoradas`)
+    ? discordSyncResultText(result)
     : 'Puxa as ultimas mensagens do canal DnD configurado e salva como notas da sessao.';
+  const cursorMode = discord.cursorMode || 'latest';
+  const needsCursor = cursorMode !== 'latest';
   return `
     <div class="timeline-discord-sync">
-      <div>
+      <div class="discord-sync-intro">
         <span class="label">Discord</span>
         <strong>Sincronizar canal da mesa</strong>
         <small>${escapeHtml(discord.error || summary)}</small>
       </div>
-      <label>
-        <span class="label">Canal</span>
-        <select onchange="state.timeline.discord.channel=this.value">
-          ${[
-            ['dnd', 'Mesa DnD'],
-            ['recording', 'Gravacoes'],
-            ['ops', 'Logs/Ops']
-          ].map(([value, label]) => `<option value="${value}" ${(discord.channel || 'dnd') === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
-        </select>
-      </label>
-      <label>
-        <span class="label">Mensagens</span>
-        <input type="number" min="1" max="100" value="${Number(discord.limit || 50)}" oninput="state.timeline.discord.limit=Number(this.value || 50)" />
-      </label>
-      <label class="check-row">
-        <input type="checkbox" ${discord.includeBeforeStart ? 'checked' : ''} onchange="state.timeline.discord.includeBeforeStart=this.checked" />
-        <span>Incluir antes do inicio</span>
-      </label>
-      <button ${discord.busy ? 'disabled' : ''} onclick="syncDiscordTimeline()">${discord.busy ? 'Sincronizando...' : 'Sincronizar Discord'}</button>
+      <div class="discord-sync-fields">
+        <label>
+          <span class="label">Canal</span>
+          <select onchange="state.timeline.discord.channel=this.value">
+            ${[
+              ['dnd', 'Mesa DnD'],
+              ['recording', 'Gravacoes'],
+              ['ops', 'Logs/Ops']
+            ].map(([value, label]) => `<option value="${value}" ${(discord.channel || 'dnd') === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+          </select>
+        </label>
+        <label>
+          <span class="label">Mensagens</span>
+          <input type="number" min="1" max="100" value="${Number(discord.limit || 50)}" oninput="state.timeline.discord.limit=Number(this.value || 50)" />
+        </label>
+        <label>
+          <span class="label">Janela</span>
+          <select onchange="state.timeline.discord.cursorMode=this.value; render();">
+            ${[
+              ['latest', 'Ultimas'],
+              ['before', 'Antes do ID'],
+              ['after', 'Depois do ID'],
+              ['around', 'Ao redor do ID']
+            ].map(([value, label]) => `<option value="${value}" ${cursorMode === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="${needsCursor ? '' : 'muted-field'}">
+          <span class="label">ID base</span>
+          <input ${needsCursor ? '' : 'disabled'} value="${escapeHtml(discord.cursorMessageId || '')}" placeholder="${needsCursor ? 'ID da mensagem Discord' : 'sem cursor'}" oninput="state.timeline.discord.cursorMessageId=this.value.trim()" />
+        </label>
+        <label class="check-row">
+          <input type="checkbox" ${discord.includeBeforeStart ? 'checked' : ''} onchange="state.timeline.discord.includeBeforeStart=this.checked" />
+          <span>Incluir antes do inicio</span>
+        </label>
+      </div>
+      <div class="discord-sync-actions">
+        <button ${discord.busy ? 'disabled' : ''} onclick="syncDiscordTimeline()">${discord.busy ? 'Sincronizando...' : 'Sincronizar Discord'}</button>
+        <button onclick="setDiscordCursor('latest', '')">Ultimas</button>
+      </div>
+      ${discordSyncWindowDetails(result)}
+    </div>
+  `;
+}
+
+function discordSyncResultText(result = {}) {
+  if (result.warning) return result.warning;
+  return [
+    `${result.fetched || 0} buscadas`,
+    `${result.accepted || 0} aceitas`,
+    `${result.persisted || 0} novas`,
+    `${result.updated || 0} atualizadas`,
+    `${result.skipped || 0} ignoradas`
+  ].join(', ');
+}
+
+function discordCursorLabel(value) {
+  return {
+    latest: 'Ultimas',
+    before: 'Antes do ID',
+    after: 'Depois do ID',
+    around: 'Ao redor do ID'
+  }[value] || value || 'Ultimas';
+}
+
+function discordSyncWindowDetails(result) {
+  const page = result?.window;
+  if (!page) return '';
+  const oldest = page.oldestMessageId || '';
+  const newest = page.newestMessageId || '';
+  const copyValue = [
+    `channel=${page.channelId || result.channelId || ''}`,
+    `oldest=${oldest}`,
+    `newest=${newest}`,
+    `mode=${page.cursorMode || result.cursor?.mode || 'latest'}`
+  ].join(' ');
+  return `
+    <div class="discord-sync-window">
+      <div class="source-detail-grid">
+        <div><span class="label">Janela</span><strong>${escapeHtml(discordCursorLabel(page.cursorMode))}</strong></div>
+        <div><span class="label">Conteudo visivel</span><strong>${Number(page.contentVisible || 0)}/${Number(page.fetched || 0)}</strong></div>
+        <div><span class="label">Mais antiga</span><strong>${oldest ? `${escapeHtml(fmtDateTime(page.oldestCreatedAt))} ${escapeHtml(oldest)}` : '-'}</strong></div>
+        <div><span class="label">Mais nova</span><strong>${newest ? `${escapeHtml(fmtDateTime(page.newestCreatedAt))} ${escapeHtml(newest)}` : '-'}</strong></div>
+      </div>
+      <div class="discord-window-actions">
+        <button ${oldest && page.canLoadOlder ? '' : 'disabled'} onclick="syncDiscordTimelineWithCursor('before','${escapeHtml(oldest)}')">Sincronizar anteriores</button>
+        <button ${newest ? '' : 'disabled'} onclick="syncDiscordTimelineWithCursor('after','${escapeHtml(newest)}')">Checar novas</button>
+        <button ${oldest || newest ? '' : 'disabled'} onclick="copyText('${escapeHtml(copyValue)}', 'IDs do Discord copiados.')">Copiar IDs</button>
+      </div>
     </div>
   `;
 }
@@ -1885,8 +1958,22 @@ function copyTimelineSelected() {
 
 async function syncDiscordTimeline() {
   if (!state.selectedSourceSessionId || !canSyncDiscordTimeline()) return;
+  const discord = state.timeline.discord || {};
+  const cursorMode = discord.cursorMode || 'latest';
+  const cursorMessageId = String(discord.cursorMessageId || '').trim();
+  if (cursorMode !== 'latest' && !cursorMessageId) {
+    toast('Informe o ID base da mensagem Discord.');
+    return;
+  }
+  const body = {
+    sourceSessionId: state.selectedSourceSessionId,
+    limit: Math.min(100, Math.max(1, Number(discord.limit || 50))),
+    includeBeforeStart: Boolean(discord.includeBeforeStart),
+    channel: discord.channel || 'dnd'
+  };
+  if (cursorMode !== 'latest') body[cursorMode] = cursorMessageId;
   state.timeline.discord = {
-    ...(state.timeline.discord || {}),
+    ...discord,
     busy: true,
     error: null,
     result: null
@@ -1895,12 +1982,7 @@ async function syncDiscordTimeline() {
   try {
     const payload = await api('/api/discord-sync-channel', {
       method: 'POST',
-      body: JSON.stringify({
-        sourceSessionId: state.selectedSourceSessionId,
-        limit: Math.min(100, Math.max(1, Number(state.timeline.discord.limit || 50))),
-        includeBeforeStart: Boolean(state.timeline.discord.includeBeforeStart),
-        channel: state.timeline.discord.channel || 'dnd'
-      })
+      body: JSON.stringify(body)
     });
     state.timeline.discord = {
       ...(state.timeline.discord || {}),
@@ -1920,6 +2002,24 @@ async function syncDiscordTimeline() {
     toast(error.message);
     render();
   }
+}
+
+function setDiscordCursor(mode, messageId = '') {
+  state.timeline.discord = {
+    ...(state.timeline.discord || {}),
+    cursorMode: mode || 'latest',
+    cursorMessageId: messageId || ''
+  };
+  render();
+}
+
+async function syncDiscordTimelineWithCursor(mode, messageId = '') {
+  state.timeline.discord = {
+    ...(state.timeline.discord || {}),
+    cursorMode: mode || 'latest',
+    cursorMessageId: messageId || ''
+  };
+  await syncDiscordTimeline();
 }
 
 async function loadTimelineAudio(id) {
@@ -2731,5 +2831,7 @@ window.signOutGoogle = signOutAuth;
 window.confirmClearDraft = confirmClearDraft;
 window.setDateTimeNow = setDateTimeNow;
 window.clearDateTime = clearDateTime;
+window.setDiscordCursor = setDiscordCursor;
+window.syncDiscordTimelineWithCursor = syncDiscordTimelineWithCursor;
 
 boot();

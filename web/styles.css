@@ -727,7 +727,7 @@ body.auth-locked .music-dock { display: none; }
 }
 .timeline-discord-sync {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px 120px minmax(150px, auto) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: end;
   margin: 0 14px 14px;
@@ -739,12 +739,40 @@ body.auth-locked .music-dock { display: none; }
 .timeline-discord-sync.muted {
   display: block;
 }
-.timeline-discord-sync label {
+.discord-sync-intro {
+  align-self: center;
+}
+.discord-sync-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 120px minmax(140px, 1fr) minmax(190px, 1.3fr) minmax(170px, auto);
+  gap: 10px;
+  align-items: end;
+}
+.timeline-discord-sync label,
+.discord-sync-fields label {
   display: grid;
   gap: 5px;
 }
 .timeline-discord-sync input {
   min-width: 0;
+}
+.muted-field {
+  opacity: .62;
+}
+.discord-sync-actions,
+.discord-window-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: end;
+}
+.discord-sync-window {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
 .timeline-layout {
   display: grid;
@@ -909,8 +937,13 @@ body.auth-locked .music-dock { display: none; }
   .timeline-inspector {
     position: static;
   }
-  .timeline-discord-sync {
+  .timeline-discord-sync,
+  .discord-sync-fields {
     grid-template-columns: 1fr;
+  }
+  .discord-sync-actions,
+  .discord-window-actions {
+    justify-content: start;
   }
 }
 @media (max-width: 760px) {

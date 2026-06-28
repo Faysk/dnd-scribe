@@ -1299,6 +1299,68 @@ function discordAttachmentSummary(message = {}) {
     .join('\n');
 }
 
+function discordCursorOptions(body = {}) {
+  const around = cleanText(body.around || body.aroundMessageId || body.around_message_id, 80);
+  const before = cleanText(body.before || body.beforeMessageId || body.before_message_id, 80);
+  const after = cleanText(body.after || body.afterMessageId || body.after_message_id, 80);
+  if (around) return { mode: 'around', messageId: around, query: { around } };
+  if (before) return { mode: 'before', messageId: before, query: { before } };
+  if (after) return { mode: 'after', messageId: after, query: { after } };
+  return { mode: 'latest', messageId: null, query: {} };
+}
+
+function discordMessageRefs(messages = []) {
+  return messages
+    .map(message => ({
+      id: cleanText(message.id, 80),
+      createdAt: cleanText(message.timestamp || message.created_at || message.createdAt, 80),
+      hasContent: Boolean(cleanText(message.content || message.text || '', 20)),
+      attachmentCount: Array.isArray(message.attachments) ? message.attachments.length : 0
+    }))
+    .filter(message => message.id)
+    .sort((a, b) => {
+      const aTime = dateMs(a.createdAt) || 0;
+      const bTime = dateMs(b.createdAt) || 0;
+      if (aTime !== bTime) return aTime - bTime;
+      return String(a.id).localeCompare(String(b.id));
+    });
+}
+
+function discordSyncWindow(rawMessages = [], acceptedMessages = [], { channelId = '', limit = 50, cursor = {} } = {}) {
+  const rawRefs = discordMessageRefs(rawMessages);
+  const acceptedRefs = discordMessageRefs(acceptedMessages.map(message => ({
+    id: message.id,
+    createdAt: message.createdAt,
+    content: message.content,
+    attachments: message.metadata?.discord?.attachments || []
+  })));
+  const oldest = rawRefs[0] || null;
+  const newest = rawRefs[rawRefs.length - 1] || null;
+  const acceptedOldest = acceptedRefs[0] || null;
+  const acceptedNewest = acceptedRefs[acceptedRefs.length - 1] || null;
+  const contentVisible = rawRefs.filter(message => message.hasContent || message.attachmentCount > 0).length;
+  const attachmentCount = rawRefs.reduce((total, message) => total + message.attachmentCount, 0);
+  return {
+    channelId,
+    limit,
+    cursorMode: cursor.mode || 'latest',
+    cursorMessageId: cursor.messageId || null,
+    fetched: rawMessages.length,
+    contentVisible,
+    attachmentCount,
+    oldestMessageId: oldest?.id || null,
+    newestMessageId: newest?.id || null,
+    oldestCreatedAt: oldest?.createdAt || null,
+    newestCreatedAt: newest?.createdAt || null,
+    acceptedOldestMessageId: acceptedOldest?.id || null,
+    acceptedNewestMessageId: acceptedNewest?.id || null,
+    acceptedOldestCreatedAt: acceptedOldest?.createdAt || null,
+    acceptedNewestCreatedAt: acceptedNewest?.createdAt || null,
+    canLoadOlder: Boolean(oldest?.id && rawMessages.length >= limit),
+    canCheckNewer: Boolean(newest?.id)
+  };
+}
+
 function normalizedDiscordMessage(message = {}, { sessionStartedAt = null, includeBeforeStart = false } = {}) {
   const id = cleanText(message.id, 80);
   const createdAt = cleanText(message.timestamp || message.created_at || message.createdAt, 80);
@@ -1390,15 +1452,14 @@ async function fetchDiscordChannelMessages(channelId, options = {}) {
 async function persistDiscordMessages(db, campaign, sourceSessionId, body, access) {
   const channelId = cleanText(body.channelId || body.channel_id || discordChannelIdForTarget(body.channel || body.target || 'dnd'), 80);
   const limit = limitedInteger(body.limit, 50, 1, DISCORD_SYNC_MAX_MESSAGES);
+  const cursor = discordCursorOptions(body);
   const session = await data(`${targetCte()} select row_to_json(target) data from target;`, [campaign, sourceSessionId], db);
   if (!session) throw httpError(404, `Sessao nao encontrada: ${sourceSessionId}`);
 
   const suppliedMessages = Array.isArray(body.messages) ? body.messages : null;
   const rawMessages = suppliedMessages || await fetchDiscordChannelMessages(channelId, {
     limit,
-    before: body.before,
-    after: body.after,
-    around: body.around
+    ...cursor.query
   });
 
   const sessionStartedAt = dateMs(body.sessionStartedAt || body.session_started_at || session.started_at);
@@ -1425,6 +1486,11 @@ async function persistDiscordMessages(db, campaign, sourceSessionId, body, acces
     updated: 0,
     sessionStartedAt: session.started_at || null,
     includeBeforeStart,
+    cursor: {
+      mode: cursor.mode,
+      messageId: cursor.messageId
+    },
+    window: discordSyncWindow(rawMessages, messages, { channelId, limit, cursor }),
     timing: sessionStartedAt === null ? 'unsynced' : 'synced_from_session_started_at',
     warning: rawMessages.length && !messages.length
       ? 'Discord retornou mensagens sem texto/anexo. Valide Message Content Intent ou use o comando de contexto para salvar mensagens importantes.'
