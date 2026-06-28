@@ -15,7 +15,7 @@ The Craig job UI now gives a stronger operational view and is wired to backend s
 
 ## Backend recovery implemented
 
-`/api/pipeline-recover` is a small authenticated production endpoint for stale zero-cost Craig jobs.
+`/api/pipeline-recover` is a small authenticated production endpoint for stale zero-cost Craig jobs. To stay under the Vercel Hobby limit of 12 Serverless Functions, it is routed by `vercel.json` to the existing `/api/ai-cost?pipelineRecover=1` Function and implemented in `lib/pipeline-recovery.js`.
 
 It requires:
 
