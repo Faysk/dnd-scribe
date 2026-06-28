@@ -1256,6 +1256,8 @@ function renderIngestResult(result) {
           cost: result.cost?.paidAiCostUsd ?? 0
         }, null, 2))}</pre>` : ''}
         <div class="actions">
+          <button onclick="runUploadedCraigJob(true)">Simular job</button>
+          <button class="primary" onclick="runUploadedCraigJob(false)">Executar job</button>
           <button onclick="openOperations()">Abrir Operacao</button>
           <button onclick="copyText(state.ingest.result?.upload?.storagePath || '', 'Caminho R2 copiado.')">Copiar caminho R2</button>
         </div>
@@ -1505,6 +1507,20 @@ async function openOperations() {
   }
   await loadJobs(true);
   render();
+}
+
+async function runUploadedCraigJob(dryRun = false) {
+  const job = state.ingest.result?.job;
+  if (!job?.id || !job?.type) {
+    toast('Nenhum job Craig recente encontrado.');
+    return;
+  }
+  if (typeof window.runCloudJob !== 'function') {
+    await openOperations();
+    toast('Abra Operacao para executar este job.');
+    return;
+  }
+  await window.runCloudJob(job.id, job.type, dryRun);
 }
 
 async function saveCraigTrack(trackKey, editableKey = false) {
@@ -2905,5 +2921,6 @@ window.clearDateTime = clearDateTime;
 window.setDiscordCursor = setDiscordCursor;
 window.syncDiscordTimelineWithCursor = syncDiscordTimelineWithCursor;
 window.openOperations = openOperations;
+window.runUploadedCraigJob = runUploadedCraigJob;
 
 boot();
