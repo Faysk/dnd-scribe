@@ -2458,6 +2458,108 @@ function filteredSegments() {
   });
 }
 
+function candidateDecisionIsOpen(decision = {}) {
+  return ['candidate', 'possible_hook', 'interpretation', 'retcon_pending'].includes(decision.decision || 'candidate');
+}
+
+function reviewQueueModel() {
+  const segments = state.review?.segments || [];
+  const candidates = allCandidates();
+  const segmentDrafts = Object.keys(state.segmentDecisions || {}).length;
+  const candidateDrafts = Object.keys(state.candidateDecisions || {}).length;
+  const openSegmentStatuses = new Set(['pending', 'needs_review', 'canon_candidate', 'quote_candidate', 'outtake']);
+  const openSegments = segments.filter(segment => openSegmentStatuses.has(reviewDecision(segment).status));
+  const needsReview = segments.filter(segment => reviewDecision(segment).status === 'needs_review' || segment.needs_review || segment.ai?.needs_review);
+  const canonSegments = segments.filter(segment => {
+    const decision = reviewDecision(segment);
+    const flags = segment.ai?.metadata?.candidate_flags || {};
+    return decision.status === 'canon_candidate' || flags.canon || segment.ai?.canon_relevance === 'major';
+  });
+  const candidateOpen = candidates.filter(item => candidateDecisionIsOpen(candidateDecision(item)));
+  const candidateCanon = candidates.filter(item => item.targetType === 'canon_candidates');
+  const candidateQuotes = candidates.filter(item => item.targetType === 'quote_candidates');
+  const candidateOuttakes = candidates.filter(item => item.targetType === 'outtake_candidates');
+  const sourceGaps = candidates.filter(item => !(item.source_segment_ids || []).length);
+  const aiDecisionAttention = segments.filter(segment => {
+    const decision = reviewDecision(segment);
+    const flags = segment.ai?.metadata?.candidate_flags || {};
+    const aiImportant = flags.canon || flags.quote || flags.outtake || segment.ai?.canon_relevance === 'major';
+    return aiImportant && ['rejected', 'private_note'].includes(decision.status) && !decision.note;
+  });
+  const attention = needsReview.length + sourceGaps.length + aiDecisionAttention.length;
+  const draftTotal = segmentDrafts + candidateDrafts;
+  const title = attention
+    ? `${attention} ponto(s) pedem revisao`
+    : openSegments.length || candidateOpen.length
+      ? `${openSegments.length + candidateOpen.length} item(ns) em fila`
+      : draftTotal
+        ? `${draftTotal} rascunho(s) para aplicar`
+        : 'Fila decisoria limpa';
+  const action = needsReview.length
+    ? 'Resolver trechos marcados como revisar antes de publicar canon.'
+    : canonSegments.length
+      ? 'Conferir candidatos de canon e registrar a decisao do DM.'
+      : candidateOpen.length
+        ? 'Revisar candidatos de IA por tipo e salvar rascunhos.'
+        : draftTotal
+          ? 'Aplicar decisoes locais no banco quando o pacote estiver correto.'
+          : 'Seguir para publicacoes ou timeline para auditoria final.';
+  return {
+    title,
+    action,
+    attention,
+    openSegments,
+    needsReview,
+    canonSegments,
+    candidateOpen,
+    candidateCanon,
+    candidateQuotes,
+    candidateOuttakes,
+    sourceGaps,
+    aiDecisionAttention,
+    segmentDrafts,
+    candidateDrafts,
+    draftTotal
+  };
+}
+
+function renderReviewQueueSummary(context = 'review') {
+  const model = reviewQueueModel();
+  const tone = model.attention ? 'orange' : model.openSegments.length || model.candidateOpen.length || model.draftTotal ? 'gold' : 'green';
+  return `
+    <section class="review-queue ${tone}">
+      <div class="review-queue-head">
+        <div>
+          <span class="label">Fila do DM</span>
+          <h2>${escapeHtml(model.title)}</h2>
+          <p>${escapeHtml(model.action)}</p>
+        </div>
+        <div class="badges">
+          ${badge(`${model.openSegments.length} trechos`, model.openSegments.length ? 'gold' : 'green')}
+          ${badge(`${model.candidateOpen.length} candidatos`, model.candidateOpen.length ? 'blue' : 'green')}
+          ${badge(`${model.draftTotal} rascunhos`, model.draftTotal ? 'gold' : 'green')}
+          ${model.attention ? badge(`${model.attention} atencao`, 'orange') : badge('sem conflito', 'green')}
+        </div>
+      </div>
+      <div class="review-queue-grid">
+        <div><span class="label">Revisar</span><strong>${escapeHtml(model.needsReview.length)}</strong><small>speaker, incerteza ou IA pedindo cuidado</small></div>
+        <div><span class="label">Canon IA</span><strong>${escapeHtml(model.canonSegments.length + model.candidateCanon.length)}</strong><small>trechos e candidatos de lore</small></div>
+        <div><span class="label">Falas</span><strong>${escapeHtml(model.candidateQuotes.length)}</strong><small>frases candidatas para publicacao</small></div>
+        <div><span class="label">Bastidores</span><strong>${escapeHtml(model.candidateOuttakes.length)}</strong><small>outtakes e notas internas</small></div>
+        <div><span class="label">Sem origem</span><strong>${escapeHtml(model.sourceGaps.length)}</strong><small>candidato sem segmento fonte</small></div>
+        <div><span class="label">IA x decisao</span><strong>${escapeHtml(model.aiDecisionAttention.length)}</strong><small>rejeitado/privado sem nota</small></div>
+      </div>
+      <div class="actions review-queue-actions">
+        <button onclick="state.tab='review'; state.status='needs_review'; render();">Abrir revisar</button>
+        <button onclick="state.tab='review'; state.status='canon_candidate'; render();">Canon IA</button>
+        <button onclick="state.tab='candidates'; state.candidateKind='canon_candidates'; state.candidateStatus='all'; render();">Candidatos canon</button>
+        <button onclick="state.tab='candidates'; state.candidateKind='all'; state.candidateStatus='candidate'; render();">Candidatos abertos</button>
+        <button class="primary" onclick="applyDecisions()" ${model.draftTotal ? '' : 'disabled'}>Aplicar rascunhos</button>
+      </div>
+    </section>
+  `;
+}
+
 function renderTimeline() {
   if (!state.selectedSourceSessionId) return loadingView('Escolha uma sessao para abrir a timeline.');
   const timeline = state.timeline;
@@ -3641,6 +3743,7 @@ function renderReview() {
         }).join('')}
       </select>
     </section>
+    ${renderReviewQueueSummary('review')}
     <section class="review-layout">
       <div class="panel">
         <div class="panel-head"><h2>Timeline</h2><small>${segments.length}/${state.review.segments.length}</small></div>
@@ -3900,6 +4003,7 @@ function renderCandidates() {
         ${statuses.map(status => `<option value="${status}" ${state.candidateStatus === status ? 'selected' : ''}>${escapeHtml(status === 'all' ? 'Todos status' : status)}</option>`).join('')}
       </select>
     </section>
+    ${renderReviewQueueSummary('candidates')}
     <section class="candidate-grid">
       ${candidates.map(candidateCard).join('') || `<div class="empty">Nenhum candidato nesse filtro.</div>`}
     </section>

@@ -561,6 +561,50 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   gap: 12px;
   align-items: start;
 }
+.review-queue {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.review-queue.green { border-color: var(--green); background: #0f1914; }
+.review-queue.gold { border-color: var(--gold); background: #1a1710; }
+.review-queue.orange { border-color: var(--orange); background: #1d130b; }
+.review-queue-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.review-queue-head p {
+  margin-top: 5px;
+}
+.review-queue-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+.review-queue-grid div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.025);
+  padding: 9px;
+}
+.review-queue-grid strong,
+.review-queue-grid small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.review-queue-grid strong {
+  margin-top: 2px;
+  font-size: 1.05rem;
+}
+.review-queue-actions {
+  justify-content: flex-end;
+}
 .panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -893,6 +937,7 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   .rail { position: relative; height: auto; }
   .session-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .status-strip, .candidate-grid, .publication-grid, .ops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .review-queue-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .roll20-review-layout { grid-template-columns: 1fr; }
   .review-layout { grid-template-columns: 1fr; }
   .session-manager { grid-template-columns: 1fr; }
@@ -903,7 +948,7 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .workspace { padding: 12px 12px 118px; }
   .rail { padding: 12px; }
-  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-readiness, .upload-page-head, .upload-summary-grid, .upload-action-metrics, .pipeline-control {
+  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-readiness, .upload-page-head, .upload-summary-grid, .upload-action-metrics, .pipeline-control, .review-queue-head, .review-queue-grid {
     grid-template-columns: 1fr;
   }
   .upload-readiness-signals {
@@ -926,6 +971,12 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
     display: grid;
     grid-template-columns: 1fr;
     justify-content: stretch;
+  }
+  .review-queue-actions {
+    justify-content: stretch;
+  }
+  .review-queue-head {
+    display: grid;
   }
   .top-actions button { width: 100%; }
   .music-dock {
