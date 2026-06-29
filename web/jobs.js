@@ -815,7 +815,7 @@
     if (!window.confirm('Colocar este job de volta na fila de retry?')) return null;
     try {
       if (typeof setBusy === 'function') setBusy(true);
-      const payload = await callApi('/api/jobs/retry', { jobId, reason });
+      const payload = await callApi('/api/job-retry', { jobId, reason });
       if (payload.jobs) window.state.jobs = payload.jobs;
       remember?.('Job reenfileirado para retry.', { jobId, reason });
       toast?.('Job reenfileirado.');
@@ -847,7 +847,7 @@
     if (action === 'discard') body.confirm = 'DISCARD_JOB';
     try {
       if (typeof setBusy === 'function') setBusy(true);
-      const payload = await callApi('/api/jobs/control', body);
+      const payload = await callApi('/api/job-control', body);
       if (payload.jobs) window.state.jobs = payload.jobs;
       if (payload.sessions) window.state.sessions = payload.sessions;
       remember?.(`Job ${action}.`, { jobId, action, status: payload.status, operatorState: payload.operatorState });

@@ -6040,11 +6040,11 @@ async function handlePost(req, res, path) {
       client.release();
     }
   }
-  if (path === '/api/jobs/retry') {
+  if (path === '/api/jobs/retry' || path === '/api/job-retry') {
     const payload = await retryProcessingJob(req, campaign, body);
     return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
   }
-  if (path === '/api/jobs/control') {
+  if (path === '/api/jobs/control' || path === '/api/job-control') {
     const payload = await controlProcessingJob(req, campaign, body);
     return sendJson(res, 200, {
       ...payload,

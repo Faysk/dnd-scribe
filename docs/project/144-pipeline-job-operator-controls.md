@@ -10,10 +10,10 @@ The pipeline already showed retryable failures and high-level autopilot actions.
 
 ## Backend
 
-New protected endpoint:
+New protected endpoint. It uses a first-level route because production Vercel does not route the catch-all to nested helper paths:
 
 ```text
-POST /api/jobs/control
+POST /api/job-control
 ```
 
 Required permission:
@@ -90,7 +90,7 @@ Existing steps are updated so the UI can explain what happened:
 - Running jobs are not paused directly because a worker may already be active. Stale running jobs should use the existing recovery flow first.
 - Resume only accepts jobs explicitly paused by the operator.
 - Discard does not delete storage objects, transcript data, or audit evidence. It only removes the job from the active operational path.
-- The old retry endpoint now refuses paused or discarded jobs. Paused jobs must be resumed; discarded jobs stay discarded unless future tooling adds a deliberate restore flow.
+- The retry endpoint `POST /api/job-retry` now refuses paused or discarded jobs. Paused jobs must be resumed; discarded jobs stay discarded unless future tooling adds a deliberate restore flow.
 
 ## UI
 
