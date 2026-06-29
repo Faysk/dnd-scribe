@@ -2178,6 +2178,108 @@ function normalizeCleanupLimit(value) {
   return Math.max(1, Math.min(20, Math.floor(limit)));
 }
 
+function normalizeStorageInventoryLimit(value) {
+  const limit = Number(value || 25);
+  if (!Number.isFinite(limit) || limit <= 0) return 25;
+  return Math.max(5, Math.min(100, Math.floor(limit)));
+}
+
+function normalizeStorageInventoryOffset(value) {
+  const offset = Number(value || 0);
+  if (!Number.isFinite(offset) || offset <= 0) return 0;
+  return Math.min(100000, Math.floor(offset));
+}
+
+async function storageInventoryPayload(req, campaign, query) {
+  const access = await requirePermission(req, campaign, {
+    action: 'project.monitor.read',
+    scopeType: 'project',
+    scopeId: PROJECT_SCOPE_ID,
+    legacyRoles: ['owner', 'master'],
+    error: 'Inventario de storage exige permissao project.monitor.read.'
+  });
+  const limit = normalizeStorageInventoryLimit(query.get('limit'));
+  const offset = normalizeStorageInventoryOffset(query.get('offset'));
+  const sourceSessionId = cleanText(query.get('sourceSessionId') || query.get('source_session_id') || '', 180);
+  const fileType = cleanText(query.get('fileType') || query.get('file_type') || '', 120);
+  const sourceSystem = cleanText(query.get('sourceSystem') || query.get('source_system') || '', 120);
+  const search = cleanText(query.get('q') || query.get('search') || '', 180);
+  const result = await getPool().query(
+    `
+with file_rows as (
+  select
+    rf.id, rf.session_id, rf.file_type, rf.source_system, rf.source_file_role,
+    rf.storage_bucket, rf.storage_path, rf.original_filename, rf.mime_type,
+    rf.size_bytes, rf.duration_ms, rf.created_at, null::timestamptz updated_at, rf.metadata,
+    s.source_session_id, s.title session_title, s.status session_status
+  from recording_files rf
+  join sessions s on s.id = rf.session_id
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1
+    and ($2::text = '' or s.source_session_id = $2::text)
+    and ($3::text = '' or coalesce(rf.file_type, '') = $3::text)
+    and ($4::text = '' or coalesce(rf.source_system, '') = $4::text)
+    and (
+      $5::text = ''
+      or coalesce(rf.storage_path, '') ilike '%' || $5::text || '%'
+      or coalesce(rf.original_filename, '') ilike '%' || $5::text || '%'
+      or coalesce(rf.source_file_role, '') ilike '%' || $5::text || '%'
+      or coalesce(s.source_session_id, '') ilike '%' || $5::text || '%'
+      or coalesce(s.title, '') ilike '%' || $5::text || '%'
+    )
+), page_rows as (
+  select *
+  from file_rows
+  order by size_bytes desc nulls last, created_at desc nulls last, id
+  limit $6::integer offset $7::integer
+), category_rows as (
+  select coalesce(file_type, 'unknown') file_type, coalesce(source_system, 'unknown') source_system,
+         count(*)::int objects, coalesce(sum(size_bytes), 0)::bigint bytes
+  from file_rows
+  group by coalesce(file_type, 'unknown'), coalesce(source_system, 'unknown')
+  order by coalesce(sum(size_bytes), 0) desc
+  limit 12
+)
+select json_build_object(
+  'ok', true,
+  'mode', 'db_recording_files_page',
+  'campaignSlug', $1::text,
+  'filters', json_build_object(
+    'sourceSessionId', nullif($2::text, ''),
+    'fileType', nullif($3::text, ''),
+    'sourceSystem', nullif($4::text, ''),
+    'search', nullif($5::text, '')
+  ),
+  'page', json_build_object(
+    'limit', $6::integer,
+    'offset', $7::integer,
+    'nextOffset', case when $7::integer + $6::integer < (select count(*) from file_rows) then $7::integer + $6::integer else null end,
+    'hasMore', ($7::integer + $6::integer < (select count(*) from file_rows)),
+    'totalObjects', (select count(*)::int from file_rows),
+    'totalBytes', coalesce((select sum(size_bytes)::bigint from file_rows), 0)
+  ),
+  'objects', coalesce((select json_agg(row_to_json(page_rows) order by size_bytes desc nulls last, created_at desc nulls last, id) from page_rows), '[]'::json),
+  'categories', coalesce((select json_agg(row_to_json(category_rows) order by bytes desc) from category_rows), '[]'::json),
+  'actor', json_build_object(
+    'profileId', $8::text,
+    'displayName', $9::text
+  )
+) data;`,
+    [
+      campaign,
+      sourceSessionId,
+      fileType,
+      sourceSystem,
+      search,
+      limit,
+      offset,
+      access.profile?.id || null,
+      access.profile?.displayName || access.user?.displayName || null
+    ]
+  );
+  return result.rows[0]?.data || { ok: true, mode: 'db_recording_files_page', objects: [], page: { limit, offset, totalObjects: 0, totalBytes: 0, hasMore: false, nextOffset: null } };
+}
+
 async function selectCleanupCandidates(db, campaign, limit, requireLifecycleReady = true, sourceSessionId = '') {
   const result = await db.query(
     `
@@ -6143,6 +6245,9 @@ async function handleGet(req, res, path, query) {
       limit: query.get('limit') || query.get('transcriptionLimit') || DEFAULT_TRANSCRIPTION_LIMIT
     });
     return sendJson(res, 200, payload);
+  }
+  if (path === '/api/storage-inventory' || path === '/api/storage/inventory') {
+    return sendJson(res, 200, await storageInventoryPayload(req, campaign, query));
   }
   if (path === '/api/monitoring') {
     const access = await requirePermission(req, campaign, {

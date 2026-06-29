@@ -44,8 +44,10 @@
   function ensureState() {
     window.state.storageInventory ||= {
       loading: false,
+      objectLoading: false,
       cleanupRunning: false,
       error: null,
+      objectError: null,
       data: null,
       loadedAt: null
     };
@@ -71,7 +73,9 @@
       .storage-bar span { display: block; height: 100%; min-width: 3px; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--gold)); }
       .storage-object-list { display: grid; gap: 6px; margin-top: 10px; }
       .storage-object-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; background: #070a0f; }
-      .storage-object-row code { color: var(--muted); overflow-wrap: anywhere; }
+      .storage-object-row code { display: block; color: var(--muted); overflow-wrap: anywhere; }
+      .storage-object-row small { display: block; overflow-wrap: anywhere; }
+      .storage-object-footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 8px; }
       .cleanup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
       .cleanup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: #070a0f; padding: 8px; }
       .cleanup-row.red { border-color: var(--red); background: #1d1011; }
@@ -143,6 +147,31 @@
     };
   }
 
+  function normalizeStorageObject(row = {}) {
+    const fileType = row.file_type || row.fileType || 'unknown';
+    const sourceSystem = row.source_system || row.sourceSystem || 'unknown';
+    const retentionClass = retentionFor(fileType, sourceSystem);
+    return {
+      id: row.id || '',
+      sourceSessionId: row.source_session_id || row.sourceSessionId || 'unknown',
+      sessionTitle: row.session_title || row.sessionTitle || '',
+      sessionStatus: row.session_status || row.sessionStatus || '',
+      fileType,
+      sourceSystem,
+      sourceFileRole: row.source_file_role || row.sourceFileRole || '',
+      storageBucket: row.storage_bucket || row.storageBucket || '',
+      storagePath: row.storage_path || row.storagePath || '',
+      originalFilename: row.original_filename || row.originalFilename || '',
+      mimeType: row.mime_type || row.mimeType || '',
+      sizeBytes: Number(row.size_bytes || row.sizeBytes || 0),
+      durationMs: Number(row.duration_ms || row.durationMs || 0),
+      createdAt: row.created_at || row.createdAt || null,
+      updatedAt: row.updated_at || row.updatedAt || null,
+      retentionClass,
+      label: `${fileType} / ${sourceSystem}`
+    };
+  }
+
   function inventoryFromMonitoring(payload) {
     const rows = metricById(payload, 'storage')?.data || [];
     const cleanup = metricById(payload, 'audio-cleanup')?.data || null;
@@ -190,8 +219,53 @@
       budget,
       sessions,
       largestObjects: [],
+      objectPage: null,
+      objectCategories: [],
       policy
     };
+  }
+
+  async function fetchStorageObjectsPage(offset = 0, limit = 25) {
+    const payload = await api(`/api/storage-inventory?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`);
+    return {
+      objects: (payload.objects || []).map(normalizeStorageObject),
+      page: payload.page || { limit, offset, hasMore: false, nextOffset: null, totalObjects: 0, totalBytes: 0 },
+      categories: payload.categories || []
+    };
+  }
+
+  async function loadStorageObjectsPage(reset = false) {
+    const inventory = ensureState();
+    if (inventory.objectLoading) return null;
+    if (!inventory.data) return null;
+    const currentPage = inventory.data.objectPage || {};
+    const offset = reset ? 0 : currentPage.nextOffset;
+    if (offset === null || offset === undefined) return null;
+    inventory.objectLoading = true;
+    inventory.objectError = null;
+    try { render?.(); } catch (_error) {}
+    try {
+      const page = await fetchStorageObjectsPage(offset, currentPage.limit || 25);
+      inventory.data.largestObjects = reset
+        ? page.objects
+        : [...(inventory.data.largestObjects || []), ...page.objects];
+      inventory.data.objectPage = page.page;
+      inventory.data.objectCategories = page.categories;
+      inventory.objectError = null;
+      remember?.('Pagina de objetos de storage carregada.', {
+        offset: page.page.offset,
+        visible: inventory.data.largestObjects.length,
+        total: page.page.totalObjects
+      });
+      return page;
+    } catch (error) {
+      inventory.objectError = error.message;
+      toast?.(error.message);
+      return null;
+    } finally {
+      inventory.objectLoading = false;
+      try { render?.(); } catch (_error) {}
+    }
   }
 
   async function loadStorageInventory(force = false) {
@@ -203,8 +277,14 @@
     inventory.error = null;
     try { render?.(); } catch (_error) {}
     try {
-      const payload = await api('/api/monitoring?deep=1');
+      const [payload, objectPage] = await Promise.all([
+        api('/api/monitoring?deep=1'),
+        fetchStorageObjectsPage(0, 25)
+      ]);
       const data = inventoryFromMonitoring(payload);
+      data.largestObjects = objectPage.objects;
+      data.objectPage = objectPage.page;
+      data.objectCategories = objectPage.categories;
       inventory.data = data;
       inventory.loadedAt = new Date().toISOString();
       inventory.error = null;
@@ -374,16 +454,30 @@
   }
 
   function renderLargestObjects(data) {
+    const inventory = ensureState();
     const objects = data?.largestObjects || [];
-    if (!objects.length) return '<div class="empty">Maiores objetos entram na listagem R2 direta; por enquanto o snapshot vem agregado pelo banco.</div>';
+    const page = data?.objectPage || {};
+    if (!objects.length) return '<div class="empty">Nenhum objeto rastreado em recording_files para esta campanha.</div>';
     return `
       <div class="storage-object-list">
-        ${objects.slice(0, 10).map(item => `
+        ${objects.map(item => `
           <div class="storage-object-row">
-            <code>${esc(item.key || '')}</code>
-            <div class="badges">${chip(bytes(item.sizeBytes), categoryTone(item.category, item.retentionClass))}${chip(item.label || item.category, 'blue')}</div>
+            <div>
+              <strong>${esc(item.originalFilename || item.sourceFileRole || item.fileType || 'objeto')}</strong>
+              <code>${esc(item.storagePath || '')}</code>
+              <small>${esc(item.sessionTitle || item.sourceSessionId)} • ${esc(item.sourceSessionId)} • ${esc(item.retentionClass || '')}</small>
+            </div>
+            <div class="badges">
+              ${chip(bytes(item.sizeBytes), categoryTone(item.fileType, item.retentionClass))}
+              ${chip(item.label || item.fileType, 'blue')}
+              ${item.durationMs ? chip(minutes(item.durationMs / 60000), 'green') : ''}
+            </div>
           </div>
         `).join('')}
+      </div>
+      <div class="storage-object-footer">
+        <small>Mostrando ${esc(objects.length)} de ${esc(page.totalObjects || objects.length)} objeto(s) rastreados no banco.</small>
+        <button onclick="loadStorageObjectsPage(false)" ${inventory.objectLoading || !page.hasMore ? 'disabled' : ''}>${inventory.objectLoading ? 'Carregando...' : page.hasMore ? 'Carregar mais objetos' : 'Tudo carregado'}</button>
       </div>
     `;
   }
@@ -413,6 +507,7 @@
           </div>
         </div>
         ${inventory.error ? `<div class="empty">${esc(inventory.error)}</div>` : ''}
+        ${inventory.objectError ? `<div class="empty">${esc(inventory.objectError)}</div>` : ''}
         ${inventory.loading && !data ? '<div class="empty">Lendo metricas de storage...</div>' : ''}
         ${data ? `
           <div class="storage-grid">
@@ -481,6 +576,7 @@
 
   injectStyles();
   window.loadStorageInventory = loadStorageInventory;
+  window.loadStorageObjectsPage = loadStorageObjectsPage;
   window.runStorageCleanup = runStorageCleanup;
   window.renderStorageInventoryCard = renderStorageInventoryCard;
   try { renderOps = renderOpsWithStorage; } catch (_error) {}

@@ -20,6 +20,7 @@ A central de monitoramento profundo ja valida rotas, mas tambem e util ter um co
 - `/api/auth-config` -> `200`
 - `/api/health` -> `200`
 - `/api/monitoring` -> `401`
+- `/api/storage-inventory` -> `401`
 - `/api/roll20-bridge/config` -> `401`
 - `/api/pipeline-control?sourceSessionId=route-smoke` -> `401`
 
