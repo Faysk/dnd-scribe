@@ -6089,7 +6089,11 @@ async function handleGet(req, res, path, query) {
   if (path === '/api/pipeline-supervisor' || path === '/api/cron/pipeline-supervisor') {
     return sendJson(res, 200, await runPipelineSupervisor(req, campaign, query));
   }
-  if (path === '/api/roll20-bridge/config' || path === '/api/roll20/bridge/config') {
+  if (
+    path === '/api/roll20-bridge/config'
+    || path === '/api/roll20/bridge/config'
+    || (path === '/api/roll20-bridge' && query.get('roll20BridgeConfig') === '1')
+  ) {
     const access = await requireCampaignAccess(req, campaign, ['owner', 'master']);
     const token = roll20BridgeToken();
     const recentSessions = (await listSessions(campaign, runId)).slice(0, 8).map(session => ({

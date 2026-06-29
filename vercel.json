@@ -3,6 +3,14 @@
   "outputDirectory": "public",
   "rewrites": [
     {
+      "source": "/api/roll20-bridge/config",
+      "destination": "/api/roll20-bridge?roll20BridgeConfig=1"
+    },
+    {
+      "source": "/api/roll20/bridge/config",
+      "destination": "/api/roll20-bridge?roll20BridgeConfig=1"
+    },
+    {
       "source": "/api/jobs/retry",
       "destination": "/api/job-retry"
     },
