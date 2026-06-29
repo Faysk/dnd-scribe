@@ -2544,6 +2544,7 @@ function renderTimelineOverview(data, items) {
         <span class="roll20">Roll20</span>
         <span class="discord">Discord</span>
       </div>
+      ${renderTimelineTimingLegend(items)}
       <div class="timeline-overview-track" style="--overview-bins:${bins.length}">
         ${bins.map(bin => renderTimelineOverviewBin(bin, maxTotal)).join('')}
         ${selectedLeft === null ? '' : `<span class="timeline-overview-marker" style="left:${selectedLeft}%"></span>`}
@@ -2580,6 +2581,82 @@ function renderTimelineNavigation(items) {
       <button ${nav.previous ? '' : 'disabled'} onclick="navigateTimeline(-1)" title="Item anterior">Anterior</button>
       <strong>${escapeHtml(label)}</strong>
       <button ${nav.next ? '' : 'disabled'} onclick="navigateTimeline(1)" title="Proximo item">Proximo</button>
+    </div>
+  `;
+}
+
+function timelineTimingConfidence(item) {
+  const mode = String(item?.timingMode || '');
+  const missingTime = item?.startMs === null || item?.startMs === undefined || mode.includes('unsynced');
+  if (missingTime) {
+    return {
+      key: 'unsynced',
+      label: 'sem tempo',
+      tone: 'orange',
+      detail: 'Item ainda nao tem posicao confiavel dentro da sessao.'
+    };
+  }
+  if (mode === 'segment_exact') {
+    return {
+      key: 'exact',
+      label: 'tempo exato',
+      tone: 'green',
+      detail: 'Tempo vem diretamente do segmento transcrito.'
+    };
+  }
+  if (mode === 'phrase_estimated_from_segment') {
+    return {
+      key: 'estimated',
+      label: 'frase estimada',
+      tone: 'orange',
+      detail: 'Frase foi dividida localmente dentro de um segmento transcrito, sem custo extra de IA.'
+    };
+  }
+  if (mode.includes('before_session_start')) {
+    return {
+      key: 'outside',
+      label: 'fora da janela',
+      tone: 'orange',
+      detail: 'Timestamp existe, mas caiu antes do inicio real da sessao.'
+    };
+  }
+  if (item?.kind === 'roll20' || item?.kind === 'discord') {
+    return {
+      key: 'anchored',
+      label: 'ancorado',
+      tone: 'blue',
+      detail: 'Tempo calculado a partir do inicio real da sessao e do timestamp da fonte.'
+    };
+  }
+  return {
+    key: 'timed',
+    label: 'sincronizado',
+    tone: 'blue',
+    detail: 'Item tem posicao sincronizada na sessao.'
+  };
+}
+
+function timelineTimingCounts(items) {
+  return items.reduce((counts, item) => {
+    const key = timelineTimingConfidence(item).key;
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function renderTimelineTimingLegend(items) {
+  const counts = timelineTimingCounts(items);
+  const entries = [
+    ['exact', 'Exato'],
+    ['estimated', 'Estimado'],
+    ['anchored', 'Ancorado'],
+    ['unsynced', 'Sem tempo'],
+    ['outside', 'Fora da janela']
+  ].filter(([key]) => counts[key]);
+  if (!entries.length) return '';
+  return `
+    <div class="timeline-confidence-legend">
+      ${entries.map(([key, label]) => `<span class="${key}">${escapeHtml(label)} <strong>${counts[key]}</strong></span>`).join('')}
     </div>
   `;
 }
@@ -2677,8 +2754,9 @@ function renderTimelineBlock(item, duration) {
   const title = item.kind === 'roll20' ? eventTypeLabel(item.title) : item.title;
   const row = Math.max(0, Number(item.timelineRow || 0));
   const top = 9 + (row * 28);
+  const timing = timelineTimingConfidence(item);
   return `
-    <button class="timeline-block ${item.kind} ${selected ? 'selected' : ''}" data-timeline-block-id="${escapeHtml(item.id)}" aria-pressed="${selected ? 'true' : 'false'}" style="left:${left}%;width:${width}%;top:${top}px;" onclick="selectTimelineItem('${escapeHtml(item.id)}')" title="${escapeHtml(item.text || title)}">
+    <button class="timeline-block ${item.kind} timing-${timing.key} ${selected ? 'selected' : ''}" data-timeline-block-id="${escapeHtml(item.id)}" aria-pressed="${selected ? 'true' : 'false'}" style="left:${left}%;width:${width}%;top:${top}px;" onclick="selectTimelineItem('${escapeHtml(item.id)}')" title="${escapeHtml(`${timing.label}: ${item.text || title || item.kind}`)}">
       <span>${escapeHtml(title || item.kind)}</span>
     </button>
   `;
@@ -2749,6 +2827,7 @@ function renderTimelineInspector(item) {
     `;
   }
   const canPlay = item.kind === 'speech' && item.trackKey;
+  const timing = timelineTimingConfidence(item);
   return `
     <aside class="panel timeline-inspector">
       <div class="panel-head">
@@ -2756,7 +2835,7 @@ function renderTimelineInspector(item) {
           <span class="label">${escapeHtml(item.kind)}</span>
           <h2>${escapeHtml(item.title || item.kind)}</h2>
         </div>
-        <div class="badges">${badge(item.kind, item.kind === 'roll20' ? 'green' : item.kind === 'discord' ? 'violet' : 'blue')}${item.timingMode ? badge('tempo estimado', 'orange') : ''}</div>
+        <div class="badges">${badge(item.kind, item.kind === 'roll20' ? 'green' : item.kind === 'discord' ? 'violet' : 'blue')}${badge(timing.label, timing.tone)}</div>
       </div>
       <div class="panel-body detail-grid">
         <div class="field-grid">
@@ -2764,7 +2843,10 @@ function renderTimelineInspector(item) {
           <div><span class="label">Fim</span><strong>${escapeHtml(fmtDuration(item.endMs || item.startMs))}</strong></div>
           <div><span class="label">Duracao</span><strong>${escapeHtml(fmtDuration(item.durationMs || 0))}</strong></div>
           <div><span class="label">Lane</span><strong>${escapeHtml(item.laneId || '-')}</strong></div>
+          <div><span class="label">Precisao</span><strong>${escapeHtml(timing.label)}</strong></div>
+          <div><span class="label">Modo</span><strong>${escapeHtml(item.timingMode || timing.key)}</strong></div>
         </div>
+        <small class="timeline-confidence-note">${escapeHtml(timing.detail)}</small>
         <div>
           <span class="label">${item.kind === 'speech' ? 'Fala' : 'Evento'}</span>
           <p>${escapeHtml(item.text || '-')}</p>
