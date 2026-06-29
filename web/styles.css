@@ -364,6 +364,38 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   padding: 9px 10px;
   overflow-wrap: anywhere;
 }
+
+.upload-size-notice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #070a0f;
+  padding: 10px;
+}
+
+.upload-size-notice strong,
+.upload-size-notice small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.upload-size-notice.ok {
+  border-color: var(--green);
+}
+
+.upload-size-notice.attention {
+  border-color: var(--gold);
+  background: #1a1710;
+}
+
+.upload-size-notice.critical {
+  border-color: var(--red);
+  background: #1d1011;
+}
 .upload-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -762,6 +794,9 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   }
   .upload-step {
     grid-template-columns: 18px minmax(0, 1fr);
+  }
+  .upload-size-notice {
+    grid-template-columns: 1fr;
   }
   .upload-step .badge {
     grid-column: 2;

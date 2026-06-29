@@ -1,4 +1,9 @@
 const DEFAULT_RUN = 'classify_candidates_v2_gpt-4o';
+const CRAIG_UPLOAD_POLICY = {
+  sessionRetainedTargetBytes: 250 * 1024 * 1024,
+  uploadZipWarningBytes: 1200 * 1024 * 1024,
+  maxCraigZipBytes: 2 * 1024 * 1024 * 1024
+};
 const SESSION_STATUSES = [
   'planned',
   'recording',
@@ -166,6 +171,60 @@ function fmtBytes(bytes = 0) {
 function recordingIdFromCraigName(fileName = '') {
   const match = String(fileName || '').match(/^craig-([a-zA-Z0-9]+)-/);
   return match ? match[1] : '';
+}
+
+function craigUploadSizeAssessment(sizeBytes = 0) {
+  const size = Number(sizeBytes || 0);
+  if (!Number.isFinite(size) || size <= 0) return null;
+  if (size > CRAIG_UPLOAD_POLICY.maxCraigZipBytes) {
+    return {
+      level: 'critical',
+      tone: 'red',
+      title: 'ZIP acima do limite operacional',
+      detail: `Arquivo tem ${fmtBytes(size)}; limite atual ${fmtBytes(CRAIG_UPLOAD_POLICY.maxCraigZipBytes)}. Divida ou compacte antes de enviar.`
+    };
+  }
+  if (size >= CRAIG_UPLOAD_POLICY.uploadZipWarningBytes) {
+    return {
+      level: 'attention',
+      tone: 'orange',
+      title: 'ZIP grande para R2',
+      detail: `Arquivo tem ${fmtBytes(size)}. A esteira deve extrair, compactar e liberar raw depois para nao acumular storage.`
+    };
+  }
+  if (size >= CRAIG_UPLOAD_POLICY.sessionRetainedTargetBytes) {
+    return {
+      level: 'attention',
+      tone: 'gold',
+      title: 'Acima da meta retida por sessao',
+      detail: `Arquivo tem ${fmtBytes(size)}; meta de acervo final e ${fmtBytes(CRAIG_UPLOAD_POLICY.sessionRetainedTargetBytes)} por sessao apos compactacao/limpeza.`
+    };
+  }
+  return {
+    level: 'ok',
+    tone: 'green',
+    title: 'Tamanho dentro da meta inicial',
+    detail: `Arquivo tem ${fmtBytes(size)}. Ainda assim, raw ZIP deve ser tratado como temporario apos processamento.`
+  };
+}
+
+function renderCraigUploadPreflight(fileLike = null) {
+  const assessment = craigUploadSizeAssessment(fileLike?.size || fileLike?.sizeBytes || 0);
+  if (!assessment) return '';
+  return `
+    <div class="upload-size-notice ${assessment.level}">
+      <div>
+        <strong>${escapeHtml(assessment.title)}</strong>
+        <small>${escapeHtml(assessment.detail)}</small>
+      </div>
+      ${badge(assessment.level === 'ok' ? 'ok' : 'confirmar', assessment.tone)}
+    </div>
+  `;
+}
+
+function updateCraigUploadPreflight(fileLike = null) {
+  const target = document.getElementById('uploadSizeNotice');
+  if (target) target.innerHTML = renderCraigUploadPreflight(fileLike);
 }
 
 function dateTimeLocalValue(value) {
@@ -1445,6 +1504,7 @@ function renderCraigIngestPanel() {
         <div id="uploadFilePreview" class="upload-file-preview">
           ${fileName ? `${escapeHtml(fileName)}${recordingId ? ` • Craig ${escapeHtml(recordingId)}` : ''}` : 'Nenhum arquivo escolhido.'}
         </div>
+        <div id="uploadSizeNotice">${renderCraigUploadPreflight(state.ingest.file || upload)}</div>
       </div>
       <div class="upload-form-section">
         <span class="label">Metadados opcionais</span>
@@ -1696,6 +1756,7 @@ function rememberCraigFileSelection(input) {
   if (!file) {
     state.ingest = { ...state.ingest, file: null };
     if (preview) preview.textContent = 'Nenhum arquivo escolhido.';
+    updateCraigUploadPreflight(null);
     return;
   }
   state.ingest = {
@@ -1710,6 +1771,7 @@ function rememberCraigFileSelection(input) {
   if (preview) {
     preview.textContent = `${file.name} - ${fmtBytes(file.size)}${recordingId ? ` - Craig ${recordingId}` : ''}`;
   }
+  updateCraigUploadPreflight(file);
 }
 
 function editSessionForm(session) {
@@ -1890,6 +1952,15 @@ async function uploadCraigFromForm() {
     size: file.size,
     type: file.type || 'application/zip'
   };
+  const sizeAssessment = craigUploadSizeAssessment(file.size);
+  if (sizeAssessment?.level === 'critical') {
+    toast(sizeAssessment.detail);
+    return;
+  }
+  if (sizeAssessment?.level === 'attention') {
+    const okSize = window.confirm(`${sizeAssessment.title}: ${sizeAssessment.detail} Continuar upload mesmo assim?`);
+    if (!okSize) return;
+  }
   const targetSessionId = $('#ingestSessionId')?.value || '';
   if (targetSessionId) {
     const ok = window.confirm(`Anexar este ZIP Craig na sessao existente "${targetSessionId}"? Para uma nova gravacao, cancele e deixe "Criar nova sessao pelo ZIP".`);
