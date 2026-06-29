@@ -32,17 +32,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check API syntax
-        run: npm run check:api
-
-      - name: Check worker syntax
-        run: npm run check:workers
-
-      - name: Check frontend syntax
-        run: npm run check:web
-
-      - name: Check monitoring syntax
-        run: node --check lib/monitoring.js && node --check web/monitoring.js
+      - name: Run quality gate
+        run: npm run check
 
       - name: Build static frontend
         run: npm run build
