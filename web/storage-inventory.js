@@ -88,6 +88,21 @@
       .ops-priority-signal.red { border-color: var(--red); background: #1d1011; }
       .ops-priority-signal.blue { border-color: var(--blue); }
       .ops-priority-signal strong { display: block; margin-top: 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .ops-action-card { grid-column: 1 / -1; }
+      .ops-action-layout { display: grid; grid-template-columns: minmax(220px, 330px) minmax(0, 1fr); gap: 12px; align-items: start; }
+      .ops-action-focus { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: #0d1219; padding: 12px; min-width: 0; }
+      .ops-action-focus.green { border-color: var(--green); }
+      .ops-action-focus.gold { border-color: var(--gold); background: #1a1710; }
+      .ops-action-focus.red { border-color: var(--red); background: #1d1011; }
+      .ops-action-focus.blue { border-color: var(--blue); background: #101822; }
+      .ops-action-focus strong, .ops-action-focus small { display: block; overflow-wrap: anywhere; }
+      .ops-action-steps { display: grid; gap: 8px; }
+      .ops-action-step { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius); background: #0d1219; padding: 9px; }
+      .ops-action-step.green { border-color: var(--green); }
+      .ops-action-step.gold { border-color: var(--gold); background: #1a1710; }
+      .ops-action-step.red { border-color: var(--red); background: #1d1011; }
+      .ops-action-step.blue { border-color: var(--blue); background: #101822; }
+      .ops-action-step strong, .ops-action-step small { display: block; overflow-wrap: anywhere; }
       .r2-audit-panel { border: 1px solid var(--line); border-radius: var(--radius); background: #080c12; padding: 10px; margin-top: 10px; }
       .r2-audit-panel.red { border-color: var(--red); background: #1d1011; }
       .cleanup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
@@ -98,7 +113,7 @@
       .cleanup-row code { display: block; color: var(--muted); overflow-wrap: anywhere; }
       .cleanup-row small { overflow-wrap: anywhere; }
       @media (max-width: 900px) {
-        .storage-inventory-head, .storage-grid, .storage-category-line, .storage-object-row, .cleanup-grid, .cleanup-row, .ops-priority-layout, .ops-priority-signals { grid-template-columns: 1fr; }
+        .storage-inventory-head, .storage-grid, .storage-category-line, .storage-object-row, .cleanup-grid, .cleanup-row, .ops-priority-layout, .ops-priority-signals, .ops-action-layout, .ops-action-step { grid-template-columns: 1fr; }
       }
     `;
     document.head.appendChild(style);
@@ -733,6 +748,159 @@
     `;
   }
 
+  function opsActionModel() {
+    const jobs = window.state?.jobs || [];
+    const failedJobs = jobs.filter(job => job.status === 'failed');
+    const runningJobs = jobs.filter(job => job.status === 'running');
+    const queuedJobs = jobs.filter(job => ['queued', 'retrying'].includes(job.status));
+    const control = window.state?.pipelineControl || null;
+    const storage = ensureState().data || null;
+    const cleanup = storage?.cleanup || {};
+    const cleanupBytes = Number(cleanup.deleteReadyBytes || 0);
+    const draft = opsDraftCounts();
+    const draftTotal = Number(draft.segmentDecisions?.length || 0) + Number(draft.candidateDecisions?.length || 0);
+    const sourceSessionId = window.state?.selectedSourceSessionId || '';
+    const rows = [
+      {
+        label: 'Falhas',
+        value: `${failedJobs.length} job(s)`,
+        tone: failedJobs.length ? 'red' : 'green',
+        detail: failedJobs[0]?.error || failedJobs[0]?.type || 'Nenhuma falha carregada.'
+      },
+      {
+        label: 'Fila',
+        value: `${queuedJobs.length} job(s)`,
+        tone: queuedJobs.length ? 'gold' : 'green',
+        detail: queuedJobs[0]?.type || 'Nada esperando continuacao.'
+      },
+      {
+        label: 'Rodando',
+        value: `${runningJobs.length} job(s)`,
+        tone: runningJobs.length ? 'gold' : 'green',
+        detail: runningJobs[0]?.type || 'Nenhum job em execucao.'
+      },
+      {
+        label: 'Limpeza',
+        value: bytes(cleanupBytes),
+        tone: cleanupBytes ? 'gold' : 'green',
+        detail: cleanupBytes ? 'Simular antes de executar qualquer delete.' : 'Nada delete_ready no snapshot.'
+      },
+      {
+        label: 'Rascunho',
+        value: `${draftTotal} decisao(oes)`,
+        tone: draftTotal ? 'gold' : 'green',
+        detail: draftTotal ? 'Aplicar decisoes quando a revisao estiver correta.' : 'Sem rascunho local pendente.'
+      }
+    ];
+
+    if (failedJobs.length) {
+      return {
+        tone: 'red',
+        title: 'Corrigir falhas antes de avançar',
+        action: 'Atualize jobs, abra o erro e use retry apenas no job correto.',
+        risk: 'Continuar sem resolver falha pode duplicar etapa ou esconder um timeout real.',
+        rows,
+        buttons: [
+          '<button onclick="loadJobs(true)">Atualizar jobs</button>',
+          failedJobs[0]?.id ? `<button class="primary" onclick="retryCloudJob('${esc(failedJobs[0].id)}')">Retry primeiro job falho</button>` : ''
+        ]
+      };
+    }
+    if (window.state?.pipelineControlError) {
+      return {
+        tone: 'red',
+        title: 'Esteira precisa recarregar',
+        action: 'Recarregue o controle da esteira antes de executar qualquer etapa.',
+        risk: window.state.pipelineControlError,
+        rows,
+        buttons: [
+          `<button class="primary" onclick="refreshPipelineControl(true)">Recarregar esteira</button>`,
+          '<button onclick="loadJobs(true)">Atualizar jobs</button>'
+        ]
+      };
+    }
+    if (queuedJobs.length || control?.actions?.length) {
+      return {
+        tone: 'gold',
+        title: 'Pipeline tem continuação',
+        action: 'Use a esteira automatica abaixo; simule quando houver custo ou delete envolvido.',
+        risk: sourceSessionId ? `Sessao alvo: ${sourceSessionId}` : 'Selecione uma sessao para evitar executar no contexto errado.',
+        rows,
+        buttons: [
+          '<button onclick="refreshPipelineControl(true)">Atualizar esteira</button>',
+          '<button onclick="state.tab=\'upload\'; render();">Abrir Upload</button>'
+        ]
+      };
+    }
+    if (cleanupBytes) {
+      return {
+        tone: 'gold',
+        title: 'Storage tem limpeza possivel',
+        action: 'Simule a limpeza, confira objetos delete_ready e execute só com confirmação.',
+        risk: 'Limpeza segura não apaga sessão nem transcrição, mas ainda remove objetos R2.',
+        rows,
+        buttons: [
+          '<button class="primary" onclick="runStorageCleanup(true)">Simular limpeza</button>',
+          '<button onclick="loadStorageInventory(true)">Atualizar storage</button>'
+        ]
+      };
+    }
+    if (draftTotal) {
+      return {
+        tone: 'gold',
+        title: 'Decisões locais pendentes',
+        action: 'Revise o pacote local e aplique decisões quando estiver pronto.',
+        risk: 'Enquanto não aplicar, o banco não reflete o review atual.',
+        rows,
+        buttons: [
+          '<button class="primary" onclick="applyDecisions()">Aplicar decisoes</button>',
+          '<button onclick="state.tab=\'review\'; render();">Abrir Review</button>'
+        ]
+      };
+    }
+    return {
+      tone: 'green',
+      title: 'Operação estável',
+      action: 'Atualize monitoramento ou rode auditorias sob demanda antes da próxima sessão real.',
+      risk: 'Sem bloqueio local detectado no snapshot atual.',
+      rows,
+      buttons: [
+        '<button onclick="state.tab=\'monitoring\'; render();">Abrir Monitor</button>',
+        '<button onclick="loadStorageInventory(true)">Atualizar storage</button>',
+        '<button onclick="loadJobs(true)">Atualizar jobs</button>'
+      ]
+    };
+  }
+
+  function renderOpsActionDrilldown() {
+    const model = opsActionModel();
+    return `
+      <article class="ops-card ops-action-card">
+        <div class="ops-action-layout">
+          <div class="ops-action-focus ${esc(model.tone)}">
+            <span class="label">Proxima acao segura</span>
+            <strong>${esc(model.title)}</strong>
+            <small>${esc(model.action)}</small>
+            <small>${esc(model.risk)}</small>
+            <div class="actions">${model.buttons.filter(Boolean).join('')}</div>
+          </div>
+          <div class="ops-action-steps">
+            ${model.rows.map(row => `
+              <div class="ops-action-step ${esc(row.tone)}">
+                <div>
+                  <span class="label">${esc(row.label)}</span>
+                  <strong>${esc(row.value)}</strong>
+                  <small>${esc(row.detail)}</small>
+                </div>
+                ${chip(row.tone === 'red' ? 'critico' : row.tone === 'gold' ? 'acao' : 'ok', row.tone)}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
   function renderOpsWithStorage() {
     const payload = typeof buildDecisionPayload === 'function'
       ? buildDecisionPayload()
@@ -741,6 +909,7 @@
     return `
       <section class="ops-grid">
         ${renderOpsPrioritySummary()}
+        ${renderOpsActionDrilldown()}
         <article class="ops-card">
           <h2>Pacote local</h2>
           <p>Decisoes ainda nao aplicadas no banco.</p>
