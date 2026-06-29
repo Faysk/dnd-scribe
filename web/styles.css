@@ -1268,6 +1268,23 @@ body.auth-locked .music-dock { display: none; }
   border-style: dashed;
   box-shadow: inset 0 -2px 0 rgba(217, 178, 92, .75);
 }
+.timeline-block.has-cluster {
+  padding-right: 25px;
+}
+.timeline-block.has-cluster small {
+  position: absolute;
+  right: 4px;
+  top: 3px;
+  display: inline-grid;
+  min-width: 17px;
+  height: 17px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(217, 178, 92, .95);
+  color: #111827;
+  font-size: .66rem;
+  font-weight: 700;
+}
 .timeline-block.selected {
   outline: 2px solid var(--gold);
   outline-offset: 1px;
@@ -1312,6 +1329,22 @@ body.auth-locked .music-dock { display: none; }
 .timeline-confidence-note {
   display: block;
   color: var(--muted);
+}
+.timeline-cluster-card {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid #8d6834;
+  border-radius: var(--radius);
+  background: #17140d;
+}
+.timeline-cluster-card div {
+  display: grid;
+  gap: 4px;
+}
+.timeline-cluster-card small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 .timeline-audio-dock {
   display: grid;

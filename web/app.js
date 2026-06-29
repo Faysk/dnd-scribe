@@ -2688,6 +2688,7 @@ function renderTimelineLane(lane, laneItems, duration) {
   if (stats.speechMs) meta.push(`${fmtDuration(stats.speechMs)} fala`);
   if (stats.events) meta.push(`${stats.events} eventos`);
   if (stats.overlaps) meta.push(`${stats.overlaps} sobreposicoes`);
+  if (stats.clusters) meta.push(`${stats.clusters} clusters`);
   const layout = timelineLaneLayout(laneItems);
   const trackHeight = Math.max(54, 14 + (layout.rowCount * 28));
   const hasSelection = laneItems.some(item => item.id === state.timeline.selectedItemId);
@@ -2707,6 +2708,7 @@ function renderTimelineLane(lane, laneItems, duration) {
 
 function timelineLaneLayout(laneItems) {
   const activeRows = [];
+  const clusterMap = timelineDenseClusterMap(laneItems);
   const items = [...laneItems]
     .map((item, originalIndex) => ({ ...item, _range: timelineItemRange(item), _originalIndex: originalIndex }))
     .sort((a, b) => a._range.start - b._range.start || a._range.end - b._range.end || a._originalIndex - b._originalIndex)
@@ -2714,18 +2716,51 @@ function timelineLaneLayout(laneItems) {
       const row = activeRows.findIndex(end => end <= item._range.start);
       const targetRow = row >= 0 ? row : activeRows.length;
       activeRows[targetRow] = item._range.end;
-      return { ...item, timelineRow: targetRow };
+      return { ...item, timelineRow: targetRow, timelineCluster: clusterMap.get(item.id) || null };
     });
   return { items, rowCount: Math.max(1, activeRows.length) };
 }
 
+function timelineDenseClusterMap(laneItems, windowMs = 2000) {
+  const timedEvents = laneItems
+    .filter(item => item.kind !== 'speech')
+    .map(item => ({ item, range: timelineItemRange(item) }))
+    .filter(entry => Number.isFinite(entry.range.start))
+    .sort((a, b) => a.range.start - b.range.start || String(a.item.id || '').localeCompare(String(b.item.id || '')));
+  const clusters = [];
+  let current = [];
+  timedEvents.forEach(entry => {
+    if (!current.length || entry.range.start - current[current.length - 1].range.start <= windowMs) {
+      current.push(entry);
+      return;
+    }
+    clusters.push(current);
+    current = [entry];
+  });
+  if (current.length) clusters.push(current);
+  const clusterMap = new Map();
+  clusters
+    .filter(cluster => cluster.length > 1)
+    .forEach(cluster => {
+      const startMs = Math.min(...cluster.map(entry => entry.range.start));
+      const endMs = Math.max(...cluster.map(entry => entry.range.end));
+      const members = cluster.map(entry => entry.item);
+      members.forEach((member, index) => {
+        clusterMap.set(member.id, { size: members.length, index, startMs, endMs, members });
+      });
+    });
+  return clusterMap;
+}
+
 function timelineLaneStats(laneItems) {
   const speech = laneItems.filter(item => item.kind === 'speech');
+  const clusterKeys = new Set([...timelineDenseClusterMap(laneItems).values()].map(cluster => `${cluster.startMs}:${cluster.endMs}:${cluster.size}`));
   return {
     count: laneItems.length,
     speechMs: speech.reduce((sum, item) => sum + Math.max(0, timelineItemRange(item).end - timelineItemRange(item).start), 0),
     events: laneItems.filter(item => item.kind !== 'speech').length,
-    overlaps: timelineOverlapCount(laneItems)
+    overlaps: timelineOverlapCount(laneItems),
+    clusters: clusterKeys.size
   };
 }
 
@@ -2756,9 +2791,13 @@ function renderTimelineBlock(item, duration) {
   const row = Math.max(0, Number(item.timelineRow || 0));
   const top = 9 + (row * 28);
   const timing = timelineTimingConfidence(item);
+  const cluster = item.timelineCluster;
+  const visualWidth = cluster ? Math.max(width, Math.min(6, 1.6 + (cluster.size * .45))) : width;
+  const clusterTitle = cluster ? ` / cluster ${cluster.index + 1}/${cluster.size}` : '';
   return `
-    <button class="timeline-block ${item.kind} timing-${timing.key} ${selected ? 'selected' : ''}" data-timeline-block-id="${escapeHtml(item.id)}" aria-pressed="${selected ? 'true' : 'false'}" style="left:${left}%;width:${width}%;top:${top}px;" onclick="selectTimelineItem('${escapeHtml(item.id)}')" title="${escapeHtml(`${timing.label}: ${item.text || title || item.kind}`)}">
+    <button class="timeline-block ${item.kind} timing-${timing.key} ${cluster ? 'has-cluster' : ''} ${selected ? 'selected' : ''}" data-timeline-block-id="${escapeHtml(item.id)}" aria-pressed="${selected ? 'true' : 'false'}" style="left:${left}%;width:${visualWidth}%;top:${top}px;" onclick="selectTimelineItem('${escapeHtml(item.id)}')" title="${escapeHtml(`${timing.label}${clusterTitle}: ${item.text || title || item.kind}`)}">
       <span>${escapeHtml(title || item.kind)}</span>
+      ${cluster ? `<small>${cluster.size}</small>` : ''}
     </button>
   `;
 }
@@ -2895,6 +2934,7 @@ function renderTimelineInspector(item) {
           <p>${escapeHtml(item.text || '-')}</p>
         </div>
         ${timelineSourceDetails(item)}
+        ${timelineClusterDetails(item)}
         ${timelineAttachmentLinks(item)}
         ${item.subtitle ? `<small>${escapeHtml(item.subtitle)}</small>` : ''}
         ${canPlay ? timelineAudioPanel(item) : '<div class="audio-card"><span class="label">Audio</span><p>Item sem faixa de audio direta.</p></div>'}
@@ -2904,6 +2944,28 @@ function renderTimelineInspector(item) {
         </div>
       </div>
     </aside>
+  `;
+}
+
+function timelineClusterForItem(item) {
+  if (!item || item.kind === 'speech') return null;
+  const laneItems = (state.timeline.data?.items || []).filter(entry => entry.laneId === item.laneId);
+  return timelineDenseClusterMap(laneItems).get(item.id) || null;
+}
+
+function timelineClusterDetails(item) {
+  const cluster = timelineClusterForItem(item);
+  if (!cluster) return '';
+  const members = cluster.members || [];
+  return `
+    <div class="timeline-cluster-card">
+      <span class="label">Cluster de eventos</span>
+      <strong>${members.length} eventos entre ${escapeHtml(fmtDuration(cluster.startMs))} e ${escapeHtml(fmtDuration(cluster.endMs))}</strong>
+      <div>
+        ${members.slice(0, 5).map(member => `<small>${escapeHtml(fmtDuration(member.startMs))} / ${escapeHtml(member.kind)} / ${escapeHtml(member.title || member.text || member.id)}</small>`).join('')}
+        ${members.length > 5 ? `<small>+${members.length - 5} eventos no mesmo cluster</small>` : ''}
+      </div>
+    </div>
   `;
 }
 
