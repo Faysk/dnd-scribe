@@ -27,5 +27,11 @@
     "api/**/*.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/pipeline-supervisor",
+      "schedule": "15 4 * * *"
+    }
+  ]
 }

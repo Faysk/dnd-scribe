@@ -11,6 +11,7 @@ const {
 const { buildMonitoringPayload } = require('../lib/monitoring');
 const { notifyDiscord } = require('../lib/discord');
 const { markJobStep } = require('../lib/job-steps');
+const { recoverStaleJobs } = require('../lib/pipeline-recovery');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
@@ -3323,6 +3324,115 @@ function pipelineBlockedMessage(job) {
   return `Pipeline aguardando etapa ${job.type}.`;
 }
 
+
+function cronSecret() {
+  return process.env.CRON_SECRET || process.env.DND_CRON_SECRET || '';
+}
+
+function requireCronAuth(req) {
+  const secret = cronSecret();
+  if (!secret) throw httpError(503, 'CRON_SECRET nao configurado.');
+  const header = req.headers?.authorization || req.headers?.Authorization || '';
+  if (header !== `Bearer ${secret}`) throw httpError(401, 'Cron nao autorizado.');
+}
+
+async function supervisorSessions(db, campaign, limit = 5) {
+  const result = await db.query(
+    `
+select s.source_session_id, min(pj.created_at) first_job_at
+from processing_jobs pj
+join sessions s on s.id = pj.session_id
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1
+  and coalesce(s.status, '') <> 'archived'
+  and pj.status in ('queued','retrying','running')
+  and pj.job_type = any($2::text[])
+group by s.source_session_id
+order by min(pj.created_at)
+limit $3::int;`,
+    [campaign, PIPELINE_RUNNABLE_JOB_TYPES, limit]
+  );
+  return result.rows.map(row => row.source_session_id).filter(Boolean);
+}
+
+async function executeSupervisorJob(req, campaign, job, options) {
+  if (job.type === 'cloud_ingest_craig') {
+    return getCloudIngestRunner()({ jobId: job.id, dryRun: false });
+  }
+  if (job.type === 'cloud_extract_craig_tracks') {
+    return getCloudExtractRunner()({ jobId: job.id, dryRun: false, maxTracks: options.maxTracks });
+  }
+  if (job.type === 'cloud_plan_audio_chunks') {
+    return runCloudPlanChunks(req, campaign, {
+      jobId: job.id,
+      dryRun: false,
+      chunkSeconds: options.chunkSeconds
+    }, { skipPermission: true });
+  }
+  return { ok: false, skipped: true, reason: `Tipo nao suportado: ${job.type}` };
+}
+
+async function runPipelineSupervisor(req, campaign, query) {
+  requireCronAuth(req);
+  const db = getPool();
+  const dryRun = ['1', 'true', 'yes'].includes(String(query.get('dryRun') || '').toLowerCase());
+  const sourceSessionId = cleanText(query.get('sourceSessionId') || '', 180);
+  const maxSessions = normalizeWorkflowLimit(query.get('maxSessions'), 4, 1, 10);
+  const maxRunsPerSession = normalizeWorkflowLimit(query.get('maxRuns'), 2, 1, 6);
+  const maxTracks = normalizePipelineMaxTracks(query.get('maxTracks') || 1);
+  const chunkSeconds = normalizeChunkSeconds(query.get('chunkSeconds') || DEFAULT_CHUNK_SECONDS);
+  const staleMinutes = normalizeWorkflowLimit(query.get('staleMinutes'), 20, 10, 240);
+  const sessions = sourceSessionId ? [sourceSessionId] : await supervisorSessions(db, campaign, maxSessions);
+  const results = [];
+  let processed = 0;
+
+  for (const sessionId of sessions) {
+    const item = { sourceSessionId: sessionId, recovery: null, runs: [] };
+    item.recovery = await recoverStaleJobs(db, campaign, {
+      sourceSessionId: sessionId,
+      dryRun,
+      staleMinutes,
+      limit: maxRunsPerSession
+    });
+    for (let index = 0; index < maxRunsPerSession; index += 1) {
+      const nextJob = await selectNextPipelineJob(db, campaign, { sourceSessionId: sessionId, limit: 1 });
+      if (!nextJob) break;
+      if (dryRun) {
+        item.runs.push({ dryRun: true, job: nextJob });
+        break;
+      }
+      const jobResult = await executeSupervisorJob(req, campaign, nextJob, { maxTracks, chunkSeconds });
+      processed += jobResult?.processed === false ? 0 : 1;
+      item.runs.push({ job: nextJob, result: jobResult });
+      if (!jobResult?.ok) break;
+    }
+    results.push(item);
+  }
+
+  if (!dryRun && processed > 0) {
+    await notifyPipelineOps({
+      title: 'Supervisor Craig executado',
+      status: 'ok',
+      description: `Supervisor continuou ${processed} etapa(s) zero-cost em ${results.length} sessao(oes).`,
+      fields: [
+        { name: 'campanha', value: campaign, inline: true },
+        { name: 'sessoes', value: String(results.length), inline: true },
+        { name: 'etapas', value: String(processed), inline: true }
+      ]
+    });
+  }
+
+  return {
+    ok: true,
+    mode: 'pipeline_supervisor',
+    dryRun,
+    campaign,
+    checkedAt: new Date().toISOString(),
+    processed,
+    sessions: results
+  };
+}
+
 async function runPipelineContinue(req, campaign, body) {
   await requirePermission(req, campaign, {
     action: 'project.jobs.run',
@@ -4065,14 +4175,16 @@ returning id;`,
   return result.rows[0]?.id || null;
 }
 
-async function runCloudPlanChunks(req, campaign, body) {
-  await requirePermission(req, campaign, {
-    action: 'project.jobs.run',
-    scopeType: 'project',
-    scopeId: PROJECT_SCOPE_ID,
-    legacyRoles: ['owner', 'master'],
-    error: 'Planejar chunks exige permissao project.jobs.run.'
-  });
+async function runCloudPlanChunks(req, campaign, body, options = {}) {
+  if (!options.skipPermission) {
+    await requirePermission(req, campaign, {
+      action: 'project.jobs.run',
+      scopeType: 'project',
+      scopeId: PROJECT_SCOPE_ID,
+      legacyRoles: ['owner', 'master'],
+      error: 'Planejar chunks exige permissao project.jobs.run.'
+    });
+  }
   const dryRun = body.dryRun !== false;
   const jobId = uuidOrNull(body.jobId || body.job_id);
   const chunkSeconds = normalizeChunkSeconds(body.chunkSeconds || body.chunk_seconds);
@@ -5957,6 +6069,9 @@ async function handleGet(req, res, path, query) {
   }
   if (path === '/api/health') {
     return sendJson(res, 200, { ok: true, app: 'dnd-scribe-vercel', campaignSlug: campaign });
+  }
+  if (path === '/api/pipeline-supervisor' || path === '/api/cron/pipeline-supervisor') {
+    return sendJson(res, 200, await runPipelineSupervisor(req, campaign, query));
   }
   if (path === '/api/roll20-bridge/config' || path === '/api/roll20/bridge/config') {
     const access = await requireCampaignAccess(req, campaign, ['owner', 'master']);
