@@ -62,10 +62,10 @@ jobs:
       DND_COST_TRANSCRIPTION_AUDIO_MINUTE_USD: ${{ github.event.inputs.transcription_cost_usd_per_minute || secrets.DND_COST_TRANSCRIPTION_AUDIO_MINUTE_USD }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"
@@ -119,7 +119,7 @@ jobs:
 
       - name: Upload worker log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: transcription-worker-log
           path: transcription-worker.log
