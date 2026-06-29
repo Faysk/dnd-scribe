@@ -804,6 +804,32 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   color: var(--text);
 }
 .candidate-card textarea { min-height: 74px; margin: 8px 0; }
+.candidate-source-list {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 9px;
+}
+.candidate-source-list.missing {
+  border-color: var(--gold);
+  background: #1a1710;
+}
+.candidate-source-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.candidate-source-row strong,
+.candidate-source-row small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.candidate-source-row .actions {
+  justify-content: flex-end;
+}
 .publication-card pre, .ops-card pre {
   white-space: pre-wrap;
   max-height: 320px;
@@ -977,6 +1003,12 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   }
   .review-queue-head {
     display: grid;
+  }
+  .candidate-source-row {
+    grid-template-columns: 1fr;
+  }
+  .candidate-source-row .actions {
+    justify-content: stretch;
   }
   .top-actions button { width: 100%; }
   .music-dock {

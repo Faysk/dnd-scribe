@@ -4022,10 +4022,65 @@ function candidateCard(item) {
       </div>
       <small>${escapeHtml(item.kind)} • ${escapeHtml(item.source_candidate_id)} • ${escapeHtml((item.source_segment_ids || []).join(', '))}</small>
       <p>${escapeHtml(item.body || '')}</p>
+      ${candidateSourcesPanel(item)}
       <textarea id="${noteId}" placeholder="Nota para auditoria">${escapeHtml(decision.note || '')}</textarea>
       <div class="actions">${candidateActions(item, noteId)}</div>
     </article>
   `;
+}
+
+function candidateSourcesPanel(item) {
+  const sourceIds = item.source_segment_ids || [];
+  if (!sourceIds.length) {
+    return `
+      <div class="candidate-source-list missing">
+        <span class="label">Origem</span>
+        <small>Sem segmento fonte registrado. Trate como candidato que precisa de auditoria antes de canon/publicacao.</small>
+      </div>
+    `;
+  }
+  const segments = state.review?.segments || [];
+  return `
+    <div class="candidate-source-list">
+      <span class="label">Origem</span>
+      ${sourceIds.map(segmentId => {
+        const segment = segments.find(item => item.id === segmentId);
+        const label = segment
+          ? `${fmtDuration(segment.start_ms)} - ${segment.speaker_name || segment.track_key}`
+          : String(segmentId).slice(0, 8);
+        return `
+          <div class="candidate-source-row">
+            <div>
+              <strong>${escapeHtml(label)}</strong>
+              <small>${escapeHtml(segment ? (segment.text || '').slice(0, 150) : 'Segmento nao carregado neste payload.')}</small>
+            </div>
+            <div class="actions">
+              <button onclick="openCandidateSource('${escapeHtml(segmentId)}', false)">Abrir</button>
+              <button onclick="openCandidateSource('${escapeHtml(segmentId)}', true)" ${segment ? '' : 'disabled'}>Ouvir</button>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function openCandidateSource(segmentId, playAudio = false) {
+  const segment = state.review?.segments?.find(item => item.id === segmentId);
+  if (!segment) {
+    toast('Segmento fonte nao esta carregado neste payload.');
+    return;
+  }
+  state.tab = 'review';
+  state.status = 'all';
+  state.speaker = 'all';
+  state.query = '';
+  state.selectedSegmentId = segmentId;
+  render();
+  window.setTimeout(() => {
+    document.querySelector('.segment-row.active')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (playAudio) loadSegmentAudio(segmentId);
+  }, 80);
 }
 
 function candidateStatusBadge(status) {
