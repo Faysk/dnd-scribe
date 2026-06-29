@@ -103,6 +103,9 @@
       .ops-action-step.red { border-color: var(--red); background: #1d1011; }
       .ops-action-step.blue { border-color: var(--blue); background: #101822; }
       .ops-action-step strong, .ops-action-step small { display: block; overflow-wrap: anywhere; }
+      .ops-action-step button { min-height: 32px; padding: 5px 9px; }
+      .ops-focus-target { scroll-margin-top: 16px; }
+      .ops-focus-target:target { outline: 2px solid var(--gold); outline-offset: 3px; }
       .r2-audit-panel { border: 1px solid var(--line); border-radius: var(--radius); background: #080c12; padding: 10px; margin-top: 10px; }
       .r2-audit-panel.red { border-color: var(--red); background: #1d1011; }
       .cleanup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
@@ -633,7 +636,7 @@
     const canRunCleanup = Boolean(window.state?.auth?.capabilities?.canRunTechnicalJobs);
     const hasDeleteReady = Number(cleanup.deleteReadyBytes || 0) > 0;
     return `
-      <article class="ops-card storage-inventory-card">
+      <article id="ops-storage-card" class="ops-card storage-inventory-card ops-focus-target">
         <div class="storage-inventory-head">
           <div>
             <span class="label">Storage de audio</span>
@@ -671,6 +674,13 @@
         ` : ''}
       </article>
     `;
+  }
+
+  function scrollOpsTarget(targetId = '') {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (window.history?.replaceState) window.history.replaceState(null, '', `#${targetId}`);
   }
 
   function opsDraftCounts() {
@@ -765,31 +775,36 @@
         label: 'Falhas',
         value: `${failedJobs.length} job(s)`,
         tone: failedJobs.length ? 'red' : 'green',
-        detail: failedJobs[0]?.error || failedJobs[0]?.type || 'Nenhuma falha carregada.'
+        detail: failedJobs[0]?.error || failedJobs[0]?.type || 'Nenhuma falha carregada.',
+        target: 'ops-jobs-card'
       },
       {
         label: 'Fila',
         value: `${queuedJobs.length} job(s)`,
         tone: queuedJobs.length ? 'gold' : 'green',
-        detail: queuedJobs[0]?.type || 'Nada esperando continuacao.'
+        detail: queuedJobs[0]?.type || 'Nada esperando continuacao.',
+        target: 'ops-pipeline-card'
       },
       {
         label: 'Rodando',
         value: `${runningJobs.length} job(s)`,
         tone: runningJobs.length ? 'gold' : 'green',
-        detail: runningJobs[0]?.type || 'Nenhum job em execucao.'
+        detail: runningJobs[0]?.type || 'Nenhum job em execucao.',
+        target: 'ops-jobs-card'
       },
       {
         label: 'Limpeza',
         value: bytes(cleanupBytes),
         tone: cleanupBytes ? 'gold' : 'green',
-        detail: cleanupBytes ? 'Simular antes de executar qualquer delete.' : 'Nada delete_ready no snapshot.'
+        detail: cleanupBytes ? 'Simular antes de executar qualquer delete.' : 'Nada delete_ready no snapshot.',
+        target: 'ops-storage-card'
       },
       {
         label: 'Rascunho',
         value: `${draftTotal} decisao(oes)`,
         tone: draftTotal ? 'gold' : 'green',
-        detail: draftTotal ? 'Aplicar decisoes quando a revisao estiver correta.' : 'Sem rascunho local pendente.'
+        detail: draftTotal ? 'Aplicar decisoes quando a revisao estiver correta.' : 'Sem rascunho local pendente.',
+        target: 'ops-draft-card'
       }
     ];
 
@@ -892,7 +907,7 @@
                   <strong>${esc(row.value)}</strong>
                   <small>${esc(row.detail)}</small>
                 </div>
-                ${chip(row.tone === 'red' ? 'critico' : row.tone === 'gold' ? 'acao' : 'ok', row.tone)}
+                <button onclick="scrollOpsTarget('${esc(row.target)}')">${row.tone === 'green' ? 'ver' : 'abrir'}</button>
               </div>
             `).join('')}
           </div>
@@ -910,7 +925,7 @@
       <section class="ops-grid">
         ${renderOpsPrioritySummary()}
         ${renderOpsActionDrilldown()}
-        <article class="ops-card">
+        <article id="ops-draft-card" class="ops-card ops-focus-target">
           <h2>Pacote local</h2>
           <p>Decisoes ainda nao aplicadas no banco.</p>
           <div class="badges">
@@ -921,23 +936,23 @@
             <button class="danger" ${draft ? '' : 'disabled'} onclick="confirmClearDraft()">Limpar rascunho</button>
           </div>
         </article>
-        <article class="ops-card">
+        <article id="ops-summary-card" class="ops-card ops-focus-target">
           <h2>Resumo Supabase</h2>
           <pre>${esc(JSON.stringify(window.state?.summary || {}, null, 2))}</pre>
         </article>
-        <article class="ops-card">
+        <article id="ops-roll20-card" class="ops-card ops-focus-target">
           <h2>Eventos Roll20</h2>
           ${typeof renderRoll20Events === 'function' ? renderRoll20Events() : '<div class="empty">Roll20 indisponivel.</div>'}
         </article>
         ${renderStorageInventoryCard()}
-        <article class="ops-card">
+        <article id="ops-pipeline-card" class="ops-card ops-focus-target">
           <div class="row between">
             <h2>Esteira automatica</h2>
             <button onclick="refreshPipelineControl(true)">Atualizar</button>
           </div>
           ${typeof window.renderPipelineControl === 'function' ? window.renderPipelineControl('ops') : '<div class="empty">Modulo de esteira carregando.</div>'}
         </article>
-        <article class="ops-card">
+        <article id="ops-jobs-card" class="ops-card ops-focus-target">
           <div class="row between">
             <h2>Jobs de producao</h2>
             <button onclick="loadJobs(false)">Atualizar</button>
@@ -958,6 +973,7 @@
   window.loadR2InventoryPage = loadR2InventoryPage;
   window.runStorageCleanup = runStorageCleanup;
   window.renderStorageInventoryCard = renderStorageInventoryCard;
+  window.scrollOpsTarget = scrollOpsTarget;
   try { renderOps = renderOpsWithStorage; } catch (_error) {}
   window.renderOps = renderOpsWithStorage;
   try { render?.(); } catch (_error) {}
