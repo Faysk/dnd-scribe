@@ -206,6 +206,136 @@
     `;
   }
 
+  function parsedTime(value) {
+    const date = value ? new Date(value) : null;
+    return date && !Number.isNaN(date.getTime()) ? date : null;
+  }
+
+  function compactDateTime(value) {
+    const date = parsedTime(value);
+    if (!date) return '-';
+    return date.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function addOperationEvent(events, seen, event) {
+    const date = parsedTime(event.at);
+    if (!date) return;
+    const key = [event.kind, event.id || '', event.at, event.title].join(':');
+    if (seen.has(key)) return;
+    seen.add(key);
+    events.push({
+      ...event,
+      atMs: date.getTime(),
+      tone: event.tone || 'blue'
+    });
+  }
+
+  function operationDetailParts(parts = []) {
+    return parts.filter(part => part !== null && part !== undefined && String(part).trim()).join(' • ');
+  }
+
+  function buildOperationTimeline(control = {}) {
+    const events = [];
+    const seen = new Set();
+    const jobs = Array.isArray(control.jobs) ? control.jobs : [];
+    for (const job of jobs) {
+      const id = shortId(job.id);
+      const type = job.type || 'job';
+      const workerStatus = job.output?.workerStatus || job.output?.uploadStatus || '';
+      addOperationEvent(events, seen, {
+        kind: 'job-created',
+        id: job.id,
+        at: job.createdAt,
+        title: 'Job criado',
+        detail: operationDetailParts([type, id, workerStatus || job.status]),
+        status: job.status || 'queued',
+        tone: jobTone(job.status || 'queued')
+      });
+      addOperationEvent(events, seen, {
+        kind: 'job-started',
+        id: job.id,
+        at: job.startedAt,
+        title: 'Job iniciou',
+        detail: operationDetailParts([type, id, `${job.attempts || 0} tentativa(s)`]),
+        status: 'running',
+        tone: 'orange'
+      });
+      for (const step of job.steps || []) {
+        const stepAt = step.finishedAt || step.updatedAt || step.startedAt;
+        addOperationEvent(events, seen, {
+          kind: 'job-step',
+          id: `${job.id}:${step.key || step.id || step.label}`,
+          at: stepAt,
+          title: step.label || step.key || 'Etapa',
+          detail: operationDetailParts([type, shortProgress(step), step.error ? String(step.error).slice(0, 140) : '']),
+          status: step.status || 'pending',
+          tone: jobTone(step.status || 'pending')
+        });
+      }
+      addOperationEvent(events, seen, {
+        kind: 'job-finished',
+        id: job.id,
+        at: job.finishedAt,
+        title: job.status === 'succeeded' ? 'Job concluiu' : job.status === 'failed' ? 'Job falhou' : 'Job finalizou',
+        detail: operationDetailParts([type, id, job.error ? String(job.error).slice(0, 140) : workerStatus]),
+        status: job.status || 'finished',
+        tone: jobTone(job.status || 'finished')
+      });
+    }
+
+    const runs = Array.isArray(control.workflowRuns?.runs) ? control.workflowRuns.runs : [];
+    for (const run of runs) {
+      addOperationEvent(events, seen, {
+        kind: 'workflow-run',
+        id: run.runId || run.jobId,
+        at: run.updatedAt || run.createdAt || run.requestedAt || run.jobCreatedAt,
+        title: run.conclusion ? 'Workflow finalizou' : run.status === 'in_progress' ? 'Workflow rodando' : 'Workflow solicitado',
+        detail: operationDetailParts([run.workflow || run.name || run.jobType, run.runId ? `#${run.runId}` : '', run.refreshError ? String(run.refreshError).slice(0, 140) : '']),
+        status: run.conclusion || run.status || 'registered',
+        tone: workflowTone(run)
+      });
+    }
+
+    return events.sort((a, b) => b.atMs - a.atMs).slice(0, 16);
+  }
+
+  function renderOperationTimeline(control = {}) {
+    const events = buildOperationTimeline(control);
+    if (!events.length) return '';
+    const attention = events.filter(event => ['red', 'orange', 'gold'].includes(event.tone)).length;
+    return `
+      <div class="operation-timeline">
+        <div class="operation-timeline-head">
+          <div>
+            <span class="label">Linha operacional</span>
+            <strong>${events.length} evento(s) recentes</strong>
+          </div>
+          <div class="badges">
+            ${attention ? chip(`${attention} atencao`, 'orange') : chip('sem alerta recente', 'green')}
+            ${chip(control.sourceSessionId || '-', 'blue')}
+          </div>
+        </div>
+        <div class="operation-event-list">
+          ${events.map(event => `
+            <div class="operation-event ${esc(event.tone)}">
+              <time datetime="${esc(event.at || '')}">${esc(compactDateTime(event.at))}</time>
+              <div>
+                <strong>${esc(event.title || 'Evento')}</strong>
+                <small>${esc(event.detail || '')}</small>
+              </div>
+              <div class="badges">${chip(event.status || event.kind || 'evento', event.tone)}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   function renderPipelineControl(variant = 'ops') {
     const control = window.state?.pipelineControl || null;
     const sourceSessionId = selectedPipelineSourceSessionId();
@@ -278,6 +408,7 @@
         </div>
         ${renderPipelineActionBar(actions, variant, github.configured)}
         ${renderWorkflowRuns(control.workflowRuns)}
+        ${renderOperationTimeline(control)}
         ${renderPipelineControlDetail(control)}
       </div>
     `;

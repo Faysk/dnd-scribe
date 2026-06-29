@@ -157,6 +157,71 @@
   overflow-wrap: anywhere;
 }
 
+.operation-timeline {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.operation-timeline-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.operation-timeline-head strong {
+  display: block;
+}
+
+.operation-event-list {
+  display: grid;
+  gap: 6px;
+}
+
+.operation-event {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #070a0f;
+  padding: 8px;
+}
+
+.operation-event time {
+  color: var(--muted);
+  font-size: .78rem;
+  white-space: nowrap;
+}
+
+.operation-event strong,
+.operation-event small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.operation-event.green {
+  border-color: var(--green);
+}
+
+.operation-event.gold,
+.operation-event.orange {
+  border-color: var(--gold);
+  background: #1a1710;
+}
+
+.operation-event.red {
+  border-color: var(--red);
+  background: #1d1011;
+}
+
+.operation-event.blue {
+  border-color: #4aa3ff;
+}
+
 .job-step-list {
   display: grid;
   gap: 6px;
@@ -287,7 +352,9 @@
   .track-progress-head,
   .track-row,
   .workflow-runs-head,
-  .workflow-run-row {
+  .workflow-run-row,
+  .operation-timeline-head,
+  .operation-event {
     display: grid;
     grid-template-columns: 1fr;
   }
