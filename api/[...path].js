@@ -6092,6 +6092,19 @@ async function handleGet(req, res, path, query) {
   if (path === '/api/roll20-bridge/config' || path === '/api/roll20/bridge/config') {
     const access = await requireCampaignAccess(req, campaign, ['owner', 'master']);
     const token = roll20BridgeToken();
+    const recentSessions = (await listSessions(campaign, runId)).slice(0, 8).map(session => ({
+      title: session.title || null,
+      sourceSessionId: session.sourceSessionId || null,
+      sessionDate: session.sessionDate || null,
+      status: session.status || null,
+      startedAt: session.startedAt || null,
+      endedAt: session.endedAt || null,
+      roll20Events: Number(session.roll20Events || 0),
+      recordingFiles: Number(session.recordingFiles || 0)
+    }));
+    const suggestedSourceSessionId = sourceSessionId && sourceSessionId !== DEFAULT_SOURCE_SESSION
+      ? sourceSessionId
+      : (recentSessions[0]?.sourceSessionId || sourceSessionId || '');
     return sendJson(res, 200, {
       ok: true,
       campaignSlug: campaign,
@@ -6099,6 +6112,8 @@ async function handleGet(req, res, path, query) {
       source: 'roll20_bridge_config',
       tokenConfigured: Boolean(token),
       bridgeToken: token,
+      suggestedSourceSessionId,
+      recentSessions,
       actor: {
         profileId: access.profile?.id || null,
         displayName: access.profile?.displayName || access.user?.displayName || null,

@@ -42,6 +42,12 @@
     ].join('');
   }
 
+  function bridgeSelectedSourceSessionId() {
+    const config = state.bridgeConfig || {};
+    const recent = Array.isArray(config.recentSessions) ? config.recentSessions : [];
+    return config.selectedSourceSessionId || config.suggestedSourceSessionId || recent[0]?.sourceSessionId || '';
+  }
+
   function render() {
     const gate = document.getElementById('siteGate');
     const shell = document.getElementById('bridgeShell');
@@ -90,10 +96,19 @@
       panel.innerHTML = '<span class="label">Token da ponte</span><p>ROLL20_BRIDGE_TOKEN ainda nao esta configurado em producao.</p>';
       return;
     }
+    const recent = Array.isArray(state.bridgeConfig.recentSessions) ? state.bridgeConfig.recentSessions.filter(item => item.sourceSessionId) : [];
+    const selectedSourceSessionId = bridgeSelectedSourceSessionId();
     panel.innerHTML = [
       '<span class="label">Token da ponte</span>',
-      '<p>Disponivel para DM/Owner autenticado. Use quando o bridge pedir o token no Roll20.</p>',
-      '<div class="actions"><button class="primary" onclick="copyBridgeToken()">Copiar token</button><button onclick="copyBridgeDefaults()">Copiar config</button></div>'
+      '<p>Disponivel para DM/Owner autenticado. Escolha a sessao alvo e copie os dados para o painel da extensao no Roll20.</p>',
+      recent.length ? [
+        '<label><span class="label">Sessao alvo</span>',
+        '<select onchange="setBridgeSourceSessionId(this.value)">',
+        recent.map(session => '<option value="' + escapeHtml(session.sourceSessionId) + '" ' + (session.sourceSessionId === selectedSourceSessionId ? 'selected' : '') + '>' + escapeHtml((session.sessionDate || '-') + ' - ' + (session.title || session.sourceSessionId) + ' [' + (session.status || 'sem status') + ']') + '</option>').join(''),
+        '</select></label>'
+      ].join('') : '<p>Nenhuma sessao recente encontrada. Crie ou selecione uma sessao antes de ligar a ponte.</p>',
+      '<div class="actions"><button class="primary" onclick="copyBridgeToken()">Copiar token</button><button onclick="copyBridgeSourceSessionId()">Copiar sourceSessionId</button><button onclick="copyBridgeDefaults()">Copiar config</button></div>',
+      selectedSourceSessionId ? '<small>Selecionada: ' + escapeHtml(selectedSourceSessionId) + '</small>' : ''
     ].join('');
   }
 
@@ -170,14 +185,29 @@
     const panel = document.getElementById('bridgeConfigPanel');
     if (panel) panel.querySelector('p').textContent = 'Token copiado.';
   };
+  window.copyBridgeSourceSessionId = async () => {
+    const sourceSessionId = bridgeSelectedSourceSessionId();
+    if (!sourceSessionId) return;
+    await navigator.clipboard.writeText(sourceSessionId);
+    const panel = document.getElementById('bridgeConfigPanel');
+    if (panel) panel.querySelector('p').textContent = 'sourceSessionId copiado.';
+  };
   window.copyBridgeDefaults = async () => {
     const config = state.bridgeConfig || {};
     await navigator.clipboard.writeText(JSON.stringify({
       apiBase: config.apiBase || 'https://dnd.faysk.dev',
-      campaignSlug: config.campaignSlug || 'yuhara-main'
+      campaignSlug: config.campaignSlug || 'yuhara-main',
+      sourceSessionId: bridgeSelectedSourceSessionId()
     }, null, 2));
     const panel = document.getElementById('bridgeConfigPanel');
     if (panel) panel.querySelector('p').textContent = 'Config copiada.';
+  };
+  window.setBridgeSourceSessionId = value => {
+    state.bridgeConfig = {
+      ...(state.bridgeConfig || {}),
+      selectedSourceSessionId: value || ''
+    };
+    renderBridgeConfig();
   };
   document.addEventListener('DOMContentLoaded', initBridgeAuth);
 }());
