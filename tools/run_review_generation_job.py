@@ -100,6 +100,21 @@ def chunks(values: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]
     return [values[index : index + size] for index in range(0, len(values), size)]
 
 
+def batch_candidate_prefix(source_session_id: str, source_run_id: str, batch: list[dict[str, Any]], fallback: int) -> str:
+    if batch:
+        sequence = batch[0].get("source_sequence")
+        try:
+            number = int(sequence)
+        except (TypeError, ValueError):
+            number = -1
+        if number >= 0:
+            return f"s{number:06d}_"
+        segment_id = str(batch[0].get("id") or "")
+        if segment_id:
+            return f"h{stable_uuid(source_session_id, source_run_id, segment_id)[:8]}_"
+    return f"b{fallback:04d}_"
+
+
 def fetch_session(database_url: str, campaign: str, source_session_id: str) -> dict[str, Any]:
     data = run_json(
         database_url,
@@ -227,7 +242,12 @@ select coalesce(json_agg(row_to_json(rows)), '[]'::json) from rows;
     ) or []
 
 
-def build_master(session: dict[str, Any], batch_segments: list[dict[str, Any]], batch_number: int) -> dict[str, Any]:
+def build_master(
+    session: dict[str, Any],
+    batch_segments: list[dict[str, Any]],
+    batch_number: int,
+    candidate_prefix: str,
+) -> dict[str, Any]:
     segments = []
     for index, item in enumerate(batch_segments, start=1):
         start_ms = int(item.get("timeline_start_ms") or 0)
@@ -251,6 +271,7 @@ def build_master(session: dict[str, Any], batch_segments: list[dict[str, Any]], 
         "summary": {
             "mode": "production_review_batch",
             "batch_number": batch_number,
+            "candidate_prefix": candidate_prefix,
             "segment_count": len(segments),
             "session_status": session.get("status"),
         },
@@ -365,6 +386,7 @@ def classify_batch(
     prompt_version: str,
     batch_dir: Path,
     batch_number: int,
+    candidate_prefix: str,
 ) -> None:
     cmd = [
         sys.executable,
@@ -383,7 +405,7 @@ def classify_batch(
         "--model",
         model,
         "--candidate-prefix",
-        f"b{batch_number:04d}_",
+        candidate_prefix,
         "--append-db",
         "--update-db",
     ]
@@ -454,8 +476,9 @@ def main() -> int:
     processed_batches = 0
     try:
         for batch_number, batch in enumerate(selected_batches, start=1):
+            candidate_prefix = batch_candidate_prefix(args.source_session_id, source_run_id, batch, batch_number)
             batch_dir = base_dir / f"batch_{dt.datetime.now(dt.UTC).strftime('%Y%m%dT%H%M%S')}_{batch_number:04d}"
-            master = build_master(session, batch, batch_number)
+            master = build_master(session, batch, batch_number, candidate_prefix)
             write_json(batch_dir / "transcripts" / "transcript_master.json", master)
             classify_batch(
                 args.env_file,
@@ -466,6 +489,7 @@ def main() -> int:
                 args.prompt_version,
                 batch_dir,
                 batch_number,
+                candidate_prefix,
             )
             processed_batches += 1
 
