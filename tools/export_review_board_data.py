@@ -6,13 +6,16 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
 
 def load_env(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
+    values: dict[str, str] = dict(os.environ)
+    if not path.exists():
+        return values
     for raw in path.read_text(errors="replace").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:

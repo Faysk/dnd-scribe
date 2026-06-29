@@ -207,8 +207,11 @@
     const cleanup = metrics.cleanup || {};
     const storage = metrics.storage || {};
     const ledger = metrics.ledger || {};
+    const segments = metrics.segments || {};
+    const review = metrics.reviewGeneration || {};
     const github = control.workflowDispatch || {};
     const actions = control.actions || [];
+    const reviewCandidateTotal = Number(review.canon_candidates || 0) + Number(review.quote_candidates || 0) + Number(review.outtake_candidates || 0);
     return `
       <div class="autopilot-panel ${esc(stageTone(control.stage, control.tone))}">
         <div class="autopilot-head">
@@ -228,6 +231,8 @@
           ${pipelineMetric('lote atual', `${Number(limited.billable_minutes || 0).toFixed(3)} min`, Number(limited.billable_minutes || 0) ? 'blue' : 'green')}
           ${pipelineMetric('custo lote', `$${Number(control.estimatedBatchCostUsd || 0).toFixed(6)}`, Number(control.estimatedBatchCostUsd || 0) ? 'gold' : 'green')}
           ${pipelineMetric('custo sessao', `$${Number(ledger.cost || 0).toFixed(6)}`, 'blue')}
+          ${pipelineMetric('review IA', `${Number(segments.classified || 0)}/${Number(segments.non_empty || segments.segments || 0)}`, Number(segments.pending_review || 0) ? 'gold' : 'green')}
+          ${pipelineMetric('candidatos', `${reviewCandidateTotal} un`, reviewCandidateTotal ? 'blue' : '')}
           ${pipelineMetric('limpavel', formatBytes(cleanup.delete_ready_bytes || 0), Number(cleanup.delete_ready_bytes || 0) ? 'green' : '')}
           ${pipelineMetric('ativo R2', formatBytes(storage.active_bytes || 0), 'blue')}
         </div>
@@ -261,7 +266,7 @@
         </div>
       `;
     }
-    const needsGithub = new Set(['dispatch_speech_slices', 'dispatch_transcription', 'dispatch_storage_cleanup']);
+    const needsGithub = new Set(['dispatch_speech_slices', 'dispatch_transcription', 'dispatch_review_generation', 'dispatch_storage_cleanup']);
     return `
       <div class="autopilot-actions">
         ${renderPipelineInputs(variant)}
@@ -282,6 +287,8 @@
         <label class="inline-job-limit"><span class="label">Chunks fala</span><input id="pipelineSpeechChunks_${esc(variant)}" type="number" min="1" max="80" value="12" /></label>
         <label class="inline-job-limit"><span class="label">Transcr.</span><input id="pipelineTranscriptionLimit_${esc(variant)}" type="number" min="1" max="100" value="50" /></label>
         <label class="inline-job-limit"><span class="label">Teto $</span><input id="pipelineApproveCost_${esc(variant)}" type="number" min="0" max="10" step="0.001" value="0.08" /></label>
+        <label class="inline-job-limit"><span class="label">Review seg</span><input id="pipelineReviewBatchSize_${esc(variant)}" type="number" min="1" max="200" value="80" /></label>
+        <label class="inline-job-limit"><span class="label">Review lotes</span><input id="pipelineReviewMaxBatches_${esc(variant)}" type="number" min="1" max="20" value="1" /></label>
         <label class="inline-job-limit"><span class="label">Cleanup</span><input id="pipelineCleanupLimit_${esc(variant)}" type="number" min="1" max="100" value="50" /></label>
       </div>
     `;
@@ -520,6 +527,13 @@
       options.approveCostUsd = numberInput(`pipelineApproveCost_${variant}`, 0.08);
       options.maxEstimatedCostUsd = options.approveCostUsd;
     }
+    if (action === 'dispatch_review_generation') {
+      options.batchSize = numberInput(`pipelineReviewBatchSize_${variant}`, 80);
+      options.maxBatches = numberInput(`pipelineReviewMaxBatches_${variant}`, 1);
+      const pendingReview = Number(window.state?.pipelineControl?.metrics?.segments?.pending_review || options.selectedReviewSegments || 0);
+      options.selectedReviewSegments = Math.min(pendingReview || options.batchSize * options.maxBatches, options.batchSize * options.maxBatches);
+      if (options.execute) options.confirm = 'RUN_REVIEW_AI';
+    }
     if (action === 'dispatch_storage_cleanup') {
       options.limit = numberInput(`pipelineCleanupLimit_${variant}`, 50);
       if (options.execute) options.confirm = 'DELETE_READY_R2';
@@ -538,6 +552,10 @@
       const estimate = Number(options.estimatedCostUsd || 0).toFixed(6);
       const cap = Number(options.approveCostUsd || 0).toFixed(6);
       return window.confirm(`Disparar transcricao paga deste lote? Estimado US$ ${estimate}, teto aprovado US$ ${cap}.`);
+    }
+    if (action === 'dispatch_review_generation' && options.execute) {
+      const selected = Number(options.selectedReviewSegments || options.batchSize || 0);
+      return window.confirm(`Gerar classificacoes e candidatos com OpenAI para ate ${selected} segmento(s) neste run?`);
     }
     if (action === 'dispatch_storage_cleanup' && options.execute) {
       return window.confirm('Apagar do R2 apenas objetos marcados delete_ready para esta sessao?');

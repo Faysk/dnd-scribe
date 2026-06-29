@@ -42,7 +42,7 @@ SEGMENT_TYPES = [
 
 
 def load_env(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
+    values: dict[str, str] = dict(os.environ)
     if not path.exists():
         return values
     for raw in path.read_text(errors="replace").splitlines():
@@ -301,9 +301,10 @@ def post_chat_completion(api_key: str, payload: dict) -> dict:
         raise SystemExit(f"OpenAI API error status={exc.code} body={body[:500]}")
 
 
-def normalize_result(result: dict, master: dict) -> dict:
+def normalize_result(result: dict, master: dict, candidate_prefix: str = "") -> dict:
     valid_ids = {item["id"] for item in master.get("segments") or []}
     by_id = {item["id"]: item for item in master.get("segments") or []}
+    order_by_id = {item["id"]: index for index, item in enumerate(master.get("segments") or [])}
     classifications = []
     seen = set()
     for item in result.get("classifications") or []:
@@ -343,10 +344,16 @@ def normalize_result(result: dict, master: dict) -> dict:
                 "outtake_candidate": False,
             }
         )
-    classifications.sort(key=lambda item: int(item["segment_id"].split("_")[-1]))
+    classifications.sort(key=lambda item: order_by_id.get(item["segment_id"], 10**9))
 
     def valid_source_ids(values: list[str]) -> list[str]:
         return [value for value in values if value in valid_ids]
+
+    def candidate_id(raw: Any, fallback: str) -> str:
+        text = str(raw or fallback)
+        if candidate_prefix and not text.startswith(candidate_prefix):
+            return f"{candidate_prefix}{text}"
+        return text
 
     normalized = {
         "summary": str(result.get("summary") or ""),
@@ -361,7 +368,7 @@ def normalize_result(result: dict, master: dict) -> dict:
             continue
         normalized["canon_candidates"].append(
             {
-                "candidate_id": item.get("candidate_id") or f"canon_{index:03d}",
+                "candidate_id": candidate_id(item.get("candidate_id"), f"canon_{index:03d}"),
                 "title": str(item.get("title") or "Canon candidato")[:160],
                 "claim": str(item.get("claim") or "")[:4000],
                 "candidate_type": str(item.get("candidate_type") or "event")[:80],
@@ -379,7 +386,7 @@ def normalize_result(result: dict, master: dict) -> dict:
             continue
         normalized["quote_candidates"].append(
             {
-                "candidate_id": item.get("candidate_id") or f"quote_{index:03d}",
+                "candidate_id": candidate_id(item.get("candidate_id"), f"quote_{index:03d}"),
                 "quote_text": str(item.get("quote_text") or "")[:4000],
                 "character_name": str(item.get("character_name") or "")[:160],
                 "speaker_name": str(item.get("speaker_name") or "")[:160],
@@ -396,7 +403,7 @@ def normalize_result(result: dict, master: dict) -> dict:
             continue
         normalized["outtake_candidates"].append(
             {
-                "candidate_id": item.get("candidate_id") or f"outtake_{index:03d}",
+                "candidate_id": candidate_id(item.get("candidate_id"), f"outtake_{index:03d}"),
                 "title": str(item.get("title") or "Bastidor candidato")[:160],
                 "description": str(item.get("description") or "")[:4000],
                 "sensitivity_level": item.get("sensitivity_level")
@@ -435,6 +442,7 @@ def build_db_sql(
     prompt_version: str,
     raw_path: str,
     normalized_path: str,
+    delete_existing: bool = True,
 ) -> str:
     session_cte = (
         "with target_session as ("
@@ -442,13 +450,16 @@ def build_db_sql(
         f"where c.slug = {q(campaign_slug)} and s.source_session_id = {q(source_session_id)}"
         ")"
     )
-    lines = [
-        "begin;",
-        f"{session_cte} delete from segment_classifications sc using transcript_segments ts, target_session s where sc.segment_id = ts.id and ts.session_id = s.id and sc.source_run_id = {q(source_run_id)};",
-        f"{session_cte} delete from canon_candidates cc using target_session s where cc.session_id = s.id and cc.source_run_id = {q(source_run_id)};",
-        f"{session_cte} delete from quote_candidates qc using target_session s where qc.session_id = s.id and qc.source_run_id = {q(source_run_id)};",
-        f"{session_cte} delete from outtake_candidates oc using target_session s where oc.session_id = s.id and oc.source_run_id = {q(source_run_id)};",
-    ]
+    lines = ["begin;"]
+    if delete_existing:
+        lines.extend(
+            [
+                f"{session_cte} delete from segment_classifications sc using transcript_segments ts, target_session s where sc.segment_id = ts.id and ts.session_id = s.id and sc.source_run_id = {q(source_run_id)};",
+                f"{session_cte} delete from canon_candidates cc using target_session s where cc.session_id = s.id and cc.source_run_id = {q(source_run_id)};",
+                f"{session_cte} delete from quote_candidates qc using target_session s where qc.session_id = s.id and qc.source_run_id = {q(source_run_id)};",
+                f"{session_cte} delete from outtake_candidates oc using target_session s where oc.session_id = s.id and oc.source_run_id = {q(source_run_id)};",
+            ]
+        )
 
     for item in result["classifications"]:
         row_id = stable_uuid("segment_classification", source_session_id, source_run_id, item["segment_id"])
@@ -474,7 +485,17 @@ select
   {q_json({"tags": item["tags"], "privacy": item["privacy"], "candidate_flags": {"quote": item["quote_candidate"], "canon": item["canon_candidate"], "outtake": item["outtake_candidate"]}})}
 from transcript_segments ts
 join target_session s on s.id = ts.session_id
-where ts.source_segment_id = {q(item["segment_id"])};
+where ts.source_segment_id = {q(item["segment_id"])}
+on conflict (id) do update set
+  segment_type = excluded.segment_type,
+  canon_relevance = excluded.canon_relevance,
+  confidence = excluded.confidence,
+  needs_review = excluded.needs_review,
+  reason = excluded.reason,
+  model = excluded.model,
+  prompt_version = excluded.prompt_version,
+  raw_output = excluded.raw_output,
+  metadata = excluded.metadata;
 """.strip()
         )
 
@@ -501,7 +522,15 @@ select
   {q(source_run_id)},
   {q(item["candidate_id"])},
   {q_json({"entities": item["entities"], "who_knows_fiction": item["who_knows_fiction"], "visibility": item["visibility"], "source_segment_ids": item["source_segment_ids"]})}
-from target_session s;
+from target_session s
+on conflict (id) do update set
+  title = excluded.title,
+  claim = excluded.claim,
+  candidate_type = excluded.candidate_type,
+  confidence = excluded.confidence,
+  source_segment_ids = excluded.source_segment_ids,
+  reviewer_notes = excluded.reviewer_notes,
+  metadata = excluded.metadata;
 """.strip()
         )
 
@@ -527,7 +556,13 @@ select
   {q(source_run_id)},
   {q(item["candidate_id"])},
   {q_json({"speaker_name": item["speaker_name"], "visibility": item["visibility"], "reason": item["reason"], "confidence": item["confidence"], "source_segment_ids": item["source_segment_ids"]})}
-from target_session s;
+from target_session s
+on conflict (id) do update set
+  quote_text = excluded.quote_text,
+  character_name = excluded.character_name,
+  context = excluded.context,
+  source_segment_ids = excluded.source_segment_ids,
+  metadata = excluded.metadata;
 """.strip()
         )
 
@@ -555,7 +590,15 @@ select
   {q(source_run_id)},
   {q(item["candidate_id"])},
   {q_json({"reason": item["reason"], "confidence": item["confidence"], "source_segment_ids": item["source_segment_ids"]})}
-from target_session s;
+from target_session s
+on conflict (id) do update set
+  title = excluded.title,
+  description = excluded.description,
+  start_ms = excluded.start_ms,
+  end_ms = excluded.end_ms,
+  sensitivity_level = excluded.sensitivity_level,
+  source_segment_ids = excluded.source_segment_ids,
+  metadata = excluded.metadata;
 """.strip()
         )
 
@@ -621,6 +664,8 @@ def main() -> int:
     parser.add_argument("--model")
     parser.add_argument("--prompt-version", default=PROMPT_VERSION)
     parser.add_argument("--source-run-id")
+    parser.add_argument("--candidate-prefix", default="")
+    parser.add_argument("--append-db", action="store_true", help="Upsert this batch without deleting earlier rows for the same run.")
     parser.add_argument("--update-db", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -656,7 +701,7 @@ def main() -> int:
         return 0
 
     result, raw = call_openai(values, messages, model)
-    normalized = normalize_result(result, master)
+    normalized = normalize_result(result, master, args.candidate_prefix)
     write_json(raw_path, raw)
     write_json(normalized_path, normalized)
 
@@ -681,6 +726,7 @@ def main() -> int:
             prompt_version=args.prompt_version,
             raw_path=str(raw_path),
             normalized_path=str(normalized_path),
+            delete_existing=not args.append_db,
         )
         apply_db_update(database_url, sql)
         print("db_updated=true")

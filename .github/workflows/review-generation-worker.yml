@@ -1,0 +1,111 @@
+name: Review Generation Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_session_id:
+        description: "Craig source_session_id, for example craig-BIRq3nIWB4v9"
+        required: true
+        type: string
+      campaign:
+        description: "Campaign slug"
+        required: true
+        default: "yuhara-main"
+        type: string
+      batch_size:
+        description: "Segments per OpenAI review batch"
+        required: true
+        default: "80"
+        type: string
+      max_batches:
+        description: "Maximum batches for this run"
+        required: true
+        default: "1"
+        type: string
+      execute:
+        description: "Actually call OpenAI and write review candidates"
+        required: true
+        default: false
+        type: boolean
+      model:
+        description: "Optional text model override"
+        required: false
+        default: ""
+        type: string
+      source_run_id:
+        description: "AI source_run_id"
+        required: false
+        default: "classify_candidates_v2_gpt-4o"
+        type: string
+      skip_publications:
+        description: "Do not build review publication packet after final batch"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: review-generation-${{ github.event.inputs.source_session_id }}
+  cancel-in-progress: false
+
+jobs:
+  review-generation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${DATABASE_URL}" || (echo "DATABASE_URL secret is missing" && exit 1)
+          if [ "${{ github.event.inputs.execute }}" = "true" ]; then
+            test -n "${OPENAI_API_KEY}" || (echo "OPENAI_API_KEY secret is missing" && exit 1)
+          fi
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Run review generation worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            "${{ github.event.inputs.source_session_id }}"
+            --campaign "${{ github.event.inputs.campaign }}"
+            --batch-size "${{ github.event.inputs.batch_size }}"
+            --max-batches "${{ github.event.inputs.max_batches }}"
+            --source-run-id "${{ github.event.inputs.source_run_id }}"
+            --json
+          )
+          if [ "${{ github.event.inputs.execute }}" = "true" ]; then
+            args+=(--execute)
+          fi
+          if [ -n "${{ github.event.inputs.model }}" ]; then
+            args+=(--model "${{ github.event.inputs.model }}")
+          fi
+          if [ "${{ github.event.inputs.skip_publications }}" = "true" ]; then
+            args+=(--skip-publications)
+          fi
+          python tools/run_review_generation_job.py "${args[@]}" 2>&1 | tee review-generation-worker.log
+
+      - name: Upload worker log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-generation-worker-log
+          path: review-generation-worker.log
+          if-no-files-found: ignore

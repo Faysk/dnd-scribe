@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import subprocess
 import tempfile
 import uuid
@@ -17,7 +18,9 @@ NAMESPACE = uuid.UUID("0e5b216d-7b46-48dd-83dd-6e5b4f27a614")
 
 
 def load_env(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
+    values: dict[str, str] = dict(os.environ)
+    if not path.exists():
+        return values
     for raw in path.read_text(errors="replace").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:

@@ -38,6 +38,9 @@ const TRANSCRIPTION_PROMPT_VERSION = 'transcribe_v1';
 const DEFAULT_TRANSCRIPTION_LIMIT = 50;
 const DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE = Number(process.env.DND_COST_TRANSCRIPTION_AUDIO_MINUTE_USD || 0.003);
 const DEFAULT_TRANSCRIPTION_APPROVAL_USD = 0.08;
+const REVIEW_GENERATION_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4o';
+const DEFAULT_REVIEW_BATCH_SIZE = 80;
+const DEFAULT_REVIEW_MAX_BATCHES = 1;
 
 const SESSION_STATUSES = new Set([
   'planned',
@@ -2216,9 +2219,28 @@ with target_session as (
   where session_id = (select id from target_session)
     and operation_type = 'transcription'
 ), segment_stats as (
-  select count(*)::int segments
-  from transcript_segments
-  where session_id = (select id from target_session)
+  select
+    count(*)::int segments,
+    count(*) filter (where ts.is_empty is false)::int non_empty,
+    count(*) filter (where ts.is_empty is true)::int empty,
+    count(distinct sc.segment_id) filter (where ts.is_empty is false)::int classified,
+    greatest(
+      (count(*) filter (where ts.is_empty is false))::int
+        - (count(distinct sc.segment_id) filter (where ts.is_empty is false))::int,
+      0
+    )::int pending_review
+  from transcript_segments ts
+  left join segment_classifications sc
+    on sc.segment_id = ts.id
+   and sc.source_run_id = $6
+  where ts.session_id = (select id from target_session)
+), review_candidate_stats as (
+  select
+    (select count(*)::int from canon_candidates cc where cc.session_id = (select id from target_session) and cc.source_run_id = $6) canon_candidates,
+    (select count(*)::int from quote_candidates qc where qc.session_id = (select id from target_session) and qc.source_run_id = $6) quote_candidates,
+    (select count(*)::int from outtake_candidates oc where oc.session_id = (select id from target_session) and oc.source_run_id = $6) outtake_candidates,
+    (select count(*)::int from publications p where p.session_id = (select id from target_session) and p.source_run_id = $6) publications,
+    (select count(*)::int from publications p where p.session_id = (select id from target_session) and p.source_run_id = $6 and p.source_publication_id = 'ai_review_packet') review_packets
 )
 select jsonb_build_object(
   'session', (select to_jsonb(target_session) from target_session),
@@ -2230,9 +2252,10 @@ select jsonb_build_object(
   'cleanup', (select to_jsonb(cleanup_stats) from cleanup_stats),
   'storage', (select to_jsonb(storage_stats) from storage_stats),
   'ledger', (select to_jsonb(ledger_stats) from ledger_stats),
-  'segments', (select to_jsonb(segment_stats) from segment_stats)
+  'segments', (select to_jsonb(segment_stats) from segment_stats),
+  'reviewGeneration', (select to_jsonb(review_candidate_stats) from review_candidate_stats)
 ) data;`,
-    [campaign, sourceSessionId, model, promptVersion, limit]
+    [campaign, sourceSessionId, model, promptVersion, limit, DEFAULT_RUN]
   );
   const data = result.rows[0]?.data || {};
   if (!data.session) throw httpError(404, `Sessao nao encontrada: ${sourceSessionId}`);
@@ -2245,6 +2268,10 @@ function derivePipelineControl(campaign, sourceSessionId, jobs, metrics) {
   const zeroCostNext = jobs.find(job => PIPELINE_RUNNABLE_JOB_TYPES.includes(job.type) && ['queued', 'retrying'].includes(job.status));
   const speechJob = jobs.find(job => job.type === 'cloud_detect_speech_slices' && ['queued', 'retrying', 'running', 'failed'].includes(job.status));
   const pendingTranscription = Number(metrics.workUnits?.total_candidates || 0);
+  const reviewPending = Number(metrics.segments?.pending_review || 0);
+  const reviewSegments = Number(metrics.segments?.non_empty || metrics.segments?.segments || 0);
+  const reviewClassified = Number(metrics.segments?.classified || 0);
+  const reviewPublications = Number(metrics.reviewGeneration?.publications || 0);
   const limitedMinutes = Number(metrics.limitedTranscription?.billable_minutes || 0);
   const estimatedCostUsd = Number((limitedMinutes * DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE).toFixed(6));
   const cleanupBytes = Number(metrics.cleanup?.delete_ready_bytes || 0);
@@ -2283,6 +2310,16 @@ function derivePipelineControl(campaign, sourceSessionId, jobs, metrics) {
     tone = 'gold';
     title = 'Transcricao pronta para lote';
     detail = `${pendingTranscription} unidade(s) pendente(s); lote atual estimado em US$ ${estimatedCostUsd.toFixed(6)}.`;
+  } else if (reviewPending > 0) {
+    stage = 'review_generation_ready';
+    tone = 'gold';
+    title = 'Review IA pendente';
+    detail = `${reviewPending} segmento(s) ainda precisam de classificacao e candidatos revisaveis.`;
+  } else if (reviewSegments > 0 && reviewClassified >= reviewSegments && reviewPublications === 0) {
+    stage = 'review_publication_ready';
+    tone = 'blue';
+    title = 'Gerar pacote de review';
+    detail = 'Todos os segmentos foram classificados; falta publicar o pacote revisavel no banco.';
   } else if (cleanupBytes > 0) {
     stage = 'cleanup_ready';
     tone = 'green';
@@ -2317,6 +2354,28 @@ function derivePipelineControl(campaign, sourceSessionId, jobs, metrics) {
       tone: 'primary'
     });
   }
+  if (pendingTranscription === 0 && reviewSegments > 0 && (reviewPending > 0 || reviewPublications === 0)) {
+    const selectedReviewSegments = Math.min(
+      reviewPending || reviewSegments,
+      DEFAULT_REVIEW_BATCH_SIZE * DEFAULT_REVIEW_MAX_BATCHES
+    );
+    actions.push({
+      id: 'dispatch_review_generation_dry',
+      label: 'Simular review IA',
+      action: 'dispatch_review_generation',
+      execute: false,
+      selectedReviewSegments,
+      tone: ''
+    });
+    actions.push({
+      id: 'dispatch_review_generation',
+      label: `Gerar review IA ${selectedReviewSegments} seg`,
+      action: 'dispatch_review_generation',
+      execute: true,
+      selectedReviewSegments,
+      tone: 'primary'
+    });
+  }
   if (cleanupBytes > 0) {
     actions.push({ id: 'dispatch_cleanup_dry', label: 'Simular limpeza', action: 'dispatch_storage_cleanup', execute: false, tone: '' });
     actions.push({ id: 'dispatch_cleanup', label: 'Limpar R2', action: 'dispatch_storage_cleanup', execute: true, tone: 'danger' });
@@ -2334,6 +2393,8 @@ function derivePipelineControl(campaign, sourceSessionId, jobs, metrics) {
     workflowDispatch: workflowDispatchStatus(),
     model: TRANSCRIPTION_MODEL,
     promptVersion: TRANSCRIPTION_PROMPT_VERSION,
+    reviewModel: REVIEW_GENERATION_MODEL,
+    reviewRunId: DEFAULT_RUN,
     transcriptionCostUsdPerMinute: DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE,
     estimatedBatchCostUsd: estimatedCostUsd,
     jobs,
@@ -2443,6 +2504,40 @@ async function runPipelineControlAction(req, campaign, body) {
       billableMinutes: minutes,
       dispatch,
       pipeline: await buildPipelineControlPayload(campaign, sourceSessionId, { ...body, limit })
+    };
+  }
+
+  if (action === 'dispatch_review_generation') {
+    const execute = body.execute === true;
+    if (execute && body.confirm !== 'RUN_REVIEW_AI') {
+      throw httpError(400, 'Review IA real exige confirm="RUN_REVIEW_AI".');
+    }
+    const batchSize = normalizeWorkflowLimit(body.batchSize || body.batch_size, DEFAULT_REVIEW_BATCH_SIZE, 1, 200);
+    const maxBatches = normalizeWorkflowLimit(body.maxBatches || body.max_batches, DEFAULT_REVIEW_MAX_BATCHES, 1, 20);
+    const sourceRunId = cleanText(body.sourceRunId || body.source_run_id || DEFAULT_RUN, 140) || DEFAULT_RUN;
+    const inputs = {
+      source_session_id: sourceSessionId,
+      campaign,
+      batch_size: String(batchSize),
+      max_batches: String(maxBatches),
+      execute: String(execute),
+      model: cleanText(body.model || REVIEW_GENERATION_MODEL, 80),
+      source_run_id: sourceRunId,
+      skip_publications: String(body.skipPublications === true || body.skip_publications === true)
+    };
+    const dispatch = await dispatchGithubWorkflow('review-generation-worker.yml', inputs);
+    await recordWorkflowDispatch(getPool(), campaign, sourceSessionId, 'review_generation_workflow_dispatch', inputs, dispatch, actorId);
+    return {
+      ok: true,
+      action,
+      dispatched: true,
+      dryRun: !execute,
+      sourceSessionId,
+      batchSize,
+      maxBatches,
+      sourceRunId,
+      dispatch,
+      pipeline: await buildPipelineControlPayload(campaign, sourceSessionId, body)
     };
   }
 
