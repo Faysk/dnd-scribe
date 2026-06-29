@@ -3437,7 +3437,6 @@ function jobControlStepStatus(action) {
 }
 
 async function controlProcessingJob(req, campaign, body) {
-  const action = normalizeJobControlAction(body.action || body.jobAction || body.job_action);
   const access = await requirePermission(req, campaign, {
     action: 'project.jobs.run',
     scopeType: 'project',
@@ -3445,6 +3444,7 @@ async function controlProcessingJob(req, campaign, body) {
     legacyRoles: ['owner', 'master'],
     error: 'Controlar jobs exige permissao project.jobs.run.'
   });
+  const action = normalizeJobControlAction(body.action || body.jobAction || body.job_action);
   const jobIdRaw = cleanText(body.jobId || body.job_id, 80);
   const jobId = uuidOrNull(jobIdRaw);
   if (!jobId) throw httpError(400, 'jobId invalido para controle de job.');
