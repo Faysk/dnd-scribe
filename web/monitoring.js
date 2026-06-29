@@ -173,6 +173,85 @@
     `;
   }
 
+  function monitorTriageItems(data = {}) {
+    const items = [];
+    const push = (source, item = {}, level = item.status || item.level || '') => {
+      const status = level === 'warning' ? 'attention' : level;
+      items.push({
+        source,
+        id: item.id || item.label || item.title || source,
+        label: item.label || item.title || item.id || source,
+        detail: item.description || item.detail || item.error || item.note || '',
+        status
+      });
+    };
+    (data.checks || []).forEach(item => push('API', item));
+    (data.env || []).forEach(item => push('Env', item));
+    (data.metrics || []).forEach(item => push('Metricas', item));
+    (data.readiness?.items || []).forEach(item => push('Prontidao', item));
+    (data.recommendations || []).forEach(item => push('Recomendacao', item, item.level));
+    return items;
+  }
+
+  function monitorActionText(item, data = {}) {
+    if (!item) return 'Atualizar snapshot antes de decidir.';
+    const label = `${item.source} ${item.label}`.toLowerCase();
+    if (label.includes('env') || label.includes('token') || label.includes('secret')) return 'Conferir variaveis e expiracao antes de rodar testes reais.';
+    if (label.includes('storage') || label.includes('r2') || label.includes('limpeza')) return 'Auditar storage e rodar limpeza apenas em modo confirmado.';
+    if (label.includes('job') || label.includes('pipeline')) return 'Abrir Operacao, revisar job falho e usar retry/pausa/descarte.';
+    if (label.includes('roll20') || label.includes('discord')) return 'Validar ingestao da fonte e ultima mensagem/evento recebido.';
+    if (data.deep) return 'Corrigir o item critico ou reexecutar verificacao profunda apos ajuste.';
+    return 'Rodar verificacao profunda para confirmar antes de agir.';
+  }
+
+  function renderMonitorTriage(data = {}) {
+    const items = monitorTriageItems(data);
+    const critical = items.filter(item => item.status === 'critical');
+    const attention = items.filter(item => ['attention', 'warning'].includes(item.status));
+    const healthy = items.filter(item => item.status === 'ok');
+    const unknown = items.filter(item => ['standby', 'not_checked', ''].includes(item.status || ''));
+    const focus = critical[0] || attention[0] || unknown[0] || null;
+    const triageStatus = critical.length ? 'critical' : attention.length ? 'attention' : unknown.length ? 'standby' : 'ok';
+    const title = critical.length
+      ? `${critical.length} item(ns) critico(s)`
+      : attention.length
+        ? `${attention.length} item(ns) em atencao`
+        : unknown.length
+          ? `${unknown.length} item(ns) sem teste profundo`
+          : 'Tudo saudavel no snapshot';
+    const detail = focus
+      ? `${focus.source}: ${focus.label}${focus.detail ? ` - ${focus.detail}` : ''}`
+      : 'Nenhum bloqueio operacional encontrado no snapshot atual.';
+    return `
+      <section class="monitor-triage ${tone(triageStatus)}">
+        <div class="monitor-triage-main">
+          <div>
+            <span class="label">Triagem tecnica</span>
+            <h2>${esc(title)}</h2>
+            <p>${esc(detail)}</p>
+          </div>
+          <div class="badges">
+            ${chip(`${num(critical.length)} criticos`, critical.length ? 'red' : 'green')}
+            ${chip(`${num(attention.length)} atencoes`, attention.length ? 'orange' : 'green')}
+            ${chip(`${num(healthy.length)} ok`, 'green')}
+            ${unknown.length ? chip(`${num(unknown.length)} sem teste`, 'blue') : ''}
+          </div>
+        </div>
+        <div class="monitor-triage-grid">
+          <div><span class="label">Acao segura</span><strong>${esc(monitorActionText(focus, data))}</strong></div>
+          <div><span class="label">Snapshot</span><strong>${esc(data.snapshotId || '-')}</strong></div>
+          <div><span class="label">Gerado</span><strong>${esc(data.generatedAt || '-')}</strong></div>
+          <div><span class="label">Modo</span><strong>${esc(data.deep ? 'profundo' : 'rapido')}</strong></div>
+        </div>
+        <div class="actions monitor-triage-actions">
+          <button onclick="loadMonitoring(false, true)">Atualizar rapido</button>
+          <button class="primary" onclick="loadMonitoring(true, true)">Verificacao profunda</button>
+          <button onclick="state.tab='ops'; render();">Abrir Operacao</button>
+        </div>
+      </section>
+    `;
+  }
+
   function jsonDetails(label, status, description, data, open = false) {
     return `
       <details class="monitor-detail" ${open ? 'open' : ''}>
@@ -270,6 +349,8 @@
             <button class="primary" onclick="loadMonitoring(true, true)">Verificacao profunda</button>
           </div>
         </div>
+
+        ${renderMonitorTriage(data)}
 
         <div class="monitor-overview">
           ${summaryMetric(statusLabel(data.overallStatus), 'estado geral', data.overallStatus)}

@@ -24,6 +24,54 @@
   gap: 8px;
 }
 
+.monitor-triage {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px;
+}
+
+.monitor-triage.green { border-color: #3f805b; background: #0f1914; }
+.monitor-triage.red { border-color: #8f4949; background: #1b1011; }
+.monitor-triage.orange { border-color: #9b6437; background: #1d130b; }
+.monitor-triage.gold { border-color: #8c713b; background: #1a160d; }
+.monitor-triage.blue { border-color: #426f97; background: #101822; }
+
+.monitor-triage-main {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.monitor-triage-main p {
+  margin-top: 5px;
+}
+
+.monitor-triage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.monitor-triage-grid div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.025);
+  padding: 9px;
+}
+
+.monitor-triage-grid strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.monitor-triage-actions {
+  justify-content: flex-end;
+}
+
 .monitor-metric {
   min-height: 82px;
   display: grid;
@@ -219,6 +267,7 @@
 
 @media (max-width: 1180px) {
   .monitor-overview,
+  .monitor-triage-grid,
   .monitor-readiness-grid,
   .monitor-alert-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -231,6 +280,7 @@
 
 @media (max-width: 760px) {
   .monitor-head,
+  .monitor-triage-main,
   .monitor-readiness-head,
   .monitor-detail summary,
   .monitor-log-row summary {
@@ -239,8 +289,13 @@
   }
 
   .monitor-overview,
+  .monitor-triage-grid,
   .monitor-readiness-grid,
   .monitor-alert-grid {
     grid-template-columns: 1fr;
+  }
+
+  .monitor-triage-actions {
+    justify-content: stretch;
   }
 }
