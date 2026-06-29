@@ -2268,6 +2268,7 @@ function renderTimeline() {
       </div>
 
       ${renderTimelineOverview(data, items)}
+      ${renderTimelineQualityPanel(data, items)}
       ${renderTimelineAudioDock(selected)}
 
       <section class="timeline-layout">
@@ -2669,6 +2670,97 @@ function renderTimelineTimingLegend(items) {
     <div class="timeline-confidence-legend">
       ${entries.map(([key, label]) => `<span class="${key}">${escapeHtml(label)} <strong>${counts[key]}</strong></span>`).join('')}
     </div>
+  `;
+}
+
+function timelineClusterCount(items) {
+  const lanes = new Map();
+  items.forEach(item => {
+    if (!lanes.has(item.laneId)) lanes.set(item.laneId, []);
+    lanes.get(item.laneId).push(item);
+  });
+  let count = 0;
+  lanes.forEach(laneItems => {
+    const keys = new Set([...timelineDenseClusterMap(laneItems).values()].map(cluster => `${cluster.startMs}:${cluster.endMs}:${cluster.size}`));
+    count += keys.size;
+  });
+  return count;
+}
+
+function timelineQualitySignals(data, items) {
+  const timing = timelineTimingCounts(items);
+  const speechItems = items.filter(item => item.kind === 'speech');
+  const roll20Items = items.filter(item => item.kind === 'roll20');
+  const discordItems = items.filter(item => item.kind === 'discord');
+  const audioTracks = new Set(speechItems.map(item => item.trackKey).filter(Boolean));
+  const recordingFiles = Array.isArray(data?.recordingFiles) ? data.recordingFiles : [];
+  const clusters = timelineClusterCount(items);
+  const signals = [
+    {
+      key: 'anchor',
+      label: 'Ancora',
+      value: data?.session?.startedAt ? 'ativa' : 'faltando',
+      tone: data?.session?.startedAt ? 'ok' : 'warn'
+    },
+    {
+      key: 'speech',
+      label: 'Falas',
+      value: `${speechItems.length}`,
+      tone: speechItems.length ? 'ok' : 'warn'
+    },
+    {
+      key: 'audio',
+      label: 'Audio',
+      value: `${audioTracks.size || recordingFiles.length} faixas`,
+      tone: audioTracks.size || recordingFiles.length ? 'ok' : 'warn'
+    },
+    {
+      key: 'external',
+      label: 'Eventos externos',
+      value: `${roll20Items.length + discordItems.length}`,
+      tone: roll20Items.length || discordItems.length ? 'ok' : 'info'
+    },
+    {
+      key: 'estimated',
+      label: 'Estimados',
+      value: `${timing.estimated || 0}`,
+      tone: timing.estimated ? 'info' : 'ok'
+    },
+    {
+      key: 'unsynced',
+      label: 'Sem tempo',
+      value: `${timing.unsynced || 0}`,
+      tone: timing.unsynced ? 'warn' : 'ok'
+    },
+    {
+      key: 'clusters',
+      label: 'Clusters',
+      value: `${clusters}`,
+      tone: clusters ? 'info' : 'ok'
+    }
+  ];
+  const warnings = signals.filter(signal => signal.tone === 'warn').length;
+  const readiness = warnings ? 'atenção' : (speechItems.length && (audioTracks.size || recordingFiles.length) ? 'review pronta' : 'parcial');
+  return { signals, readiness, warnings };
+}
+
+function renderTimelineQualityPanel(data, items) {
+  const quality = timelineQualitySignals(data, items);
+  return `
+    <section class="panel timeline-quality-panel">
+      <div>
+        <span class="label">Qualidade da timeline</span>
+        <h2>${escapeHtml(quality.readiness)}</h2>
+      </div>
+      <div class="timeline-quality-signals">
+        ${quality.signals.map(signal => `
+          <div class="${escapeHtml(signal.tone)}">
+            <span class="label">${escapeHtml(signal.label)}</span>
+            <strong>${escapeHtml(signal.value)}</strong>
+          </div>
+        `).join('')}
+      </div>
+    </section>
   `;
 }
 
