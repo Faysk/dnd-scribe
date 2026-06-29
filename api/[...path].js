@@ -9,6 +9,7 @@ const {
   summarizeRoll20Events
 } = require('../lib/roll20-commands');
 const { buildMonitoringPayload } = require('../lib/monitoring');
+const { notifyDiscord } = require('../lib/discord');
 const { markJobStep } = require('../lib/job-steps');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
@@ -2544,6 +2545,46 @@ limit $3::int;`,
   };
 }
 
+
+async function notifyPipelineOps(event = {}) {
+  try {
+    return await notifyDiscord({
+      target: 'ops',
+      fallbackWebhook: true,
+      ...event
+    });
+  } catch (error) {
+    console.warn('pipeline_ops_notification_failed', error.message || String(error));
+    return { sent: false, error: error.message || String(error) };
+  }
+}
+
+function workflowRunField(dispatch = {}) {
+  const run = dispatch.run || {};
+  if (!run.id && !run.url) return 'run ainda nao localizado';
+  return [
+    run.id ? `#${run.id}` : '',
+    run.status || '',
+    run.conclusion || '',
+    run.url || ''
+  ].filter(Boolean).join(' | ');
+}
+
+async function notifyWorkflowDispatch(action, sourceSessionId, dispatch, actorId, extra = {}) {
+  return notifyPipelineOps({
+    title: 'Worker GitHub Actions disparado',
+    status: 'ok',
+    sourceSessionId,
+    description: cleanText(`Acao: ${action}. Workflow: ${dispatch?.workflow || 'desconhecido'}.`, 500),
+    costUsd: extra.costUsd,
+    fields: [
+      { name: 'workflow', value: dispatch?.workflow || 'desconhecido', inline: true },
+      { name: 'run', value: workflowRunField(dispatch), inline: false },
+      { name: 'ator', value: actorId || 'unknown', inline: true }
+    ]
+  });
+}
+
 async function recordWorkflowDispatch(db, campaign, sourceSessionId, jobType, input, dispatch, actorId) {
   if (!sourceSessionId) return null;
   const result = await db.query(
@@ -2955,6 +2996,7 @@ async function runPipelineControlAction(req, campaign, body) {
     const dispatch = await dispatchGithubWorkflow('speech-slices-worker.yml', inputs);
     const db = getPool();
     await markSpeechWorkflowDispatched(db, campaign, sourceSessionId, dispatch, actorId);
+    if (write) await notifyWorkflowDispatch(action, sourceSessionId, dispatch, actorId);
     return {
       ok: true,
       action,
@@ -2990,6 +3032,7 @@ async function runPipelineControlAction(req, campaign, body) {
     };
     const dispatch = await dispatchGithubWorkflow('transcription-worker.yml', inputs);
     await recordWorkflowDispatch(getPool(), campaign, sourceSessionId, 'transcription_workflow_dispatch', inputs, dispatch, actorId);
+    if (execute) await notifyWorkflowDispatch(action, sourceSessionId, dispatch, actorId, { costUsd: estimatedCostUsd });
     return {
       ok: true,
       action,
@@ -3023,6 +3066,7 @@ async function runPipelineControlAction(req, campaign, body) {
     };
     const dispatch = await dispatchGithubWorkflow('review-generation-worker.yml', inputs);
     await recordWorkflowDispatch(getPool(), campaign, sourceSessionId, 'review_generation_workflow_dispatch', inputs, dispatch, actorId);
+    if (execute) await notifyWorkflowDispatch(action, sourceSessionId, dispatch, actorId);
     return {
       ok: true,
       action,
@@ -3052,6 +3096,7 @@ async function runPipelineControlAction(req, campaign, body) {
     };
     const dispatch = await dispatchGithubWorkflow('storage-cleanup-worker.yml', inputs);
     await recordWorkflowDispatch(getPool(), campaign, sourceSessionId, 'storage_cleanup_workflow_dispatch', inputs, dispatch, actorId);
+    if (execute) await notifyWorkflowDispatch(action, sourceSessionId, dispatch, actorId);
     return {
       ok: true,
       action,
@@ -3526,6 +3571,19 @@ where job_id = $1::uuid
     });
 
     await client.query('commit');
+    await notifyPipelineOps({
+      title: `Job ${jobControlLabel(action)}`,
+      status: action === 'discard' ? 'warning' : 'ok',
+      sourceSessionId: job.source_session_id || null,
+      jobId,
+      description: cleanText(`Job ${job.job_type} recebeu acao ${action}.`, 500),
+      fields: [
+        { name: 'acao', value: action, inline: true },
+        { name: 'estado', value: operatorState, inline: true },
+        { name: 'ator', value: actor, inline: true },
+        { name: 'motivo', value: reason, inline: false }
+      ]
+    });
     return {
       ok: true,
       action,
