@@ -1313,6 +1313,35 @@ body.auth-locked .music-dock { display: none; }
   display: block;
   color: var(--muted);
 }
+.timeline-audio-dock {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.2fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+.timeline-audio-dock.muted {
+  opacity: .72;
+}
+.timeline-audio-summary {
+  display: grid;
+  gap: 3px;
+}
+.timeline-audio-control {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.timeline-audio-control audio {
+  width: 100%;
+  min-height: 36px;
+}
+.timeline-audio-control p {
+  margin: 0;
+  color: var(--muted);
+}
+.timeline-audio-control .error-text {
+  color: var(--red);
+}
 .source-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1350,6 +1379,9 @@ body.auth-locked .music-dock { display: none; }
   }
   .timeline-overview-kpis {
     justify-content: start;
+  }
+  .timeline-audio-dock {
+    grid-template-columns: 1fr;
   }
   .discord-sync-actions,
   .discord-window-actions {

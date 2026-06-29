@@ -2258,6 +2258,7 @@ function renderTimeline() {
       </div>
 
       ${renderTimelineOverview(data, items)}
+      ${renderTimelineAudioDock(selected)}
 
       <section class="timeline-layout">
         <div class="timeline-main">
@@ -2804,6 +2805,48 @@ function renderTimelineEvents(items) {
   `;
 }
 
+function renderTimelineAudioDock(item) {
+  if (!item) return '';
+  const canPlay = item.kind === 'speech' && item.trackKey;
+  const active = state.audio.segmentId === item.id;
+  const timing = timelineTimingConfidence(item);
+  if (!canPlay) {
+    return `
+      <section class="panel timeline-audio-dock muted">
+        <div>
+          <span class="label">Audio do item selecionado</span>
+          <strong>${escapeHtml(item.title || item.kind)}</strong>
+          <small>Este item nao possui faixa de audio direta.</small>
+        </div>
+        <div class="badges">${badge(item.kind, item.kind === 'roll20' ? 'green' : item.kind === 'discord' ? 'violet' : 'blue')}${badge(timing.label, timing.tone)}</div>
+      </section>
+    `;
+  }
+  const loading = active && state.audio.loading;
+  const error = active && state.audio.error;
+  const ready = active && state.audio.url;
+  const fragment = ready ? `${state.audio.url}#t=${Math.floor(state.audio.startSeconds)}` : '';
+  return `
+    <section class="panel timeline-audio-dock">
+      <div class="timeline-audio-summary">
+        <span class="label">Audio do item selecionado</span>
+        <strong>${escapeHtml(item.title || item.trackKey || 'Fala')}</strong>
+        <small>${escapeHtml(item.trackKey)} / ${escapeHtml(fmtDuration(item.startMs))} / ${escapeHtml(timing.label)}</small>
+      </div>
+      <div class="timeline-audio-control">
+        ${loading ? '<p>Gerando URL assinada...</p>' : ''}
+        ${error ? `<p class="error-text">${escapeHtml(state.audio.error)}</p>` : ''}
+        ${ready ? `<audio id="timelineDockAudio" controls preload="metadata" src="${escapeHtml(fragment)}"></audio>` : ''}
+        ${ready ? '' : `<button ${loading ? 'disabled' : ''} onclick="loadTimelineAudio('${escapeHtml(item.id)}')">${loading ? 'Carregando...' : 'Ouvir trecho'}</button>`}
+      </div>
+      <div class="badges">
+        ${ready ? badge('R2 assinado', 'green') : badge('sob demanda', 'blue')}
+        ${ready && state.audio.file?.sizeBytes ? badge(`${Math.round(state.audio.file.sizeBytes / 1024 / 1024)} MB`, 'blue') : ''}
+      </div>
+    </section>
+  `;
+}
+
 function selectTimelineNearest(startMs, endMs) {
   const items = filteredTimelineItems();
   const target = (Number(startMs || 0) + Number(endMs || 0)) / 2;
@@ -3068,7 +3111,7 @@ async function loadTimelineAudio(id) {
     };
     render();
     window.setTimeout(() => {
-      const player = document.getElementById('segmentAudio');
+      const player = document.getElementById('timelineDockAudio') || document.getElementById('segmentAudio');
       if (!player) return;
       const seekAndPlay = () => {
         try {
