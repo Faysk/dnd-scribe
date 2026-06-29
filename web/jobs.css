@@ -118,6 +118,45 @@
   padding-top: 10px;
 }
 
+.workflow-runs {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.workflow-runs.muted {
+  color: var(--muted);
+}
+
+.workflow-runs-head,
+.workflow-run-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.workflow-run-list {
+  display: grid;
+  gap: 6px;
+}
+
+.workflow-run-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #070a0f;
+  padding: 8px;
+}
+
+.workflow-run-row strong,
+.workflow-run-row small,
+.workflow-run-row p {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
 .job-step-list {
   display: grid;
   gap: 6px;
@@ -246,7 +285,9 @@
   }
 
   .track-progress-head,
-  .track-row {
+  .track-row,
+  .workflow-runs-head,
+  .workflow-run-row {
     display: grid;
     grid-template-columns: 1fr;
   }

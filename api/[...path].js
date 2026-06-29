@@ -2463,6 +2463,87 @@ async function dispatchGithubWorkflow(workflowFile, inputs) {
   };
 }
 
+
+function extractWorkflowDispatch(output = {}) {
+  return output.githubWorkflow || output.dispatch || output.workflowDispatch || null;
+}
+
+function workflowRunSummary(row, dispatch, live = null, refreshError = '') {
+  const run = live || dispatch?.run || {};
+  const runId = run.id || dispatch?.runId || null;
+  const repository = dispatch?.repository || GITHUB_WORKFLOW_REPO;
+  return {
+    jobId: row.id,
+    jobType: row.job_type,
+    jobStatus: row.status,
+    jobCreatedAt: row.created_at,
+    workflow: dispatch?.workflow || run.name || '',
+    repository,
+    ref: dispatch?.ref || GITHUB_WORKFLOW_REF,
+    requestedAt: dispatch?.requestedAt || row.created_at,
+    runId,
+    name: run.name || dispatch?.workflow || row.job_type,
+    status: run.status || null,
+    conclusion: run.conclusion || null,
+    createdAt: run.created_at || run.createdAt || null,
+    updatedAt: run.updated_at || null,
+    url: run.html_url || run.url || (runId ? `https://github.com/${repository}/actions/runs/${runId}` : ''),
+    live: Boolean(live),
+    refreshError: refreshError || null
+  };
+}
+
+async function workflowRunsForSession(db, campaign, sourceSessionId, options = {}) {
+  const limit = normalizeWorkflowLimit(options.workflowRunLimit || options.limit, 5, 1, 10);
+  const status = workflowDispatchStatus();
+  const result = await db.query(
+    `
+select pj.id::text, pj.job_type, pj.status, pj.output, pj.created_at
+from processing_jobs pj
+join sessions s on s.id = pj.session_id
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1
+  and s.source_session_id = $2
+  and (
+    pj.output ? 'dispatch'
+    or pj.output ? 'githubWorkflow'
+    or pj.output ? 'workflowDispatch'
+    or pj.job_type in (
+      'transcription_workflow_dispatch',
+      'review_generation_workflow_dispatch',
+      'storage_cleanup_workflow_dispatch'
+    )
+  )
+order by pj.created_at desc
+limit $3::int;`,
+    [campaign, sourceSessionId, limit]
+  );
+  const rows = result.rows || [];
+  const runs = [];
+  for (const row of rows) {
+    const dispatch = extractWorkflowDispatch(row.output || {});
+    if (!dispatch) continue;
+    const runId = dispatch.run?.id || dispatch.runId || null;
+    let live = null;
+    let refreshError = '';
+    if (status.configured && runId) {
+      try {
+        live = await githubApi(`/repos/${dispatch.repository || GITHUB_WORKFLOW_REPO}/actions/runs/${runId}`);
+      } catch (error) {
+        refreshError = error.message || String(error);
+      }
+    }
+    runs.push(workflowRunSummary(row, dispatch, live, refreshError));
+  }
+  return {
+    configured: status.configured,
+    repository: status.repository,
+    ref: status.ref,
+    refreshedAt: new Date().toISOString(),
+    runs
+  };
+}
+
 async function recordWorkflowDispatch(db, campaign, sourceSessionId, jobType, input, dispatch, actorId) {
   if (!sourceSessionId) return null;
   const result = await db.query(
@@ -2819,11 +2900,15 @@ async function buildPipelineControlPayload(campaign, sourceSessionId, options = 
   if (!cleanSource) throw httpError(400, 'sourceSessionId obrigatorio para controle de pipeline.');
   const limit = normalizeWorkflowLimit(options.limit || options.transcriptionLimit, DEFAULT_TRANSCRIPTION_LIMIT, 1, 100);
   const db = getPool();
-  const [jobs, metrics] = await Promise.all([
+  const [jobs, metrics, workflowRuns] = await Promise.all([
     listJobs(campaign, cleanSource),
-    pipelineControlMetrics(db, campaign, cleanSource, limit)
+    pipelineControlMetrics(db, campaign, cleanSource, limit),
+    workflowRunsForSession(db, campaign, cleanSource, { workflowRunLimit: options.workflowRunLimit || 5 })
   ]);
-  return derivePipelineControl(campaign, cleanSource, jobs, metrics);
+  return {
+    ...derivePipelineControl(campaign, cleanSource, jobs, metrics),
+    workflowRuns
+  };
 }
 
 async function runPipelineControlAction(req, campaign, body) {

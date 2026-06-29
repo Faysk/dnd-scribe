@@ -277,7 +277,61 @@
           ${pipelineMetric('ativo R2', formatBytes(storage.active_bytes || 0), 'blue')}
         </div>
         ${renderPipelineActionBar(actions, variant, github.configured)}
+        ${renderWorkflowRuns(control.workflowRuns)}
         ${renderPipelineControlDetail(control)}
+      </div>
+    `;
+  }
+
+  function workflowTone(run = {}) {
+    if (run.conclusion === 'success') return 'green';
+    if (['failure', 'cancelled', 'timed_out'].includes(run.conclusion || '')) return 'red';
+    if (['in_progress', 'queued', 'requested', 'waiting'].includes(run.status || '')) return 'orange';
+    return run.refreshError ? 'red' : 'blue';
+  }
+
+  function renderWorkflowRuns(summary = null) {
+    const runs = Array.isArray(summary?.runs) ? summary.runs : [];
+    if (!runs.length && !summary?.configured) return '';
+    if (!runs.length) {
+      return `
+        <div class="workflow-runs muted">
+          <div>
+            <span class="label">GitHub Actions</span>
+            <strong>Nenhum worker disparado</strong>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="workflow-runs">
+        <div class="workflow-runs-head">
+          <div>
+            <span class="label">GitHub Actions</span>
+            <strong>${runs.length} run(s) recentes</strong>
+          </div>
+          <div class="badges">
+            ${chip(summary.configured ? 'token ok' : 'token faltando', summary.configured ? 'green' : 'red')}
+            ${chip(summary.ref || 'main', 'blue')}
+          </div>
+        </div>
+        <div class="workflow-run-list">
+          ${runs.map(run => `
+            <div class="workflow-run-row">
+              <div>
+                <strong>${esc(run.workflow || run.name || run.jobType || 'workflow')}</strong>
+                <small>${esc(run.jobType || '')}${run.runId ? ` · #${esc(run.runId)}` : ''}${run.updatedAt ? ` · ${esc(run.updatedAt)}` : ''}</small>
+                ${run.refreshError ? `<p>${esc(String(run.refreshError).slice(0, 180))}</p>` : ''}
+              </div>
+              <div class="badges">
+                ${chip(run.status || 'registrado', workflowTone(run))}
+                ${run.conclusion ? chip(run.conclusion, workflowTone(run)) : ''}
+                ${run.live ? chip('live', 'green') : chip('cache', 'gold')}
+              </div>
+              ${run.url ? `<a class="button-link" href="${esc(run.url)}" target="_blank" rel="noopener">Abrir</a>` : ''}
+            </div>
+          `).join('')}
+        </div>
       </div>
     `;
   }
