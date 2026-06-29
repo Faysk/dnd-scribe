@@ -313,6 +313,41 @@ where id = {sql_literal(job_id)}::uuid;
     )
 
 
+def supersede_failed_review_jobs(
+    database_url: str,
+    session: dict[str, Any],
+    source_run_id: str,
+    winning_job_id: str,
+) -> int:
+    data = run_json(
+        database_url,
+        f"""
+with updated as (
+  update processing_jobs
+  set status = 'cancelled',
+      output = coalesce(output, '{{}}'::jsonb) || {sql_json({
+          "workerStatus": "superseded_by_success",
+          "supersededByJobId": winning_job_id,
+          "supersededAt": dt.datetime.now(dt.UTC).isoformat(),
+          "source_run_id": source_run_id,
+      })},
+      finished_at = coalesce(finished_at, now())
+  where session_id = {sql_literal(session['id'])}::uuid
+    and job_type = 'ai_review_generation'
+    and status = 'failed'
+    and id <> {sql_literal(winning_job_id)}::uuid
+    and (
+      input->>'source_run_id' = {sql_literal(source_run_id)}
+      or output->>'source_run_id' = {sql_literal(source_run_id)}
+    )
+  returning id
+)
+select json_build_object('superseded', count(*)) from updated;
+""",
+    ) or {}
+    return int(data.get("superseded") or 0)
+
+
 def update_session_review_state(
     database_url: str,
     session: dict[str, Any],
@@ -501,12 +536,16 @@ def main() -> int:
             after_stats = fetch_stats(database_url, args.campaign, args.source_session_id, source_run_id)
 
         update_session_review_state(database_url, session, source_run_id, after_stats, complete)
+        superseded_failed_jobs = 0
+        if complete:
+            superseded_failed_jobs = supersede_failed_review_jobs(database_url, session, source_run_id, job_id)
         output = {
             **dry_payload,
             "processed_batches": processed_batches,
             "after": after_stats,
             "complete": complete,
             "publications_built": publications_built,
+            "superseded_failed_jobs": superseded_failed_jobs,
             "workerStatus": "succeeded",
         }
         finish_job(database_url, job_id, "succeeded", output)

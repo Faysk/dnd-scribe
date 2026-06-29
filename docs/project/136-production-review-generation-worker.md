@@ -50,6 +50,8 @@ python3 tools/run_review_generation_job.py craig-BIRq3nIWB4v9 \
 
 Quando `pending = 0`, o worker tambem roda `tools/build_session_publications.py --update-db` e atualiza a sessao para `ready_for_review`, preservando sessoes ja `approved`, `published` ou `archived`.
 
+Ao completar uma sessao, o worker marca tentativas antigas `failed` do mesmo `source_run_id` como `cancelled` com `workerStatus=superseded_by_success`. Isso preserva o historico da falha, mas impede que o monitoramento trate um timeout antigo como problema ativo depois que uma tentativa posterior terminou com sucesso.
+
 ## Painel
 
 O painel de pipeline agora mostra:
