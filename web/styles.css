@@ -1143,7 +1143,11 @@ body.auth-locked .music-dock { display: none; }
   display: grid;
   grid-template-columns: 160px minmax(0, 1fr);
   gap: 8px;
-  min-height: 54px;
+  min-height: var(--lane-track-height, 54px);
+}
+.timeline-lane.has-selection .timeline-lane-label {
+  border-color: #8d6834;
+  background: #19160f;
 }
 .timeline-lane-label {
   display: grid;
@@ -1164,7 +1168,7 @@ body.auth-locked .music-dock { display: none; }
 }
 .timeline-lane-track {
   position: relative;
-  min-height: 54px;
+  min-height: var(--lane-track-height, 54px);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: repeating-linear-gradient(
@@ -1180,14 +1184,14 @@ body.auth-locked .music-dock { display: none; }
   top: 9px;
   min-width: 12px;
   max-width: 100%;
-  height: 34px;
-  min-height: 34px;
+  height: 24px;
+  min-height: 24px;
   padding: 0 7px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   border-radius: 6px;
-  font-size: .78rem;
+  font-size: .74rem;
   text-align: left;
 }
 .timeline-block.speech {

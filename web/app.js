@@ -2574,18 +2574,35 @@ function renderTimelineLane(lane, laneItems, duration) {
   if (stats.speechMs) meta.push(`${fmtDuration(stats.speechMs)} fala`);
   if (stats.events) meta.push(`${stats.events} eventos`);
   if (stats.overlaps) meta.push(`${stats.overlaps} sobreposicoes`);
+  const layout = timelineLaneLayout(laneItems);
+  const trackHeight = Math.max(54, 14 + (layout.rowCount * 28));
+  const hasSelection = laneItems.some(item => item.id === state.timeline.selectedItemId);
   return `
-    <div class="timeline-lane">
+    <div class="timeline-lane ${hasSelection ? 'has-selection' : ''}" style="--lane-track-height:${trackHeight}px">
       <div class="timeline-lane-label">
         <strong>${escapeHtml(lane.label || lane.id)}</strong>
         <small>${escapeHtml(lane.subtitle || lane.trackKey || lane.type || '')}</small>
         <small class="timeline-lane-metrics">${escapeHtml(meta.join(' / '))}</small>
       </div>
       <div class="timeline-lane-track">
-        ${laneItems.map(item => renderTimelineBlock(item, duration)).join('')}
+        ${layout.items.map(item => renderTimelineBlock(item, duration)).join('')}
       </div>
     </div>
   `;
+}
+
+function timelineLaneLayout(laneItems) {
+  const activeRows = [];
+  const items = [...laneItems]
+    .map((item, originalIndex) => ({ ...item, _range: timelineItemRange(item), _originalIndex: originalIndex }))
+    .sort((a, b) => a._range.start - b._range.start || a._range.end - b._range.end || a._originalIndex - b._originalIndex)
+    .map(item => {
+      const row = activeRows.findIndex(end => end <= item._range.start);
+      const targetRow = row >= 0 ? row : activeRows.length;
+      activeRows[targetRow] = item._range.end;
+      return { ...item, timelineRow: targetRow };
+    });
+  return { items, rowCount: Math.max(1, activeRows.length) };
 }
 
 function timelineLaneStats(laneItems) {
@@ -2594,7 +2611,7 @@ function timelineLaneStats(laneItems) {
     count: laneItems.length,
     speechMs: speech.reduce((sum, item) => sum + Math.max(0, timelineItemRange(item).end - timelineItemRange(item).start), 0),
     events: laneItems.filter(item => item.kind !== 'speech').length,
-    overlaps: timelineOverlapCount(speech)
+    overlaps: timelineOverlapCount(laneItems)
   };
 }
 
@@ -2622,8 +2639,10 @@ function renderTimelineBlock(item, duration) {
     : Math.max(.8, Math.min(100 - left, ((Math.max(400, end - start) / duration) * 100)));
   const selected = item.id === state.timeline.selectedItemId;
   const title = item.kind === 'roll20' ? eventTypeLabel(item.title) : item.title;
+  const row = Math.max(0, Number(item.timelineRow || 0));
+  const top = 9 + (row * 28);
   return `
-    <button class="timeline-block ${item.kind} ${selected ? 'selected' : ''}" style="left:${left}%;width:${width}%;" onclick="selectTimelineItem('${escapeHtml(item.id)}')" title="${escapeHtml(item.text || title)}">
+    <button class="timeline-block ${item.kind} ${selected ? 'selected' : ''}" style="left:${left}%;width:${width}%;top:${top}px;" onclick="selectTimelineItem('${escapeHtml(item.id)}')" title="${escapeHtml(item.text || title)}">
       <span>${escapeHtml(title || item.kind)}</span>
     </button>
   `;
