@@ -19,6 +19,7 @@ const CRAIG_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
 const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_SYNC_MAX_MESSAGES = 100;
+const DISCORD_SYNC_MAX_PAGES = 10;
 const SESSION_TIME_ZONE = process.env.DND_SESSION_TIME_ZONE || 'Europe/London';
 const DEFAULT_CHUNK_SECONDS = 600;
 const PIPELINE_RUNNABLE_JOB_TYPES = [
@@ -1088,6 +1089,16 @@ function roll20SourceEventId(event) {
 }
 
 function roll20EventText(event) {
+  const dice = event.diceRoll || event.dice_roll || event.payload?.diceRoll || null;
+  if (dice?.formula || (dice?.result !== null && dice?.result !== undefined)) {
+    return cleanText([
+      event.speaker ? `${event.speaker}:` : '',
+      'rolagem',
+      dice.formula || '',
+      dice.result !== null && dice.result !== undefined ? `= ${dice.result}` : '',
+      event.text || event.rawMessage || ''
+    ].filter(Boolean).join(' '), 3000);
+  }
   return cleanText(
     event.text
       || event.args?.motivo
@@ -1097,6 +1108,23 @@ function roll20EventText(event) {
       || event.rawCommand,
     3000
   ) || null;
+}
+
+function roll20DiceTimelineTitle(event = {}) {
+  const dice = event.payload?.diceRoll || event.diceRoll || null;
+  if (!dice) return null;
+  return [dice.formula || 'dados', dice.result !== null && dice.result !== undefined ? `= ${dice.result}` : ''].filter(Boolean).join(' ');
+}
+
+function roll20CreatedAt(event = {}, session = {}, raw = {}) {
+  const explicit = cleanText(event.createdAtRoll20 || event.created_at_roll20 || raw.receivedAt || raw.received_at, 80);
+  if (explicit) return explicit;
+  const started = dateMs(session.started_at || session.startedAt);
+  const offset = event.approxStartMs ?? event.approx_start_ms;
+  if (started !== null && offset !== null && offset !== undefined && Number.isFinite(Number(offset))) {
+    return new Date(started + Number(offset)).toISOString();
+  }
+  return null;
 }
 
 async function persistRoll20Events(db, campaign, payload, raw) {
@@ -1123,8 +1151,16 @@ limit 1;`,
 
   for (const event of persistable) {
     const sourceEventId = cleanText(event.sourceEventId || event.source_event_id || roll20SourceEventId(event), 180);
+    const estimatedCreatedAt = roll20CreatedAt(event, session, raw);
     const eventPayload = {
       ...event,
+      timeline: {
+        approxStartMs: event.approxStartMs ?? event.approx_start_ms ?? null,
+        estimatedCreatedAt,
+        timingMode: event.approxStartMs !== null && event.approxStartMs !== undefined
+          ? 'roll20_clock_from_session_start'
+          : 'roll20_unsynced'
+      },
       import: {
         source: payload.source,
         sourceSessionId,
@@ -1164,7 +1200,7 @@ returning id, source_event_id, event_type, roll20_who, character_name, text;`,
         JSON.stringify(eventPayload),
         event.rawLine || null,
         sourceEventId,
-        raw.receivedAt || raw.received_at || null,
+        estimatedCreatedAt,
         event.approxStartMs ?? event.approx_start_ms ?? null
       ]
     );
@@ -1334,6 +1370,10 @@ function discordBotToken() {
   return cleanText(process.env.DISCORD_BOT_TOKEN || '', 500);
 }
 
+function discordApiUserAgent() {
+  return cleanText(process.env.DISCORD_USER_AGENT || 'DnD-Scribe (https://dnd.faysk.dev, 0.1)', 240);
+}
+
 function discordChannelIdForTarget(target = 'dnd') {
   const normalized = cleanText(target, 40).toLowerCase();
   if (normalized === 'recording' || normalized === 'recordings' || normalized === 'gravacoes') {
@@ -1426,7 +1466,7 @@ function discordSyncWindow(rawMessages = [], acceptedMessages = [], { channelId 
   };
 }
 
-function normalizedDiscordMessage(message = {}, { sessionStartedAt = null, includeBeforeStart = false } = {}) {
+function normalizedDiscordMessage(message = {}, { sessionStartedAt = null, sessionEndedAt = null, includeBeforeStart = false, includeAfterEnd = false } = {}) {
   const id = cleanText(message.id, 80);
   const createdAt = cleanText(message.timestamp || message.created_at || message.createdAt, 80);
   const author = message.author || {};
@@ -1442,6 +1482,7 @@ function normalizedDiscordMessage(message = {}, { sessionStartedAt = null, inclu
     ? Math.round(createdMs - sessionStartedAt)
     : null;
   if (offsetMs !== null && offsetMs < 0 && !includeBeforeStart) return null;
+  if (createdMs !== null && sessionEndedAt !== null && createdMs > sessionEndedAt && !includeAfterEnd) return null;
   const startMs = offsetMs !== null && offsetMs >= 0 ? offsetMs : null;
 
   return {
@@ -1480,6 +1521,15 @@ function normalizedDiscordMessage(message = {}, { sessionStartedAt = null, inclu
   };
 }
 
+function sessionEndMs(session = {}, fallbackStartedMs = null) {
+  const explicitEnd = dateMs(session.ended_at || session.endedAt);
+  if (explicitEnd !== null) return explicitEnd;
+  const started = fallbackStartedMs ?? dateMs(session.started_at || session.startedAt);
+  const duration = Number(session.duration_ms || session.durationMs || 0);
+  if (started !== null && Number.isFinite(duration) && duration > 0) return started + duration;
+  return null;
+}
+
 async function fetchDiscordChannelMessages(channelId, options = {}) {
   const token = discordBotToken();
   if (!token) throw httpError(409, 'DISCORD_BOT_TOKEN ausente no ambiente de producao.');
@@ -1494,7 +1544,8 @@ async function fetchDiscordChannelMessages(channelId, options = {}) {
   const response = await fetch(`${DISCORD_API}/channels/${channelId}/messages?${query.toString()}`, {
     headers: {
       Authorization: `Bot ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'User-Agent': discordApiUserAgent()
     }
   });
   const body = await response.text().catch(() => '');
@@ -1514,23 +1565,84 @@ async function fetchDiscordChannelMessages(channelId, options = {}) {
   return parsed;
 }
 
+async function fetchDiscordChannelMessagePages(channelId, options = {}) {
+  const limit = limitedInteger(options.limit, 50, 1, DISCORD_SYNC_MAX_MESSAGES);
+  const maxPages = limitedInteger(options.maxPages, 1, 1, DISCORD_SYNC_MAX_PAGES);
+  const raw = [];
+  const seen = new Set();
+  const pages = [];
+  let before = cleanText(options.before || '', 80);
+  for (let index = 0; index < maxPages; index += 1) {
+    const page = await fetchDiscordChannelMessages(channelId, {
+      limit,
+      before: before || undefined
+    });
+    const refs = discordMessageRefs(page);
+    pages.push(discordSyncWindow(page, page, {
+      channelId,
+      limit,
+      cursor: { mode: before ? 'before' : 'latest', messageId: before || null }
+    }));
+    for (const message of page) {
+      const id = cleanText(message.id, 80);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      raw.push(message);
+    }
+    const oldest = refs[0] || null;
+    before = oldest?.id || '';
+    const oldestMs = dateMs(oldest?.createdAt);
+    if (!before || page.length < limit) break;
+    if (options.sessionStartedAt !== null && oldestMs !== null && oldestMs < options.sessionStartedAt) break;
+  }
+  return { messages: raw, pages };
+}
+
 async function persistDiscordMessages(db, campaign, sourceSessionId, body, access) {
   const channelId = cleanText(body.channelId || body.channel_id || discordChannelIdForTarget(body.channel || body.target || 'dnd'), 80);
   const limit = limitedInteger(body.limit, 50, 1, DISCORD_SYNC_MAX_MESSAGES);
+  const maxPages = limitedInteger(body.maxPages || body.max_pages, 1, 1, DISCORD_SYNC_MAX_PAGES);
+  const syncMode = cleanText(body.syncMode || body.sync_mode || body.mode || 'page', 40).toLowerCase();
   const cursor = discordCursorOptions(body);
   const session = await data(`${targetCte()} select row_to_json(target) data from target;`, [campaign, sourceSessionId], db);
   if (!session) throw httpError(404, `Sessao nao encontrada: ${sourceSessionId}`);
 
   const suppliedMessages = Array.isArray(body.messages) ? body.messages : null;
-  const rawMessages = suppliedMessages || await fetchDiscordChannelMessages(channelId, {
-    limit,
-    ...cursor.query
-  });
-
   const sessionStartedAt = dateMs(body.sessionStartedAt || body.session_started_at || session.started_at);
+  const sessionEndedAt = sessionEndMs(session, sessionStartedAt);
+  let pages = [];
+  let rawMessages = suppliedMessages || null;
+  if (!rawMessages) {
+    if (['session', 'session_window', 'full_session'].includes(syncMode) && cursor.mode === 'latest') {
+      const paged = await fetchDiscordChannelMessagePages(channelId, {
+        limit,
+        maxPages,
+        sessionStartedAt
+      });
+      rawMessages = paged.messages;
+      pages = paged.pages;
+    } else {
+      rawMessages = await fetchDiscordChannelMessages(channelId, {
+        limit,
+        ...cursor.query
+      });
+    }
+  }
+
   const includeBeforeStart = body.includeBeforeStart === true || body.include_before_start === true;
+  const includeAfterEnd = body.includeAfterEnd === true || body.include_after_end === true;
+  const visibleRawMessages = rawMessages.filter(message => {
+    const text = cleanText(message.content || message.text || '', 20);
+    const attachments = Array.isArray(message.attachments) ? message.attachments.length : 0;
+    return Boolean(text || attachments);
+  }).length;
   const messages = rawMessages
-    .map(message => normalizedDiscordMessage({ ...message, channel_id: message.channel_id || channelId }, { sessionStartedAt, includeBeforeStart }))
+    .map(message => normalizedDiscordMessage({ ...message, channel_id: message.channel_id || channelId }, {
+      sessionStartedAt,
+      sessionEndedAt,
+      includeBeforeStart,
+      includeAfterEnd
+    }))
     .filter(Boolean)
     .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 
@@ -1544,21 +1656,28 @@ async function persistDiscordMessages(db, campaign, sourceSessionId, body, acces
     campaignSlug: campaign,
     sourceSessionId,
     channelId,
+    syncMode,
+    maxPages,
     fetched: rawMessages.length,
     accepted: messages.length,
     skipped: rawMessages.length - messages.length,
     persisted: 0,
     updated: 0,
     sessionStartedAt: session.started_at || null,
+    sessionEndedAt: session.ended_at || (sessionEndedAt ? new Date(sessionEndedAt).toISOString() : null),
     includeBeforeStart,
+    includeAfterEnd,
     cursor: {
       mode: cursor.mode,
       messageId: cursor.messageId
     },
+    pages,
     window: discordSyncWindow(rawMessages, messages, { channelId, limit, cursor }),
     timing: sessionStartedAt === null ? 'unsynced' : 'synced_from_session_started_at',
     warning: rawMessages.length && !messages.length
-      ? 'Discord retornou mensagens sem texto/anexo. Valide Message Content Intent ou use o comando de contexto para salvar mensagens importantes.'
+      ? (visibleRawMessages
+        ? 'Discord retornou mensagens com conteudo, mas nenhuma ficou dentro da janela temporal da sessao. Use Janela da sessao, incluir antes/depois, ou um cursor mais antigo.'
+        : 'Discord retornou mensagens sem texto/anexo. Valide Message Content Intent ou use o comando de contexto para salvar mensagens importantes.')
       : null
   };
   if (dryRun || !messages.length) return { ...result, messages: messages.slice(0, 10) };
@@ -1569,7 +1688,12 @@ async function persistDiscordMessages(db, campaign, sourceSessionId, body, acces
       sync: {
         syncedByProfileId: access.profile?.id || null,
         syncedByDisplayName: access.profile?.displayName || access.user?.displayName || null,
-        syncedAt: new Date().toISOString()
+        syncedAt: new Date().toISOString(),
+        syncMode,
+        channelId,
+        maxPages,
+        sessionStartedAt: session.started_at || null,
+        sessionEndedAt: session.ended_at || (sessionEndedAt ? new Date(sessionEndedAt).toISOString() : null)
       }
     };
     const upsert = await db.query(
@@ -4536,7 +4660,7 @@ select coalesce(json_agg(item order by coalesce((item->>'startMs')::int, 2147483
       id: event.id,
       kind: 'roll20',
       laneId: 'event:roll20',
-      title: event.eventType || 'roll20',
+      title: roll20DiceTimelineTitle(event) || event.eventType || 'roll20',
       subtitle: [event.speaker, event.characterName].filter(Boolean).join(' / ') || 'Roll20',
       startMs: event.startMs,
       endMs: event.startMs,

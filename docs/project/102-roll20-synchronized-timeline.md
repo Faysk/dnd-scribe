@@ -13,8 +13,10 @@ Sincronizar capturas da mesa no mesmo eixo temporal da sessao: audio/transcricao
   - `roll20_chat_message` para conversa comum;
   - `roll20_dice_roll` para rolagens/dados detectados;
   - tipos anteriores de comandos continuam iguais.
+- Rolagens agora recebem `diceRoll` no payload, com formula, resultado final, termos de dado e indicio de critico/falha critica quando detectavel.
 - A API de ingestao Roll20 aceita `includePlain`, `includeRolls` e `syncStartClock`.
 - Eventos persistidos em `roll20_events` agora gravam `approx_start_ms` quando calculavel.
+- Quando a sessao tem `started_at`, a API tambem estima `created_at_roll20` a partir do offset calculado.
 - A home ganhou aba `Timeline`, misturando `transcript_segments` e `roll20Events` por tempo.
 
 ## Como sincronizar na pratica
@@ -28,8 +30,8 @@ Sincronizar capturas da mesa no mesmo eixo temporal da sessao: audio/transcricao
 ## Limitacoes atuais
 
 - Se o chat exportado/copiadado nao tiver horario por linha, o evento entra na timeline como `sem hora`.
-- A deteccao de rolagem e heuristica. Ela cobre textos com `1d20`, `[[...]]`, `roll`, `rolagem`, `dado/dados`, etc.
-- Discord ainda nao entra na timeline. O modelo agora ja comporta essa proxima entrada.
+- A deteccao de rolagem e heuristica. Ela cobre textos com `1d20`, `[[...]]`, `roll`, `rolagem`, `dado/dados`, `resultado`, `total`, etc.
+- Discord ja entra na timeline por `table_notes` e pode ser sincronizado por janela da sessao.
 
 ## Custo
 

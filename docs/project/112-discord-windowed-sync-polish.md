@@ -18,10 +18,13 @@ Deixar a sincronizacao do Discord pronta para uso real em producao, com importac
   - ao redor de um ID.
 - Front da timeline ganhou controles para:
   - escolher canal Discord;
+  - escolher modo `Bloco atual` ou `Janela da sessao`;
   - escolher tamanho do bloco;
+  - limitar paginas por execucao;
   - informar janela/cursor;
   - continuar importando mensagens anteriores;
   - checar mensagens novas;
+  - incluir mensagens antes do inicio ou depois do fim quando for intencional;
   - copiar IDs da janela.
 - O fluxo continua idempotente: repetir a mesma janela atualiza registros existentes em vez de duplicar notas.
 
@@ -39,4 +42,5 @@ Deixar a sincronizacao do Discord pronta para uso real em producao, com importac
 
 - Essa etapa nao usa OpenAI.
 - Mensagens antes do inicio real continuam ignoradas por padrao para manter a timeline coerente.
+- Mensagens depois do fim real tambem ficam fora por padrao quando `ended_at`/`duration_ms` existe.
 - Para importar preparacao ou bastidor antes da sessao, marcar "Incluir antes do inicio".

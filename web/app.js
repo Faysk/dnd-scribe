@@ -72,10 +72,13 @@ const state = {
       error: null,
       result: null,
       limit: 50,
+      maxPages: 6,
+      syncMode: 'page',
       channel: 'dnd',
       cursorMode: 'latest',
       cursorMessageId: '',
-      includeBeforeStart: false
+      includeBeforeStart: false,
+      includeAfterEnd: false
     }
   },
   jobs: [],
@@ -2201,7 +2204,8 @@ function renderDiscordSyncControls() {
     ? discordSyncResultText(result)
     : 'Puxa as ultimas mensagens do canal DnD configurado e salva como notas da sessao.';
   const cursorMode = discord.cursorMode || 'latest';
-  const needsCursor = cursorMode !== 'latest';
+  const syncMode = discord.syncMode || 'page';
+  const needsCursor = syncMode !== 'session_window' && cursorMode !== 'latest';
   return `
     <div class="timeline-discord-sync">
       <div class="discord-sync-intro">
@@ -2221,12 +2225,25 @@ function renderDiscordSyncControls() {
           </select>
         </label>
         <label>
+          <span class="label">Modo</span>
+          <select onchange="state.timeline.discord.syncMode=this.value; render();">
+            ${[
+              ['page', 'Bloco atual'],
+              ['session_window', 'Janela da sessao']
+            ].map(([value, label]) => `<option value="${value}" ${syncMode === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+          </select>
+        </label>
+        <label>
           <span class="label">Mensagens</span>
           <input type="number" min="1" max="100" value="${Number(discord.limit || 50)}" oninput="state.timeline.discord.limit=Number(this.value || 50)" />
         </label>
+        <label class="${syncMode === 'session_window' ? '' : 'muted-field'}">
+          <span class="label">Paginas</span>
+          <input type="number" min="1" max="10" ${syncMode === 'session_window' ? '' : 'disabled'} value="${Number(discord.maxPages || 6)}" oninput="state.timeline.discord.maxPages=Number(this.value || 6)" />
+        </label>
         <label>
           <span class="label">Janela</span>
-          <select onchange="state.timeline.discord.cursorMode=this.value; render();">
+          <select ${syncMode === 'session_window' ? 'disabled' : ''} onchange="state.timeline.discord.cursorMode=this.value; render();">
             ${[
               ['latest', 'Ultimas'],
               ['before', 'Antes do ID'],
@@ -2242,6 +2259,10 @@ function renderDiscordSyncControls() {
         <label class="check-row">
           <input type="checkbox" ${discord.includeBeforeStart ? 'checked' : ''} onchange="state.timeline.discord.includeBeforeStart=this.checked" />
           <span>Incluir antes do inicio</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" ${discord.includeAfterEnd ? 'checked' : ''} onchange="state.timeline.discord.includeAfterEnd=this.checked" />
+          <span>Incluir depois do fim</span>
         </label>
       </div>
       <div class="discord-sync-actions">
@@ -2276,6 +2297,7 @@ function discordCursorLabel(value) {
 function discordSyncWindowDetails(result) {
   const page = result?.window;
   if (!page) return '';
+  const pages = Array.isArray(result.pages) ? result.pages : [];
   const oldest = page.oldestMessageId || '';
   const newest = page.newestMessageId || '';
   const copyValue = [
@@ -2288,6 +2310,7 @@ function discordSyncWindowDetails(result) {
     <div class="discord-sync-window">
       <div class="source-detail-grid">
         <div><span class="label">Janela</span><strong>${escapeHtml(discordCursorLabel(page.cursorMode))}</strong></div>
+        <div><span class="label">Modo</span><strong>${escapeHtml(result.syncMode || 'page')}${pages.length ? ` (${pages.length} paginas)` : ''}</strong></div>
         <div><span class="label">Conteudo visivel</span><strong>${Number(page.contentVisible || 0)}/${Number(page.fetched || 0)}</strong></div>
         <div><span class="label">Mais antiga</span><strong>${oldest ? `${escapeHtml(fmtDateTime(page.oldestCreatedAt))} ${escapeHtml(oldest)}` : '-'}</strong></div>
         <div><span class="label">Mais nova</span><strong>${newest ? `${escapeHtml(fmtDateTime(page.newestCreatedAt))} ${escapeHtml(newest)}` : '-'}</strong></div>
@@ -2477,10 +2500,14 @@ function renderTimelineInspector(item) {
 
 function timelineSourceDetails(item) {
   const raw = item.raw || {};
+  const dice = raw.payload?.diceRoll || raw.diceRoll || null;
   const rows = [
     ['Fonte', raw.sourceSystem || item.kind],
     ['Source ID', raw.sourceId || raw.sourceEventId],
     ['Autor Discord', raw.authorName || raw.authorDiscordId],
+    ['Formula', dice?.formula],
+    ['Resultado', dice?.result],
+    ['Critico', dice?.criticalHint],
     ['Status', raw.reviewStatus || raw.visibility],
     ['Criado', raw.createdAt || raw.createdAtRoll20]
   ].filter(([, value]) => value !== null && value !== undefined && value !== '');
@@ -2556,7 +2583,8 @@ function copyTimelineSelected() {
 async function syncDiscordTimeline() {
   if (!state.selectedSourceSessionId || !canSyncDiscordTimeline()) return;
   const discord = state.timeline.discord || {};
-  const cursorMode = discord.cursorMode || 'latest';
+  const syncMode = discord.syncMode || 'page';
+  const cursorMode = syncMode === 'session_window' ? 'latest' : (discord.cursorMode || 'latest');
   const cursorMessageId = String(discord.cursorMessageId || '').trim();
   if (cursorMode !== 'latest' && !cursorMessageId) {
     toast('Informe o ID base da mensagem Discord.');
@@ -2565,7 +2593,10 @@ async function syncDiscordTimeline() {
   const body = {
     sourceSessionId: state.selectedSourceSessionId,
     limit: Math.min(100, Math.max(1, Number(discord.limit || 50))),
+    maxPages: Math.min(10, Math.max(1, Number(discord.maxPages || 6))),
+    syncMode,
     includeBeforeStart: Boolean(discord.includeBeforeStart),
+    includeAfterEnd: Boolean(discord.includeAfterEnd),
     channel: discord.channel || 'dnd'
   };
   if (cursorMode !== 'latest') body[cursorMode] = cursorMessageId;
@@ -3050,6 +3081,11 @@ function eventTypeTone(type = '') {
 }
 
 function roll20EventText(event) {
+  const dice = event.payload?.diceRoll || null;
+  if (dice) {
+    const title = [dice.formula || 'dados', dice.result !== null && dice.result !== undefined ? `= ${dice.result}` : ''].filter(Boolean).join(' ');
+    if (title) return title;
+  }
   return event.text
     || event.payload?.text
     || event.payload?.args?.motivo
@@ -3145,6 +3181,7 @@ function roll20EventCard(event) {
   const command = roll20EventCommand(event);
   const raw = event.payload?.rawLine || event.raw_line || '';
   const note = event.note || null;
+  const dice = event.payload?.diceRoll || null;
   return `
     <article class="roll20-review-card ${event.event_type === 'dm_backstage_note' ? 'private' : ''}">
       <div class="row between">
@@ -3155,12 +3192,15 @@ function roll20EventCard(event) {
         <div class="badges">
           ${badge(eventTypeLabel(event.event_type), eventTypeTone(event.event_type))}
           ${command ? badge(command, 'blue') : ''}
+          ${dice ? badge('dado', 'violet') : ''}
+          ${dice?.criticalHint ? badge(dice.criticalHint.replace('possible_', ''), 'gold') : ''}
           ${note?.id ? badge('nota ' + (note.review_status || 'pending'), 'green') : ''}
         </div>
       </div>
       <div class="roll20-review-meta">
         <div><span class="label">Speaker</span><strong>${escapeHtml(event.roll20_who || '-')}</strong></div>
         <div><span class="label">Personagem</span><strong>${escapeHtml(event.character_name || event.payload?.targetCharacter || '-')}</strong></div>
+        ${dice ? `<div><span class="label">Dado</span><strong>${escapeHtml([dice.formula || 'dados', dice.result !== null && dice.result !== undefined ? `= ${dice.result}` : ''].filter(Boolean).join(' '))}</strong></div>` : ''}
         <div><span class="label">Criado</span><strong>${escapeHtml(event.created_at_roll20 || event.created_at || '-')}</strong></div>
         ${note?.id ? `<div><span class="label">Nota</span><strong>${escapeHtml(note.review_status || note.note_type || note.id)}</strong></div>` : ''}
       </div>

@@ -177,7 +177,8 @@ async function main() {
     method: 'PUT',
     headers: {
       Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'User-Agent': process.env.DISCORD_USER_AGENT || 'DnD-Scribe (https://dnd.faysk.dev, 0.1)'
     },
     body: JSON.stringify(commands())
   });

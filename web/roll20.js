@@ -1,5 +1,5 @@
 const DEFAULT_PREFIX = '!dnd';
-const KNOWN_COMMANDS = new Set(['sessao', 'acao', 'canon', 'dm', 'audio']);
+const KNOWN_COMMANDS = new Set(['sessao', 'acao', 'canon', 'dm', 'audio', 'chat', 'roll']);
 const SAMPLE_CHAT = `
 [21:04] Dandelion: !dnd sessao estado:inicio titulo:"Estradas de Cinza"
 [21:18] Astel: !dnd acao personagem:"Astel" texto:"Investigou o simbolo no altar"
@@ -334,7 +334,7 @@ function splitRoll20Speaker(line, prefix = DEFAULT_PREFIX) {
   const message = prefixIndex >= 0
     ? body.slice(prefixIndex).trim()
     : (colon >= 0 && colon <= 120 ? body.slice(colon + 1).trim() : body.trim());
-  const speaker = speakerSource.replace(/:s*$/, '').trim();
+  const speaker = speakerSource.replace(/:\s*$/, '').trim();
   return {
     speaker: speaker && speaker.length <= 80 ? speaker : null,
     message,
@@ -444,6 +444,36 @@ function looksLikeRoll20Roll(message) {
     || /\b(roll|rolling|rolled|rolagem|rola|dado|dados|dice|resultado)\b/.test(text);
 }
 
+function parseRoll20DiceRoll(message) {
+  const raw = cleanText(message, 2000);
+  if (!raw) return null;
+  const inline = [...raw.matchAll(/\[\[([^\]]{1,240})\]\]/g)]
+    .map(match => cleanText(match[1], 240))
+    .filter(Boolean);
+  const formulaMatch = raw.match(/\b(\d+d\d+(?:\s*(?:kh|kl|dh|dl|ro|r)?[<>=]?\d+)?(?:\s*[+\-*/]\s*(?:\d+d\d+|\d+))*)\b/i);
+  const formula = inline[0] || cleanText(formulaMatch?.[1] || '', 240);
+  const equalsMatch = raw.match(/(?:=|resultado(?:\s+final)?|result|total|rolled|rolou|rola(?:gem)?)[^\d-]*(-?\d+)\b/i);
+  const trailingNumber = formula ? null : raw.match(/(-?\d+)\s*$/);
+  const result = equalsMatch ? Number(equalsMatch[1]) : (trailingNumber ? Number(trailingNumber[1]) : null);
+  const diceTerms = [...raw.matchAll(/\b(\d+)d(\d+)\b/gi)].map(match => ({
+    count: Number(match[1]),
+    sides: Number(match[2]),
+    notation: `${match[1]}d${match[2]}`
+  }));
+  if (!formula && !diceTerms.length && result === null) return null;
+  const d20 = diceTerms.find(term => term.sides === 20);
+  return {
+    raw,
+    formula: formula || null,
+    result: Number.isFinite(result) ? result : null,
+    dice: diceTerms,
+    hasD20: Boolean(d20),
+    criticalHint: d20 && Number.isFinite(result) && (result === 20 || result === 1)
+      ? (result === 20 ? 'possible_critical_success' : 'possible_critical_failure')
+      : null
+  };
+}
+
 
 function parseRoll20PlainLine(line, lineNo, options = {}) {
   const rawLine = String(line || '').replace(/\r?\n$/, '');
@@ -451,7 +481,7 @@ function parseRoll20PlainLine(line, lineNo, options = {}) {
   const { speaker, message, lineClock, lineClockSeconds } = splitRoll20Speaker(rawLine, options.prefix || DEFAULT_PREFIX);
   const isRoll = looksLikeRoll20Roll(message);
   if (!options.includePlain && !(options.includeRolls && isRoll)) return null;
-  return { lineNo, sourceKind: isRoll ? 'dice_roll' : 'chat_message', speaker, command: isRoll ? 'roll' : 'chat', args: {}, positional: [], rawCommand: '', rawLine, rawMessage: message, lineClock, lineClockSeconds, approxStartMs: clockDeltaMs(lineClockSeconds, options.syncStartClock), valid: true, error: null };
+  return { lineNo, sourceKind: isRoll ? 'dice_roll' : 'chat_message', speaker, command: isRoll ? 'roll' : 'chat', args: {}, positional: [], rawCommand: '', rawLine, rawMessage: message, lineClock, lineClockSeconds, approxStartMs: clockDeltaMs(lineClockSeconds, options.syncStartClock), diceRoll: isRoll ? parseRoll20DiceRoll(message) : null, valid: true, error: null };
 }
 function parseRoll20ChatText(text, options = {}) {
   return String(text || '')
@@ -504,6 +534,7 @@ function normalizeRoll20Event(parsed, campaignSlug) {
     noteType: cleanText(parsed?.args?.tipo || parsed?.args?.type || '', 80) || null,
     markerState: cleanText(parsed?.args?.estado || parsed?.args?.state || '', 80) || null,
     priority: cleanText(parsed?.args?.prioridade || parsed?.args?.priority || '', 40) || null,
+    diceRoll: parsed?.diceRoll || (sourceKind === 'dice_roll' ? parseRoll20DiceRoll(parsed?.rawMessage || parsed?.rawLine || '') : null),
     lineClock: parsed?.lineClock || null,
     lineClockSeconds: parsed?.lineClockSeconds ?? null,
     approxStartMs: parsed?.approxStartMs ?? null,
@@ -515,11 +546,12 @@ function normalizeRoll20Event(parsed, campaignSlug) {
 
 
 function summarizeEvents(events) {
-  const summary = { total: events.length, valid: 0, invalid: 0, byCommand: {}, byEventType: {}, byVisibility: {} };
+  const summary = { total: events.length, valid: 0, invalid: 0, diceRolls: 0, byCommand: {}, byEventType: {}, byVisibility: {} };
 
   for (const event of events) {
     if (event.status === 'invalid') summary.invalid += 1;
     else summary.valid += 1;
+    if (event.diceRoll) summary.diceRolls += 1;
     summary.byCommand[event.command || 'invalid'] = (summary.byCommand[event.command || 'invalid'] || 0) + 1;
     summary.byEventType[event.eventType] = (summary.byEventType[event.eventType] || 0) + 1;
     summary.byVisibility[event.visibility] = (summary.byVisibility[event.visibility] || 0) + 1;
@@ -678,6 +710,7 @@ function renderSummary() {
       ${metric(summary.total, 'eventos')}
       ${metric(summary.valid, 'validos')}
       ${metric(summary.invalid, 'invalidos')}
+      ${metric(summary.diceRolls || 0, 'rolagens')}
     </div>
     <div class="roll20-summary-block">
       <span class="label">Comandos</span>
@@ -701,7 +734,9 @@ function renderSummary() {
 
 
 function renderEvent(event) {
-  const title = event.text || event.args?.motivo || event.args?.titulo || event.rawCommand || event.command || 'Comando Roll20';
+  const dice = event.diceRoll || null;
+  const diceTitle = dice ? [dice.formula || 'dados', dice.result !== null && dice.result !== undefined ? `= ${dice.result}` : ''].filter(Boolean).join(' ') : '';
+  const title = diceTitle || event.text || event.args?.motivo || event.args?.titulo || event.rawCommand || event.command || 'Comando Roll20';
   const classes = ['roll20-event'];
   if (event.visibility === 'dm_only') classes.push('private');
   if (event.status === 'invalid') classes.push('invalid');
@@ -717,6 +752,8 @@ function renderEvent(event) {
           ${badge(event.command || 'invalid', event.status === 'invalid' ? 'red' : 'blue')}
           ${badge(event.eventType, event.visibility === 'dm_only' ? 'gold' : 'green')}
           ${badge(event.visibility, event.visibility === 'dm_only' ? 'gold' : 'violet')}
+          ${dice ? badge('dado', 'violet') : ''}
+          ${dice?.criticalHint ? badge(dice.criticalHint.replace('possible_', ''), 'gold') : ''}
         </div>
       </div>
       <dl>
@@ -724,6 +761,7 @@ function renderEvent(event) {
         <div><dt>Personagem</dt><dd>${escapeHtml(event.targetCharacter || '-')}</dd></div>
         <div><dt>Tipo</dt><dd>${escapeHtml(event.noteType || event.markerState || event.priority || '-')}</dd></div>
         <div><dt>Timeline</dt><dd>${escapeHtml(formatOffset(event.approxStartMs))}</dd></div>
+        ${dice ? `<div><dt>Formula</dt><dd>${escapeHtml(dice.formula || '-')}</dd></div><div><dt>Resultado</dt><dd>${escapeHtml(dice.result ?? '-')}</dd></div>` : ''}
       </dl>
       ${event.error ? `<p class="roll20-error">${escapeHtml(event.error)}</p>` : ''}
       <code>${escapeHtml(event.rawLine)}</code>

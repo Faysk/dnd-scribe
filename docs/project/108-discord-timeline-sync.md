@@ -73,6 +73,20 @@ Smoke tecnico em 2026-06-28:
 - 10 mensagens retornaram com autor, mas `content` vazio;
 - proxima validacao humana: confirmar/habilitar Message Content Intent no Developer Portal, ou operar via comando de contexto enquanto isso.
 
+Atualizacao em 2026-06-29:
+
+- chamadas REST agora enviam `User-Agent` para evitar bloqueios falsos em ambientes mais restritivos;
+- a sincronizacao ganhou `syncMode=session_window`, buscando paginas ate cruzar o inicio da sessao;
+- mensagens depois de `ended_at`/`duration_ms` ficam fora por padrao;
+- o painel permite controlar paginas, incluir antes do inicio e incluir depois do fim.
+
+Smoke tecnico em 2026-06-29:
+
+- API Discord respondeu `200` para o canal configurado com `User-Agent`;
+- 10 mensagens retornaram;
+- 6 mensagens tinham texto visivel;
+- 4 mensagens tinham anexos.
+
 Referencias oficiais:
 
 - https://discord.com/developers/docs/resources/message#get-channel-messages
@@ -80,13 +94,9 @@ Referencias oficiais:
 
 ## Proximas etapas
 
-1. Testar o bot em producao no canal real `1387538428903690290`.
-2. Confirmar se o Discord retorna `content`; se vier vazio, habilitar/validar Message Content Intent ou priorizar context menu.
-3. Adicionar campo visual para informar ancora manual de inicio quando `sessions.started_at` estiver vazio.
-4. Exibir anexos/imagens Discord na timeline sem baixar/copiar conteudo.
-5. Criar botao "converter em nota/canon" diretamente no inspector da timeline.
-6. Criar endpoint de paginação por `before`/`after` para puxar blocos antigos.
-7. Adicionar auditoria resumida no monitoramento: ultima sincronizacao, canal, mensagens aceitas, falhas.
-8. Relacionar mensagens Discord com jogadores por `profiles.discord_id`.
-9. Criar thread por sessao e salvar `thread_id` nos metadados da sessao.
-10. Evoluir para worker Gateway somente se precisarmos de presenca/voice state em tempo real.
+1. Adicionar campo visual para informar ancora manual de inicio quando `sessions.started_at` estiver vazio.
+2. Criar botao "converter em nota/canon" diretamente no inspector da timeline.
+3. Adicionar auditoria resumida no monitoramento: ultima sincronizacao, canal, mensagens aceitas, falhas.
+4. Relacionar mensagens Discord com jogadores por `profiles.discord_id`.
+5. Criar thread por sessao e salvar `thread_id` nos metadados da sessao.
+6. Evoluir para worker Gateway somente se precisarmos de presenca/voice state em tempo real.
