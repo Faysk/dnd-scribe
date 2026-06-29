@@ -1533,6 +1533,7 @@ function renderCraigIngestPanel() {
   const upload = state.ingest.result?.upload || state.ingest.planned?.upload || null;
   const fileName = state.ingest.file?.name || upload?.originalFilename || '';
   const recordingId = recordingIdFromCraigName(fileName);
+  const form = state.ingest.form || {};
   return `
     <div class="detail-grid">
       <div class="upload-brief">
@@ -1548,10 +1549,11 @@ function renderCraigIngestPanel() {
         </div>
       </div>
       ${renderUploadOperationalReadiness(upload, fileName, recordingId)}
+      ${renderUploadNextActionPanel(upload, fileName, recordingId)}
       <label><span class="label">Sessao alvo</span>
         <select id="ingestSessionId">
-          <option value="">Criar nova sessao pelo ZIP (recomendado)</option>
-          ${state.sessions.map(session => `<option value="${escapeHtml(session.sourceSessionId)}">${escapeHtml(session.title || session.sourceSessionId)}</option>`).join('')}
+          <option value="" ${form.sourceSessionId ? '' : 'selected'}>Criar nova sessao pelo ZIP (recomendado)</option>
+          ${state.sessions.map(session => `<option value="${escapeHtml(session.sourceSessionId)}" ${form.sourceSessionId === session.sourceSessionId ? 'selected' : ''}>${escapeHtml(session.title || session.sourceSessionId)}</option>`).join('')}
         </select>
         <small>Use uma sessao existente apenas para corrigir/reprocessar um upload ja conhecido.</small>
       </label>
@@ -1572,19 +1574,19 @@ function renderCraigIngestPanel() {
       <div class="upload-form-section">
         <span class="label">Metadados opcionais</span>
         <div class="field-grid">
-          <label><span class="label">Titulo</span><input id="ingestSessionTitle" placeholder="vazio = Sessao Craig pelo ID do ZIP" /></label>
-          <label><span class="label">Data manual</span><input id="ingestSessionDate" type="date" /></label>
-          <label><span class="label">Arco</span><input id="ingestSessionArc" placeholder="Arco atual" /></label>
-          <label><span class="label">Resumo curto</span><input id="ingestSessionSummary" placeholder="Opcional para catalogo" /></label>
+          <label><span class="label">Titulo</span><input id="ingestSessionTitle" value="${escapeHtml(form.title || '')}" placeholder="vazio = Sessao Craig pelo ID do ZIP" /></label>
+          <label><span class="label">Data manual</span><input id="ingestSessionDate" type="date" value="${escapeHtml(form.sessionDate || '')}" /></label>
+          <label><span class="label">Arco</span><input id="ingestSessionArc" value="${escapeHtml(form.arc || '')}" placeholder="Arco atual" /></label>
+          <label><span class="label">Resumo curto</span><input id="ingestSessionSummary" value="${escapeHtml(form.summary || '')}" placeholder="Opcional para catalogo" /></label>
         </div>
       </div>
       <div class="upload-form-section">
         <span class="label">Processamento</span>
         <div class="field-grid">
-          <label><span class="label">Chunk segundos</span><input id="ingestChunkSeconds" type="number" min="60" step="30" value="600" /></label>
-          <label><span class="label">Amostra segundos</span><input id="ingestSampleSeconds" type="number" min="0" step="30" placeholder="vazio" /></label>
+          <label><span class="label">Chunk segundos</span><input id="ingestChunkSeconds" type="number" min="60" step="30" value="${escapeHtml(form.chunkSeconds || '600')}" /></label>
+          <label><span class="label">Amostra segundos</span><input id="ingestSampleSeconds" type="number" min="0" step="30" value="${escapeHtml(form.sampleSeconds || '')}" placeholder="vazio" /></label>
         </div>
-        <label class="check-row"><input id="ingestSkipChunks" type="checkbox" /> <span>Somente manifest quando o worker cloud estiver ativo</span></label>
+        <label class="check-row"><input id="ingestSkipChunks" type="checkbox" ${form.skipChunks ? 'checked' : ''} /> <span>Somente manifest quando o worker cloud estiver ativo</span></label>
       </div>
       ${renderIngestChecklist()}
       <div class="actions">
@@ -1672,6 +1674,93 @@ function renderUploadOperationalReadiness(upload, fileName, recordingId) {
   `;
 }
 
+function renderUploadNextActionPanel(upload, fileName, recordingId) {
+  const fileSize = state.ingest.file?.size || upload?.sizeBytes || 0;
+  const sizeAssessment = craigUploadSizeAssessment(fileSize);
+  const jobs = uploadRelevantJobs();
+  const sourceSessionId = ingestSourceSessionId();
+  const failedJob = jobs.find(job => job.status === 'failed');
+  const runnable = jobs.find(job => ['cloud_ingest_craig', 'cloud_extract_craig_tracks', 'cloud_plan_audio_chunks'].includes(job.type) && ['queued', 'retrying'].includes(job.status));
+  const running = jobs.find(job => job.status === 'running');
+  const blocked = jobs.find(job => job.type === 'cloud_detect_speech_slices' && ['queued', 'retrying', 'running', 'failed'].includes(job.status));
+  let tone = 'blue';
+  let title = 'Escolha o ZIP Craig';
+  let detail = 'Depois da selecao, o arquivo continua no navegador ate voce confirmar o envio para producao.';
+  let action = 'Selecionar ZIP e revisar tamanho antes de enviar.';
+
+  if (state.ingest.error) {
+    tone = 'red';
+    title = 'Upload precisa de atencao';
+    detail = state.ingest.error;
+    action = sourceSessionId ? 'Atualize jobs, simule a proxima etapa ou tente novamente o job falho.' : 'Corrija a causa exibida e envie o ZIP novamente.';
+  } else if (state.ingest.busy) {
+    tone = 'orange';
+    title = ingestPhaseLabel(state.ingest.phase);
+    detail = state.ingest.file ? `${state.ingest.file.name} - ${fmtBytes(state.ingest.file.size)}` : 'Operacao em andamento na esteira Craig.';
+    action = 'Aguarde esta etapa terminar antes de iniciar outra acao.';
+  } else if (failedJob) {
+    tone = 'red';
+    title = `Falha em ${failedJob.type}`;
+    detail = failedJob.error || failedJob.stepSummary?.lastError || 'Use retry depois de conferir o detalhe do job.';
+    action = 'Tentar novamente no job falho ou descartar apenas se for um upload incorreto.';
+  } else if (runnable) {
+    tone = 'blue';
+    title = `Proxima etapa: ${runnable.type}`;
+    detail = 'Esta etapa ainda e zero-cost e pode ser simulada antes de executar.';
+    action = 'Simular ou continuar pipeline; acompanhe o resultado na lista de jobs.';
+  } else if (running) {
+    tone = 'orange';
+    title = `Rodando: ${running.type}`;
+    detail = 'Atualize os jobs antes de disparar outra etapa para evitar duplicidade operacional.';
+    action = 'Acompanhar ou recuperar se ficar rodando tempo demais.';
+  } else if (blocked) {
+    tone = 'gold';
+    title = 'Aguardando worker de fala';
+    detail = 'ZIP, manifest, extracao e chunks chegaram ate o limite antes de transcricao paga.';
+    action = 'Validar speech slicing/worker cloud antes de aprovar qualquer etapa OpenAI.';
+  } else if (fileName && !state.ingest.result) {
+    tone = sizeAssessment?.level === 'critical' ? 'red' : sizeAssessment?.level === 'attention' ? 'gold' : 'green';
+    title = 'ZIP pronto para envio';
+    detail = recordingId ? `Craig ${recordingId} detectado no nome do arquivo.` : 'Craig ID sera inferido quando possivel pelo arquivo/manifest.';
+    action = sizeAssessment?.level === 'critical' ? 'Compactar/dividir antes de enviar.' : 'Enviar ZIP para producao e acompanhar progresso.';
+  } else if (sourceSessionId || jobs.length) {
+    tone = 'green';
+    title = 'Esteira sem bloqueio imediato';
+    detail = sourceSessionId || 'Jobs de upload carregados.';
+    action = 'Atualize jobs ou abra Operacao para detalhes.';
+  }
+
+  const buttons = [];
+  if (fileName && !state.ingest.busy && !state.ingest.result && sizeAssessment?.level !== 'critical') {
+    buttons.push('<button class="primary" onclick="uploadCraigFromForm()">Enviar ZIP</button>');
+  }
+  if (runnable && !state.ingest.busy) {
+    buttons.push('<button onclick="continueUploadPipeline(true)">Simular</button>');
+    buttons.push('<button class="primary" onclick="continueUploadPipeline(false)">Continuar</button>');
+  }
+  if (failedJob && typeof window.retryCloudJob === 'function') {
+    buttons.push(`<button class="primary" onclick="retryCloudJob('${escapeHtml(failedJob.id)}')">Tentar novamente</button>`);
+  }
+  buttons.push('<button onclick="loadJobs(true)">Atualizar jobs</button>');
+
+  return `
+    <div class="upload-action-panel ${escapeHtml(tone)}">
+      <div>
+        <span class="label">Proxima acao</span>
+        <strong>${escapeHtml(title)}</strong>
+        <small>${escapeHtml(detail)}</small>
+      </div>
+      <div class="upload-action-metrics">
+        <div><span class="label">Acao</span><strong>${escapeHtml(action)}</strong></div>
+        <div><span class="label">Sessao</span><strong>${escapeHtml(sourceSessionId || 'nova pelo ZIP')}</strong></div>
+        <div><span class="label">Storage bruto</span><strong>${escapeHtml(fileSize ? fmtBytes(fileSize) : 'pendente')}</strong></div>
+        <div><span class="label">Custo agora</span><strong>OpenAI $0</strong></div>
+      </div>
+      <div class="actions upload-action-buttons">${buttons.join('')}</div>
+    </div>
+  `;
+}
+
 function ingestSourceSessionId() {
   return state.ingest.planned?.session?.sourceSessionId
     || state.ingest.result?.session?.sourceSessionId
@@ -1728,31 +1817,43 @@ function ingestStepRows() {
     {
       title: 'Sessao e metadados',
       detail: planned?.session?.sourceSessionId || result?.session?.sourceSessionId || 'Nova sessao sera inferida pelo nome do ZIP.',
+      action: planned || result ? 'Conferir data logica depois do manifest.' : 'Deixar vazio para criar sessao nova pelo ZIP.',
+      impact: 'Ancora timeline, Roll20, Discord e publicacoes.',
       state: phase === 'planning' ? { status: 'active', label: 'criando' } : (planned || result ? { status: 'done', label: 'ok' } : { status: 'waiting', label: 'aguardando' })
     },
     {
       title: 'Upload R2',
       detail: state.ingest.file ? `${state.ingest.file.name} - ${fmtBytes(state.ingest.file.size)}` : 'Arquivo vai direto do navegador para o bucket.',
+      action: state.ingest.file ? 'Enviar para R2 quando tamanho estiver aceitavel.' : 'Selecionar o ZIP Craig exportado.',
+      impact: 'Objeto bruto temporario; deve sair apos processamento validado.',
       state: phase === 'uploading' ? { status: 'active', label: `${Math.round(Number(state.ingest.progress || 0))}%` } : (['confirming', 'done'].includes(phase) || result ? { status: 'done', label: 'ok' } : { status: 'waiting', label: 'aguardando' })
     },
     {
       title: 'Confirmar banco e fila',
       detail: result?.job?.id ? `Job ${result.job.type} ${String(result.job.id).slice(0, 8)}` : 'Confirma o arquivo e cria o primeiro job cloud.',
+      action: result?.job ? 'Continuar ou simular a proxima etapa.' : 'Aguardar confirmacao depois do upload R2.',
+      impact: 'Cria trilha auditavel para retry, pausa e descarte.',
       state: phase === 'confirming' ? { status: 'active', label: 'salvando' } : (result?.job ? { status: 'done', label: 'ok' } : { status: 'waiting', label: 'aguardando' })
     },
     {
       title: 'Manifest Craig',
       detail: sessionWindow ? sessionWindowText(sessionWindow) : 'Le info.txt, participantes, faixas e duracao FLAC quando disponivel.',
+      action: manifestState.status === 'ready' ? 'Rodar manifest antes de extrair faixas.' : 'Validar participantes e janela da sessao.',
+      impact: 'Define inicio/fim real e nomes para vincular audio.',
       state: manifestState
     },
     {
       title: 'Extrair faixas',
       detail: extractResult?.summary ? `${extractResult.summary.extractedThisRun || 0} extraidas agora, ${extractResult.summary.remainingTracks || 0} restantes.` : 'Copia cada FLAC do ZIP para objeto R2 individual.',
+      action: extractState.status === 'ready' || extractState.status === 'active' ? 'Extrair em lotes pequenos para evitar timeout.' : 'Conferir quantas faixas foram geradas.',
+      impact: 'Necessario para chunking; ainda sem OpenAI paga.',
       state: extractState
     },
     {
       title: 'Chunks e OpenAI',
       detail: 'So entra depois de faixas extraidas; speech slicing reduz minutos pagos antes da transcricao.',
+      action: chunkState.status === 'ready' ? 'Planejar chunks e depois aprovar fala/transcricao em lote.' : 'Nao aprovar transcricao antes de speech slicing.',
+      impact: 'Principal ponto de controle de custo.',
       state: chunkState.status === 'done' ? chunkState : (chunkState.status === 'ready' ? chunkState : { status: 'waiting', label: 'depois' })
     }
   ];
@@ -1764,9 +1865,11 @@ function renderIngestChecklist() {
       ${ingestStepRows().map(step => `
         <div class="upload-step ${step.state.status}">
           <span class="upload-step-dot"></span>
-          <div>
+          <div class="upload-step-copy">
             <strong>${escapeHtml(step.title)}</strong>
             <small>${escapeHtml(step.detail)}</small>
+            <span><b>Acao:</b> ${escapeHtml(step.action)}</span>
+            <span><b>Impacto:</b> ${escapeHtml(step.impact)}</span>
           </div>
           ${badge(step.state.label, step.state.status === 'done' ? 'green' : step.state.status === 'error' ? 'red' : step.state.status === 'active' ? 'orange' : step.state.status === 'ready' ? 'blue' : '')}
         </div>
@@ -1886,28 +1989,44 @@ function renderIngestResult(result) {
   `;
 }
 
+function readCraigUploadForm() {
+  return {
+    sourceSessionId: $('#ingestSessionId')?.value || '',
+    title: $('#ingestSessionTitle')?.value || '',
+    sessionDate: $('#ingestSessionDate')?.value || '',
+    arc: $('#ingestSessionArc')?.value || '',
+    summary: $('#ingestSessionSummary')?.value || '',
+    chunkSeconds: $('#ingestChunkSeconds')?.value || '600',
+    sampleSeconds: $('#ingestSampleSeconds')?.value || '',
+    skipChunks: $('#ingestSkipChunks')?.checked || false
+  };
+}
+
 function rememberCraigFileSelection(input) {
   const file = input?.files?.[0] || null;
-  const preview = document.getElementById('uploadFilePreview');
+  const form = readCraigUploadForm();
   if (!file) {
-    state.ingest = { ...state.ingest, file: null };
-    if (preview) preview.textContent = 'Nenhum arquivo escolhido.';
-    updateCraigUploadPreflight(null);
+    state.ingest = { ...state.ingest, form, file: null, fileObject: null, phase: null, progress: null, error: null };
+    render();
     return;
   }
   state.ingest = {
     ...state.ingest,
+    phase: null,
+    progress: null,
+    error: null,
+    result: null,
+    planned: null,
+    lastJobResult: null,
+    form,
+    fileObject: file,
     file: {
       name: file.name,
       size: file.size,
       type: file.type || 'application/zip'
     }
   };
-  const recordingId = recordingIdFromCraigName(file.name);
-  if (preview) {
-    preview.textContent = `${file.name} - ${fmtBytes(file.size)}${recordingId ? ` - Craig ${recordingId}` : ''}`;
-  }
-  updateCraigUploadPreflight(file);
+  render();
 }
 
 function editSessionForm(session) {
@@ -2078,11 +2197,12 @@ async function setSessionArchived(archived) {
 }
 
 async function uploadCraigFromForm() {
-  const file = $('#craigZipFile')?.files?.[0];
+  const file = $('#craigZipFile')?.files?.[0] || state.ingest.fileObject;
   if (!file) {
     toast('Selecione o ZIP Craig.');
     return;
   }
+  const form = readCraigUploadForm();
   const fileInfo = {
     name: file.name,
     size: file.size,
@@ -2097,12 +2217,12 @@ async function uploadCraigFromForm() {
     const okSize = window.confirm(`${sizeAssessment.title}: ${sizeAssessment.detail} Continuar upload mesmo assim?`);
     if (!okSize) return;
   }
-  const targetSessionId = $('#ingestSessionId')?.value || '';
+  const targetSessionId = form.sourceSessionId || '';
   if (targetSessionId) {
     const ok = window.confirm(`Anexar este ZIP Craig na sessao existente "${targetSessionId}"? Para uma nova gravacao, cancele e deixe "Criar nova sessao pelo ZIP".`);
     if (!ok) return;
   }
-  state.ingest = { busy: true, phase: 'planning', progress: null, error: null, result: null, planned: null, lastJobResult: null, file: fileInfo };
+  state.ingest = { busy: true, phase: 'planning', progress: null, error: null, result: null, planned: null, lastJobResult: null, file: fileInfo, form };
   setBusy(true);
   render();
   try {
@@ -2111,16 +2231,16 @@ async function uploadCraigFromForm() {
       body: JSON.stringify({
         sourceSessionId: targetSessionId,
         attachToExisting: Boolean(targetSessionId),
-        title: $('#ingestSessionTitle')?.value || '',
-        sessionDate: $('#ingestSessionDate')?.value || null,
-        arc: $('#ingestSessionArc')?.value || '',
-        summary: $('#ingestSessionSummary')?.value || '',
+        title: form.title,
+        sessionDate: form.sessionDate || null,
+        arc: form.arc,
+        summary: form.summary,
         fileName: file.name,
         sizeBytes: file.size,
         contentType: file.type || 'application/zip',
-        chunkSeconds: $('#ingestChunkSeconds')?.value || '600',
-        sampleSeconds: $('#ingestSampleSeconds')?.value || '',
-        skipChunks: $('#ingestSkipChunks')?.checked || false,
+        chunkSeconds: form.chunkSeconds || '600',
+        sampleSeconds: form.sampleSeconds,
+        skipChunks: form.skipChunks,
         runId: DEFAULT_RUN
       })
     });

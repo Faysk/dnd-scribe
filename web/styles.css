@@ -354,6 +354,20 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 .upload-step small {
   display: block;
 }
+.upload-step-copy {
+  display: grid;
+  gap: 3px;
+}
+.upload-step-copy span {
+  display: block;
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.upload-step-copy b {
+  color: var(--text);
+}
 .upload-step-dot {
   width: 11px;
   height: 11px;
@@ -476,6 +490,41 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   display: block;
   margin-top: 3px;
   overflow-wrap: anywhere;
+}
+.upload-action-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0b1017;
+  padding: 12px;
+}
+.upload-action-panel.green { border-color: var(--green); }
+.upload-action-panel.blue { border-color: var(--blue); }
+.upload-action-panel.gold { border-color: var(--gold); background: #17140d; }
+.upload-action-panel.orange { border-color: var(--orange); background: #18110c; }
+.upload-action-panel.red { border-color: var(--red); background: #1d1011; }
+.upload-action-panel strong,
+.upload-action-panel small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.upload-action-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.upload-action-metrics div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.025);
+  padding: 9px;
+}
+.upload-action-metrics strong {
+  font-size: .92rem;
+}
+.upload-action-buttons {
+  justify-content: flex-end;
 }
 .upload-job-row .job-actions {
   margin-top: 2px;
@@ -854,7 +903,7 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .workspace { padding: 12px 12px 118px; }
   .rail { padding: 12px; }
-  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-readiness, .upload-page-head, .upload-summary-grid, .pipeline-control {
+  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-readiness, .upload-page-head, .upload-summary-grid, .upload-action-metrics, .pipeline-control {
     grid-template-columns: 1fr;
   }
   .upload-readiness-signals {
@@ -869,6 +918,9 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   .upload-step .badge {
     grid-column: 2;
     justify-self: start;
+  }
+  .upload-action-buttons {
+    justify-content: stretch;
   }
   .top-actions {
     display: grid;
