@@ -3,6 +3,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const sourceDir = path.join(root, "web");
+const integrationsDir = path.join(root, "integrations");
 const outputDir = path.join(root, "public");
 const requiredSource = path.join(sourceDir, "index.html");
 const requiredOutput = path.join(outputDir, "index.html");
@@ -55,6 +56,9 @@ if (!fs.existsSync(requiredSource)) {
 
 fs.rmSync(outputDir, { recursive: true, force: true });
 copyDirectory(sourceDir, outputDir);
+if (fs.existsSync(integrationsDir)) {
+  copyDirectory(integrationsDir, path.join(outputDir, "integrations"));
+}
 
 if (!fs.existsSync(requiredOutput)) {
   fail(`public output is missing index.html after sync: ${requiredOutput}`);

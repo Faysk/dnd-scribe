@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DnD Scribe - Ponte Roll20</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="auth-locked">
+  <section id="siteGate" class="site-gate" aria-live="polite">
+    <div class="site-gate-card">
+      <div class="site-gate-brand">
+        <div class="brand-mark">d20</div>
+        <div>
+          <span class="label">Roll20</span>
+          <h1>Entrada da mesa</h1>
+        </div>
+      </div>
+      <p>Conectando login seguro antes de abrir a ponte.</p>
+      <div class="loader-line"></div>
+    </div>
+  </section>
+
+  <main class="shell" id="bridgeShell" aria-hidden="true">
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <span class="label">Roll20</span>
+          <h1>Ponte em tempo real</h1>
+          <small>Captura chat, rolagens e comandos enquanto a mesa joga.</small>
+        </div>
+        <a class="button-link" href="/">Voltar</a>
+      </div>
+      <div class="panel-body detail-grid">
+        <div class="field-grid">
+          <div>
+            <span class="label">Camada 1</span>
+            <strong>Mod/API Roll20</strong>
+            <p>Instale o script no Roll20 para transformar cada `chat:message` em pacote tecnico.</p>
+          </div>
+          <div>
+            <span class="label">Camada 2</span>
+            <strong>Bridge do navegador</strong>
+            <p>Rode o bookmarklet no tab do jogo. Ele envia os pacotes para producao com token.</p>
+          </div>
+          <div>
+            <span class="label">Camada 3</span>
+            <strong>Timeline</strong>
+            <p>Eventos entram em `roll20_events`, sincronizados com a sessao pelo timestamp.</p>
+          </div>
+        </div>
+
+        <section class="audio-card">
+          <span class="label">1. Instalar Mod/API no Roll20</span>
+          <p>Abra a pagina do jogo no Roll20, va em Settings -> Mod (API) Scripts -> New Script e cole o script abaixo.</p>
+          <a class="button-link primary" href="/integrations/roll20/dnd-scribe-mod.js" target="_blank" rel="noreferrer">Abrir script Mod</a>
+        </section>
+
+        <section class="audio-card">
+          <span class="label">2. Rodar bridge no tab do jogo</span>
+          <p>Arraste este link para a barra de favoritos. Durante a sessao, clique nele dentro do Roll20.</p>
+          <a class="button-link primary" href="javascript:(()=>{const s=document.createElement('script');s.src='https://dnd.faysk.dev/roll20-bridge.js?v='+Date.now();document.body.appendChild(s)})()">DnD Scribe Roll20</a>
+          <p>O bridge vai pedir URL, campaign slug, sourceSessionId e token da ponte.</p>
+        </section>
+
+        <section class="audio-card">
+          <span class="label">3. Comandos no chat Roll20</span>
+          <p>`!dndscribe status` mostra o estado. `!dndscribe off` pausa. `!dndscribe on` religa.</p>
+        </section>
+
+        <section class="audio-card">
+          <span class="label">Seguranca</span>
+          <p>A API aceita somente `ROLL20_BRIDGE_TOKEN`. Sem esse token, a rota responde erro e nada e gravado.</p>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/auth-fetch.js"></script>
+  <script src="/roll20-bridge-page.js"></script>
+</body>
+</html>

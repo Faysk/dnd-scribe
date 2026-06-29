@@ -4,6 +4,7 @@ const path = require('node:path');
 const { Pool } = require('pg');
 const {
   parseRoll20ChatText,
+  parseRoll20DiceRoll,
   normalizeRoll20Events,
   summarizeRoll20Events
 } = require('../lib/roll20-commands');
@@ -20,6 +21,7 @@ const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
 const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_SYNC_MAX_MESSAGES = 100;
 const DISCORD_SYNC_MAX_PAGES = 10;
+const ROLL20_BRIDGE_MAX_EVENTS = 100;
 const SESSION_TIME_ZONE = process.env.DND_SESSION_TIME_ZONE || 'Europe/London';
 const DEFAULT_CHUNK_SECONDS = 600;
 const PIPELINE_RUNNABLE_JOB_TYPES = [
@@ -138,6 +140,32 @@ function sendJson(res, status, value) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(value));
+}
+
+function isRoll20BridgePath(pathname) {
+  return pathname === '/api/roll20-bridge' || pathname === '/api/roll20/bridge';
+}
+
+function roll20BridgeCorsOrigin(origin = '') {
+  const text = cleanText(origin, 300);
+  if (!text) return '';
+  if (text === 'https://app.roll20.net') return text;
+  if (text === 'https://roll20.net') return text;
+  if (text === 'https://dnd.faysk.dev') return text;
+  if (/^http:\/\/localhost:\d+$/.test(text)) return text;
+  return '';
+}
+
+function applyRoll20BridgeCors(req, res, pathname) {
+  if (!isRoll20BridgePath(pathname)) return;
+  const allowedOrigin = roll20BridgeCorsOrigin(req.headers.origin || '');
+  if (allowedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-DND-Roll20-Token, X-Roll20-Bridge-Token');
+  res.setHeader('Access-Control-Max-Age', '600');
 }
 
 function readBody(req) {
@@ -1043,6 +1071,217 @@ do update set role = 'master';`,
   };
 }
 
+function roll20BridgeToken() {
+  return cleanText(process.env.ROLL20_BRIDGE_TOKEN || process.env.DND_ROLL20_BRIDGE_TOKEN || '', 500);
+}
+
+function timingSafeEqualText(a, b) {
+  const left = Buffer.from(String(a || ''));
+  const right = Buffer.from(String(b || ''));
+  if (!left.length || left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}
+
+function roll20BridgeRequestToken(req, raw = {}) {
+  const auth = cleanText(req.headers.authorization || req.headers.Authorization || '', 700);
+  if (/^bearer\s+/i.test(auth)) return auth.replace(/^bearer\s+/i, '').trim();
+  return cleanText(
+    req.headers['x-dnd-roll20-token']
+      || req.headers['x-roll20-bridge-token']
+      || raw.bridgeToken
+      || raw.bridge_token
+      || '',
+    700
+  );
+}
+
+function requireRoll20BridgeAccess(req, raw = {}) {
+  const expected = roll20BridgeToken();
+  if (!expected) throw httpError(409, 'ROLL20_BRIDGE_TOKEN ausente no ambiente de producao.');
+  const supplied = roll20BridgeRequestToken(req, raw);
+  if (!timingSafeEqualText(supplied, expected)) throw httpError(401, 'Token da ponte Roll20 invalido.');
+  return {
+    source: 'roll20_bridge',
+    displayName: 'Roll20 Bridge',
+    role: 'integration'
+  };
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function textFromRoll20Html(value, max = 4000) {
+  return cleanText(
+    decodeHtmlEntities(String(value || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p\s*>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')),
+    max
+  );
+}
+
+function roll20InlineRollTotal(roll) {
+  const candidates = [
+    roll?.results?.total,
+    roll?.result?.total,
+    roll?.total,
+    roll?.value
+  ];
+  for (const candidate of candidates) {
+    const number = Number(candidate);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function roll20BridgeDiceRoll(message = {}, text = '') {
+  const inline = Array.isArray(message.inlinerolls) ? message.inlinerolls : [];
+  const formula = cleanText(
+    message.origRoll
+      || message.orig_roll
+      || message.formula
+      || inline.find(item => cleanText(item.expression, 240))?.expression
+      || '',
+    240
+  );
+  const total = roll20InlineRollTotal(inline[0]);
+  const source = [
+    formula || text,
+    total !== null ? `= ${total}` : ''
+  ].filter(Boolean).join(' ');
+  const parsed = parseRoll20DiceRoll(source || text);
+  if (!parsed && !formula && total === null) return null;
+  return {
+    ...(parsed || {}),
+    raw: text || parsed?.raw || '',
+    formula: formula || parsed?.formula || null,
+    result: total !== null ? total : (parsed?.result ?? null),
+    roll20Type: cleanText(message.type, 40) || null,
+    inlineRollCount: inline.length
+  };
+}
+
+function roll20BridgeRawMessages(raw = {}) {
+  const events = Array.isArray(raw.events) ? raw.events : null;
+  const messages = Array.isArray(raw.messages) ? raw.messages : null;
+  const payload = events || messages || [];
+  return payload.slice(0, ROLL20_BRIDGE_MAX_EVENTS);
+}
+
+function roll20BridgeEventId(packet = {}, message = {}, index = 0) {
+  const explicit = cleanText(
+    packet.sourceEventId
+      || packet.source_event_id
+      || packet.id
+      || message.sourceEventId
+      || message.source_event_id
+      || message.id
+      || '',
+    180
+  );
+  if (explicit) return explicit.startsWith('roll20-') ? explicit : `roll20-bridge-${explicit}`;
+  const seed = JSON.stringify({
+    seq: packet.seq ?? message.seq ?? null,
+    emittedAt: packet.emittedAt || packet.receivedAt || message.timestamp || null,
+    who: message.who || null,
+    playerid: message.playerid || null,
+    type: message.type || null,
+    content: String(message.content || '').slice(0, 500),
+    index
+  });
+  const hash = crypto.createHash('sha1').update(seed).digest('hex').slice(0, 18);
+  return `roll20-bridge-${hash}`;
+}
+
+function roll20BridgeParsedEvent(packet = {}, index = 0, options = {}) {
+  const message = packet.message || packet.msg || packet;
+  const type = cleanText(message.type || packet.type || 'general', 40).toLowerCase();
+  const speaker = cleanText(message.who || message.speaker || packet.who || packet.speaker || '', 160) || null;
+  const playerId = cleanText(message.playerid || message.playerId || packet.playerid || packet.playerId || '', 100) || null;
+  const text = textFromRoll20Html(message.content ?? packet.content ?? packet.text ?? '', 4000);
+  const rawLine = cleanText(packet.rawLine || `${speaker ? `${speaker}: ` : ''}${text}`, 5000);
+  const receivedAt = cleanText(packet.emittedAt || packet.receivedAt || packet.createdAt || packet.timestamp || new Date().toISOString(), 80);
+  const sourceEventId = roll20BridgeEventId(packet, message, index);
+  const isCommand = text.startsWith(options.prefix || '!dnd');
+  const diceRoll = ['rollresult', 'gmrollresult'].includes(type) || Array.isArray(message.inlinerolls) || /\b\d+d\d+\b|\[\[/.test(text)
+    ? roll20BridgeDiceRoll(message, text)
+    : null;
+
+  let parsed = null;
+  if (isCommand) {
+    parsed = parseRoll20ChatText(rawLine, {
+      prefix: options.prefix,
+      includePlain: true,
+      includeRolls: true,
+      syncStartClock: options.syncStartClock
+    })[0] || null;
+  }
+  if (!parsed) {
+    parsed = {
+      sourceKind: diceRoll ? 'dice_roll' : 'chat_message',
+      speaker,
+      command: diceRoll ? 'roll' : 'chat',
+      args: {},
+      positional: [],
+      rawCommand: '',
+      rawLine,
+      rawMessage: text,
+      lineClock: null,
+      lineClockSeconds: null,
+      approxStartMs: null,
+      diceRoll,
+      valid: true,
+      error: null
+    };
+  }
+
+  return {
+    ...parsed,
+    sourceEventId,
+    createdAtRoll20: receivedAt,
+    playerId,
+    roll20MessageType: type,
+    roll20BridgePacket: {
+      version: cleanText(packet.version || options.version || '', 40) || null,
+      seq: packet.seq ?? message.seq ?? null,
+      playerId,
+      type,
+      rolltemplate: cleanText(message.rolltemplate || message.rollTemplate || '', 120) || null,
+      target: cleanText(message.target || '', 120) || null,
+      targetName: cleanText(message.target_name || message.targetName || '', 180) || null,
+      inlineRollCount: Array.isArray(message.inlinerolls) ? message.inlinerolls.length : 0
+    }
+  };
+}
+
+function roll20BridgeNormalizeEvents(raw = {}, options = {}) {
+  const parsed = roll20BridgeRawMessages(raw).map((packet, index) => roll20BridgeParsedEvent(packet, index, options));
+  return normalizeRoll20Events(parsed, {
+    campaignSlug: options.campaignSlug,
+    receivedAt: raw.receivedAt || raw.received_at || undefined
+  }).map((event, index) => {
+    const parsedEvent = parsed[index] || {};
+    return {
+      ...event,
+      sourceEventId: parsedEvent.sourceEventId,
+      createdAtRoll20: parsedEvent.createdAtRoll20,
+      playerId: parsedEvent.playerId || null,
+      payload: {
+        ...(event.payload || {}),
+        bridge: parsedEvent.roll20BridgePacket || null
+      }
+    };
+  });
+}
+
 async function roll20IngestPreviewPayload(req, campaign, raw) {
   const access = await requireCampaignAccess(req, campaign, ['owner', 'master']);
   const prefix = cleanText(raw.prefix || process.env.ROLL20_COMMAND_PREFIX || '!dnd', 20) || '!dnd';
@@ -1076,6 +1315,44 @@ async function roll20IngestPreviewPayload(req, campaign, raw) {
       profileId: access.profile?.id || null,
       displayName: access.profile?.displayName || access.user?.displayName || null,
       role: access.campaignRole || null
+    },
+    summary: summarizeRoll20Events(events),
+    events
+  };
+}
+
+async function roll20BridgePayload(req, campaign, raw) {
+  const actor = requireRoll20BridgeAccess(req, raw);
+  const prefix = cleanText(raw.prefix || process.env.ROLL20_COMMAND_PREFIX || '!dnd', 20) || '!dnd';
+  const sourceSessionId = cleanText(raw.sourceSessionId || raw.source_session_id, 180) || null;
+  const syncStartClock = cleanText(raw.syncStartClock || raw.sync_start_clock || raw.sessionStartClock || raw.session_start_clock, 40);
+  const events = roll20BridgeNormalizeEvents(raw, {
+    campaignSlug: campaign,
+    prefix,
+    syncStartClock,
+    version: raw.version || raw.bridgeVersion || raw.bridge_version
+  });
+
+  if (!sourceSessionId) throw httpError(400, 'sourceSessionId obrigatorio para ponte Roll20.');
+  if (!events.length) throw httpError(400, 'events obrigatorio com ao menos um pacote Roll20.');
+
+  return {
+    ok: true,
+    mode: 'roll20_bridge',
+    dryRun: raw.dryRun === true,
+    campaignSlug: campaign,
+    sourceSessionId,
+    source: 'roll20-bridge',
+    prefix,
+    includePlain: true,
+    includeRolls: true,
+    syncStartClock: syncStartClock || null,
+    actor,
+    bridge: {
+      version: cleanText(raw.version || raw.bridgeVersion || raw.bridge_version || '', 40) || null,
+      batchId: cleanText(raw.batchId || raw.batch_id || '', 120) || null,
+      receivedAt: new Date().toISOString(),
+      eventLimit: ROLL20_BRIDGE_MAX_EVENTS
     },
     summary: summarizeRoll20Events(events),
     events
@@ -1127,6 +1404,15 @@ function roll20CreatedAt(event = {}, session = {}, raw = {}) {
   return null;
 }
 
+function roll20ApproxStartMs(event = {}, session = {}, createdAt = null) {
+  const explicit = event.approxStartMs ?? event.approx_start_ms;
+  if (explicit !== null && explicit !== undefined && Number.isFinite(Number(explicit))) return Number(explicit);
+  const started = dateMs(session.started_at || session.startedAt);
+  const created = dateMs(createdAt);
+  if (started !== null && created !== null && created >= started) return Math.round(created - started);
+  return null;
+}
+
 async function persistRoll20Events(db, campaign, payload, raw) {
   const sourceSessionId = cleanText(payload.sourceSessionId || raw.sourceSessionId || raw.source_session_id, 180);
   if (!sourceSessionId) throw httpError(400, 'sourceSessionId obrigatorio para persistir eventos Roll20.');
@@ -1152,12 +1438,13 @@ limit 1;`,
   for (const event of persistable) {
     const sourceEventId = cleanText(event.sourceEventId || event.source_event_id || roll20SourceEventId(event), 180);
     const estimatedCreatedAt = roll20CreatedAt(event, session, raw);
+    const approxStartMs = roll20ApproxStartMs(event, session, estimatedCreatedAt);
     const eventPayload = {
       ...event,
       timeline: {
-        approxStartMs: event.approxStartMs ?? event.approx_start_ms ?? null,
+        approxStartMs,
         estimatedCreatedAt,
-        timingMode: event.approxStartMs !== null && event.approxStartMs !== undefined
+        timingMode: approxStartMs !== null && approxStartMs !== undefined
           ? 'roll20_clock_from_session_start'
           : 'roll20_unsynced'
       },
@@ -1201,7 +1488,7 @@ returning id, source_event_id, event_type, roll20_who, character_name, text;`,
         event.rawLine || null,
         sourceEventId,
         estimatedCreatedAt,
-        event.approxStartMs ?? event.approx_start_ms ?? null
+        approxStartMs
       ]
     );
     rows.push(result.rows[0]);
@@ -5522,6 +5809,31 @@ async function handlePost(req, res, path) {
     }
     return sendJson(res, 200, payload);
   }
+  if (isRoll20BridgePath(path)) {
+    const payload = await roll20BridgePayload(req, campaign, body);
+    if (body.dryRun === true) return sendJson(res, 200, payload);
+    const client = await getPool().connect();
+    try {
+      await client.query('begin');
+      const persisted = await persistRoll20Events(client, campaign, payload, {
+        ...body,
+        bridgeToken: undefined,
+        bridge_token: undefined
+      });
+      await client.query('commit');
+      return sendJson(res, 200, {
+        ...payload,
+        mode: 'roll20_bridge_persisted',
+        dryRun: false,
+        persisted
+      });
+    } catch (error) {
+      await client.query('rollback').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
   if (path === '/api/discord/sync-channel' || path === '/api/discord-sync-channel') {
     const access = await requireCampaignAccess(req, campaign, ['owner', 'master', 'reviewer']);
     const client = await getPool().connect();
@@ -5668,6 +5980,7 @@ module.exports = async function handler(req, res) {
   const url = new URL(req.url, `https://${req.headers.host || 'localhost'}`);
   const path = url.pathname;
   try {
+    applyRoll20BridgeCors(req, res, path);
     if (req.method === 'OPTIONS') return sendJson(res, 200, { ok: true });
     if (req.method === 'GET') return await handleGet(req, res, path, url.searchParams);
     if (req.method === 'POST') return await handlePost(req, res, path);

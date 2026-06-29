@@ -72,19 +72,16 @@ Isso deixa Roll20, Discord e audio comparaveis na timeline.
 
 O projeto ainda nao faz "pull" server-side automatico do Roll20 porque nao ha, no projeto, um token/API oficial configurado para ler historico da campanha em producao.
 
-O caminho atual e intencional:
+O caminho seguro agora tem duas opcoes:
 
-- nao guardar cookie de navegador Roll20 em servidor;
-- nao depender de scraping fragil em Vercel;
-- importar texto/export do chat pela UI autenticada;
-- manter tudo auditavel e idempotente no Supabase.
+1. import manual autenticado por `/roll20.html`;
+2. ponte em tempo real com Roll20 Mod/API + navegador do GM.
 
-Se depois quisermos auto-coleta Roll20, o proximo desenho recomendado e um conector explicito:
+A ponte em tempo real esta documentada em `docs/project/138-roll20-realtime-bridge.md` e evita:
 
-1. uma extensao/bookmarklet ou bridge no navegador do DM, lendo a pagina Roll20 ja autenticada;
-2. envio para `/api/roll20-ingest` com login do DnD Scribe;
-3. fallback manual por copy/paste/export;
-4. somente considerar worker com credenciais Roll20 se aceitarmos os riscos de login automatizado, captcha, mudancas de HTML e termos da plataforma.
+- guardar cookie de navegador Roll20 em servidor;
+- depender de scraping server-side fragil em Vercel;
+- deixar a API aberta sem token.
 
 ## Status de producao
 
@@ -92,11 +89,12 @@ Pronto agora:
 
 - Discord: sincronizacao manual por bloco e por janela da sessao;
 - Roll20: import autenticado de chat, conversa comum e dados;
+- Roll20: ponte em tempo real via Mod/API + browser bridge;
 - Timeline: fala/audio + Discord + Roll20 no mesmo eixo;
 - Custo: OpenAI USD 0 nessa etapa.
 
 Ainda futuro:
 
-- conector Roll20 por navegador para puxar automaticamente sem copy/paste;
+- token Roll20 por sessao no banco em vez de token unico de ambiente;
 - botao na timeline para transformar mensagem Discord/Roll20 em canon ou nota revisada;
 - vinculo visual direto entre rolagem Roll20 e fala/acao de personagem.
