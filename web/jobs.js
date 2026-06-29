@@ -89,11 +89,44 @@
       || '';
   }
 
+  function operatorState(job) {
+    return job?.output?.operatorState || '';
+  }
+
+  function isPausedJob(job) {
+    return job?.status === 'cancelled' && operatorState(job) === 'paused';
+  }
+
+  function isDiscardedJob(job) {
+    return operatorState(job) === 'discarded';
+  }
+
   function canRetry(job) {
     if (!job || !['failed', 'cancelled'].includes(job.status)) return false;
+    if (isPausedJob(job) || isDiscardedJob(job)) return false;
     const steps = job.steps || [];
     if (!steps.length) return true;
     return steps.some(step => step.retryable !== false && ['failed', 'blocked'].includes(step.status));
+  }
+
+  function canPauseJob(job) {
+    return Boolean(job) && ['queued', 'retrying'].includes(job.status) && !isDiscardedJob(job);
+  }
+
+  function canResumeJob(job) {
+    return isPausedJob(job);
+  }
+
+  function canDiscardJob(job) {
+    return Boolean(job) && !['running', 'succeeded'].includes(job.status) && !isDiscardedJob(job);
+  }
+
+  function jobOperatorControls(job) {
+    const buttons = [];
+    if (canPauseJob(job)) buttons.push(`<button onclick="controlCloudJob('${esc(job.id)}', 'pause')">Pausar</button>`);
+    if (canResumeJob(job)) buttons.push(`<button class="primary" onclick="controlCloudJob('${esc(job.id)}', 'resume')">Retomar</button>`);
+    if (canDiscardJob(job)) buttons.push(`<button class="danger" onclick="controlCloudJob('${esc(job.id)}', 'discard')">Descartar</button>`);
+    return buttons.join('');
   }
 
   function actionLabel(type) {
@@ -110,16 +143,19 @@
     const running = relevant.find(job => isZeroCostJob(job) && job.status === 'running');
     const stale = relevant.find(isStaleRunning);
     const blocked = relevant.find(job => job.type === 'cloud_detect_speech_slices' && ['queued', 'retrying', 'running', 'failed'].includes(job.status));
+    const paused = relevant.find(isPausedJob);
+    const discarded = relevant.filter(isDiscardedJob);
     const failed = relevant.filter(job => job.status === 'failed');
     const counts = relevant.reduce((summary, job) => {
       const status = job.status || 'unknown';
       summary[status] = (summary[status] || 0) + 1;
       return summary;
     }, {});
-    return { relevant, next, running, stale, blocked, failed, counts };
+    return { relevant, next, running, stale, blocked, paused, discarded, failed, counts };
   }
 
   function pipelineTitle(status) {
+    if (status.paused) return `Pipeline pausado: ${status.paused.type}`;
     if (status.next) return `Proxima etapa: ${status.next.type}`;
     if (status.stale) return `Possivel timeout: ${status.stale.type}`;
     if (status.running) return `Rodando: ${status.running.type}`;
@@ -129,11 +165,13 @@
   }
 
   function pipelineDetail(status, sourceSessionId) {
+    if (status.paused) return 'Retome o job pausado quando quiser continuar a esteira desta sessao.';
     if (status.next) return `${sourceSessionId || status.next.session?.sourceSessionId || 'sessao'} pronta para continuar sem OpenAI paga.`;
     if (status.stale) return `Rodando ha ${jobAgeMinutes(status.stale)} min. Use Recuperar pipeline para voltar o job para retry e continuar com auditoria.`;
     if (status.running) return `Rodando ha ${jobAgeMinutes(status.running) ?? '-'} min. Atualize antes de disparar outra etapa.`;
     if (status.failed.length) return 'Use Tentar novamente no job falho antes de continuar a esteira.';
     if (status.blocked) return 'ZIP, manifest, extracao e chunks chegaram ao limite atual; falta o worker cloud de fala.';
+    if (status.discarded.length) return `${status.discarded.length} job(s) descartado(s) por decisao operacional.`;
     return sourceSessionId || 'Selecione uma sessao para inspecionar a esteira.';
   }
 
@@ -142,6 +180,8 @@
     if (status.counts.queued) badges.push(chip(`${status.counts.queued} fila`, 'gold'));
     if (status.counts.retrying) badges.push(chip(`${status.counts.retrying} retry`, 'orange'));
     if (status.counts.running) badges.push(chip(`${status.counts.running} rodando`, 'orange'));
+    if (status.paused) badges.push(chip('pausado', 'orange'));
+    if (status.discarded.length) badges.push(chip(`${status.discarded.length} descartado`, 'red'));
     if (status.failed.length) badges.push(chip(`${status.failed.length} falha`, 'red'));
     if (status.stale) badges.push(chip(`>${STALE_RUNNING_MINUTES} min`, 'red'));
     if (status.blocked && !status.next) badges.push(chip('fala pendente', 'blue'));
@@ -299,9 +339,11 @@
     const retryButton = canRetry(job)
       ? `<button class="primary" onclick="retryCloudJob('${esc(job.id)}')">Tentar novamente</button>`
       : '';
+    const operatorButtons = jobOperatorControls(job);
     if (!endpoint) {
       const next = job.output?.nextAction || job.output?.workerStatus || '';
-      return `${next ? `<p>${esc(next)}</p>` : ''}${retryButton ? `<div class="job-actions">${retryButton}</div>` : ''}`;
+      const buttons = `${retryButton}${operatorButtons}`;
+      return `${next ? `<p>${esc(next)}</p>` : ''}${buttons ? `<div class="job-actions">${buttons}</div>` : ''}`;
     }
     const limit = job.type === 'cloud_extract_craig_tracks'
       ? `<label class="inline-job-limit"><span class="label">Faixas</span><input id="jobLimit_${esc(job.id)}" type="number" min="1" max="3" value="1" /></label>`
@@ -319,6 +361,7 @@
         <button class="primary" onclick="runCloudJob('${esc(job.id)}', '${esc(job.type)}', false)" ${canExecute(job) ? '' : 'disabled'}>${esc(primaryLabel)}</button>
         ${inspectButton}
         ${retryButton}
+        ${operatorButtons}
       </div>
     `;
   }
@@ -403,6 +446,7 @@
     const workerStatus = job.output?.workerStatus || job.output?.uploadStatus || '';
     const session = job.session?.sourceSessionId || '';
     const stepStatus = job.stepSummary?.status || '';
+    const state = operatorState(job);
     const age = job.status === 'running' ? jobAgeMinutes(job) : null;
     return `
       <div class="job-row ${isStaleRunning(job) ? 'pipeline-stale' : ''}">
@@ -415,6 +459,7 @@
             ${chip(status, jobTone(status))}
             ${stepStatus ? chip(`steps: ${stepStatus}`, jobTone(stepStatus)) : ''}
             ${workerStatus ? chip(workerStatus, 'blue') : ''}
+            ${state ? chip(state, state === 'discarded' ? 'red' : state === 'paused' ? 'orange' : 'blue') : ''}
             ${age !== null ? chip(`${age} min`, isStaleRunning(job) ? 'red' : 'orange') : ''}
             ${chip(shortId(job.id), 'gold')}
           </div>
@@ -775,6 +820,7 @@
       remember?.('Job reenfileirado para retry.', { jobId, reason });
       toast?.('Job reenfileirado.');
       await loadJobs?.(true);
+      await refreshPipelineControl(false);
       render?.();
       return payload;
     } catch (error) {
@@ -786,8 +832,42 @@
     }
   }
 
+  async function controlCloudJob(jobId, action) {
+    const labels = {
+      pause: 'Pausar este job e impedir que ele continue automaticamente?',
+      resume: 'Retomar este job pausado e voltar para retry?',
+      discard: 'Descartar este job sem apagar evidencias? Ele sairá da fila operacional.'
+    };
+    if (!labels[action]) {
+      toast?.('Acao de job indisponivel.');
+      return null;
+    }
+    if (!window.confirm(labels[action])) return null;
+    const body = { jobId, action, reason: `${action}_requested_from_ui` };
+    if (action === 'discard') body.confirm = 'DISCARD_JOB';
+    try {
+      if (typeof setBusy === 'function') setBusy(true);
+      const payload = await callApi('/api/jobs/control', body);
+      if (payload.jobs) window.state.jobs = payload.jobs;
+      if (payload.sessions) window.state.sessions = payload.sessions;
+      remember?.(`Job ${action}.`, { jobId, action, status: payload.status, operatorState: payload.operatorState });
+      toast?.({ pause: 'Job pausado.', resume: 'Job retomado.', discard: 'Job descartado.' }[action]);
+      await loadJobs?.(true);
+      await refreshPipelineControl(false);
+      render?.();
+      return payload;
+    } catch (error) {
+      toast?.(error.message);
+      remember?.(`Controle de job falhou: ${error.message}`);
+      return null;
+    } finally {
+      if (typeof setBusy === 'function') setBusy(false);
+    }
+  }
+
   window.runCloudJob = runCloudJob;
   window.retryCloudJob = retryCloudJob;
+  window.controlCloudJob = controlCloudJob;
   window.continuePipeline = continuePipeline;
   window.refreshPipelineControl = refreshPipelineControl;
   window.runPipelineControlAction = runPipelineControlAction;

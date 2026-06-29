@@ -3285,6 +3285,179 @@ async function runPipelineContinue(req, campaign, body) {
   };
 }
 
+
+function normalizeJobControlAction(value) {
+  const action = cleanText(value || '', 40);
+  if (['pause', 'resume', 'discard'].includes(action)) return action;
+  throw httpError(400, `Acao de job desconhecida: ${action || 'vazia'}`);
+}
+
+function jobControlLabel(action) {
+  return {
+    pause: 'Pausa solicitada',
+    resume: 'Retomada solicitada',
+    discard: 'Job descartado'
+  }[action] || 'Controle de job';
+}
+
+function jobControlStepStatus(action) {
+  if (action === 'resume') return 'retrying';
+  if (action === 'discard') return 'skipped';
+  return 'blocked';
+}
+
+async function controlProcessingJob(req, campaign, body) {
+  const action = normalizeJobControlAction(body.action || body.jobAction || body.job_action);
+  const access = await requirePermission(req, campaign, {
+    action: 'project.jobs.run',
+    scopeType: 'project',
+    scopeId: PROJECT_SCOPE_ID,
+    legacyRoles: ['owner', 'master'],
+    error: 'Controlar jobs exige permissao project.jobs.run.'
+  });
+  const jobIdRaw = cleanText(body.jobId || body.job_id, 80);
+  const jobId = uuidOrNull(jobIdRaw);
+  if (!jobId) throw httpError(400, 'jobId invalido para controle de job.');
+  if (action === 'discard' && body.confirm !== 'DISCARD_JOB') {
+    throw httpError(400, 'Descartar job exige confirm="DISCARD_JOB".');
+  }
+  const reason = cleanText(body.reason || `${action}_requested_from_ui`, 500);
+  const actor = String(access.profile?.id || access.user?.id || access.user?.email || 'unknown');
+  const db = getPool();
+  const client = await db.connect();
+  try {
+    await client.query('begin');
+    const stateFilter = action === 'pause'
+      ? "and pj.status in ('queued','retrying')"
+      : action === 'resume'
+        ? "and pj.status = 'cancelled' and coalesce(pj.output->>'operatorState', '') = 'paused'"
+        : "and pj.status in ('queued','retrying','failed','cancelled')";
+    const target = await client.query(
+      `
+select pj.id, pj.job_type, pj.status, pj.output, s.source_session_id
+from processing_jobs pj
+join sessions s on s.id = pj.session_id
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1
+  and pj.id = $2::uuid
+  ${stateFilter}
+for update;`,
+      [campaign, jobId]
+    );
+    if (!target.rows.length) {
+      const messages = {
+        pause: 'Job nao encontrado ou nao esta em fila/retry para pausar.',
+        resume: 'Job nao encontrado ou nao esta pausado pelo operador.',
+        discard: 'Job nao encontrado ou nao pode ser descartado neste estado.'
+      };
+      throw httpError(409, messages[action]);
+    }
+    const job = target.rows[0];
+    const nextStatus = action === 'resume' ? 'retrying' : 'cancelled';
+    const workerStatus = action === 'pause'
+      ? 'operator_paused'
+      : action === 'resume'
+        ? 'operator_resumed'
+        : 'operator_discarded';
+    const operatorState = action === 'pause'
+      ? 'paused'
+      : action === 'resume'
+        ? 'active'
+        : 'discarded';
+    const outputPatch = {
+      operatorState,
+      operatorAction: action,
+      operatorActionAt: new Date().toISOString(),
+      operatorActionBy: actor,
+      operatorActionReason: reason,
+      operatorPreviousStatus: job.status,
+      workerStatus,
+      paidAiCostUsd: 0
+    };
+    if (action === 'pause') outputPatch.pausedAt = outputPatch.operatorActionAt;
+    if (action === 'resume') outputPatch.resumedAt = outputPatch.operatorActionAt;
+    if (action === 'discard') outputPatch.discardedAt = outputPatch.operatorActionAt;
+
+    await client.query(
+      `
+update processing_jobs
+set status = $2,
+    error = case when $3::text = 'discard' then 'Descartado pelo operador' else null end,
+    finished_at = case when $3::text in ('pause','discard') then now() else null end,
+    output = coalesce(output, '{}'::jsonb) || $4::jsonb
+where id = $1::uuid;`,
+      [jobId, nextStatus, action, JSON.stringify(outputPatch)]
+    );
+
+    if (action === 'pause') {
+      await client.query(
+        `
+update processing_job_steps
+set status = 'blocked',
+    retryable = true,
+    finished_at = now(),
+    progress = coalesce(progress, '{}'::jsonb) || $2::jsonb,
+    updated_at = now()
+where job_id = $1::uuid
+  and status in ('pending','retrying');`,
+        [jobId, JSON.stringify(outputPatch)]
+      );
+    } else if (action === 'resume') {
+      await client.query(
+        `
+update processing_job_steps
+set status = 'retrying',
+    retryable = true,
+    error = null,
+    finished_at = null,
+    progress = coalesce(progress, '{}'::jsonb) || $2::jsonb,
+    updated_at = now()
+where job_id = $1::uuid
+  and status in ('blocked','failed');`,
+        [jobId, JSON.stringify(outputPatch)]
+      );
+    } else if (action === 'discard') {
+      await client.query(
+        `
+update processing_job_steps
+set status = 'skipped',
+    retryable = false,
+    finished_at = now(),
+    progress = coalesce(progress, '{}'::jsonb) || $2::jsonb,
+    updated_at = now()
+where job_id = $1::uuid
+  and status <> 'succeeded';`,
+        [jobId, JSON.stringify(outputPatch)]
+      );
+    }
+
+    await markJobStep(client, { id: jobId, job_type: job.job_type }, jobControlStepStatus(action), {
+      key: `operator_${action}`,
+      label: jobControlLabel(action),
+      orderIndex: action === 'pause' ? 6 : action === 'resume' ? 7 : 8,
+      retryable: action !== 'discard',
+      progress: outputPatch,
+      error: action === 'discard' ? reason : null
+    });
+
+    await client.query('commit');
+    return {
+      ok: true,
+      action,
+      jobId,
+      sourceSessionId: job.source_session_id || null,
+      status: nextStatus,
+      operatorState,
+      reason
+    };
+  } catch (error) {
+    await client.query('rollback').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function retryProcessingJob(req, campaign, body) {
   const access = await requirePermission(req, campaign, {
     action: 'project.jobs.run',
@@ -3308,6 +3481,7 @@ with target as (
   where c.slug = $1
     and pj.id = $2::uuid
     and pj.status in ('failed','cancelled')
+    and coalesce(pj.output->>'operatorState', '') not in ('paused','discarded')
   for update
 )
 update processing_jobs pj
@@ -5869,6 +6043,14 @@ async function handlePost(req, res, path) {
   if (path === '/api/jobs/retry') {
     const payload = await retryProcessingJob(req, campaign, body);
     return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
+  }
+  if (path === '/api/jobs/control') {
+    const payload = await controlProcessingJob(req, campaign, body);
+    return sendJson(res, 200, {
+      ...payload,
+      jobs: await listJobs(campaign, payload.sourceSessionId || ''),
+      sessions: await listSessions(campaign, runId)
+    });
   }
   if (path === '/api/pipeline-continue' || path === '/api/jobs/pipeline-continue') {
     const payload = await runPipelineContinue(req, campaign, body);
