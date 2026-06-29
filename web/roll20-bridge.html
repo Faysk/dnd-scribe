@@ -57,10 +57,15 @@
         </section>
 
         <section class="audio-card">
-          <span class="label">2. Rodar bridge no tab do jogo</span>
-          <p>Arraste este link para a barra de favoritos. Durante a sessao, clique nele dentro do Roll20.</p>
-          <a class="button-link primary" href="javascript:(()=>{const s=document.createElement('script');s.src='https://dnd.faysk.dev/roll20-bridge.js?v='+Date.now();document.body.appendChild(s)})()">DnD Scribe Roll20</a>
-          <p>O bridge vai pedir URL, campaign slug, sourceSessionId e token da ponte.</p>
+          <span class="label">2. Instalar extensao Chrome local</span>
+          <p>O Roll20 bloqueia scripts externos por CSP. Use a extensao local do projeto em vez de bookmarklet.</p>
+          <a class="button-link primary" href="/integrations/roll20/chrome-extension/manifest.json" target="_blank" rel="noreferrer">Ver manifest</a>
+          <p>No Chrome, abra <code>chrome://extensions</code>, ative Developer mode, clique Load unpacked e selecione <code>D:\Projects\dnd\integrations\roll20\chrome-extension</code>.</p>
+        </section>
+
+        <section class="audio-card">
+          <span class="label">3. Rodar na mesa</span>
+          <p>Abra o jogo no Roll20. A extensao mostra um painel pequeno no canto. Clique em Config e informe URL, campaign slug, sourceSessionId e token.</p>
         </section>
 
         <section class="audio-card" id="bridgeConfigPanel">
@@ -69,7 +74,7 @@
         </section>
 
         <section class="audio-card">
-          <span class="label">3. Comandos no chat Roll20</span>
+          <span class="label">Comandos no chat Roll20</span>
           <p>`!dndscribe status` mostra o estado. `!dndscribe off` pausa. `!dndscribe on` religa.</p>
         </section>
 
