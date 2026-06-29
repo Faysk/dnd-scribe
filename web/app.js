@@ -1231,6 +1231,14 @@ function renderUploadSessionCard(session) {
         <div><span class="label">Arquivos</span><strong>${escapeHtml(target.recordingFiles || 0)}</strong></div>
         <div><span class="label">Duracao</span><strong>${escapeHtml(target.durationMs ? fmtDuration(target.durationMs) : 'pendente')}</strong></div>
       </div>
+      ${session ? `
+        <div class="actions">
+          ${session.status === 'archived'
+            ? `<button onclick="setSessionArchived(false)">Restaurar</button>`
+            : `<button class="danger" onclick="setSessionArchived(true)">Arquivar</button>`}
+          <button onclick="state.tab='sessions'; render();">Editar</button>
+        </div>
+      ` : ''}
     </section>
   `;
 }
