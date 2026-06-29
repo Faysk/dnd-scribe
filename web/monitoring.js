@@ -245,10 +245,15 @@
     const storage = metricById(data, 'storage');
     const roll20Bridge = metricById(data, 'roll20-bridge-events');
     const cleanup = metricById(data, 'audio-cleanup');
+    const storageBudget = metricById(data, 'storage-budget');
     const audio = metricById(data, 'audio-pipeline');
     const ai = metricById(data, 'ai-usage');
     const jobs = metricById(data, 'jobs');
     const totals = storageTotals(storage);
+    const storageUsage = Number.isFinite(Number(storageBudget.usagePercent))
+      ? `${num(storageBudget.usagePercent)}%`
+      : '-';
+    const storageAverageTone = Number(storageBudget.averageRetainedTargetPercent || 0) >= 100 ? 'attention' : '';
     return `
       <section class="monitor-page">
         <div class="monitor-head">
@@ -270,6 +275,8 @@
           ${summaryMetric(num(content.roll20Events), 'eventos Roll20')}
           ${summaryMetric(num(roll20Bridge.total), 'ponte Roll20', Number(roll20Bridge.total || 0) ? 'ok' : 'attention')}
           ${summaryMetric(bytes(totals.bytes), 'dados em arquivos')}
+          ${summaryMetric(storageUsage, 'limite storage', storageBudget.status || '')}
+          ${summaryMetric(bytes(storageBudget.averageSessionBytes), 'media/sessao storage', storageBudget.status === 'critical' ? 'critical' : storageAverageTone)}
           ${summaryMetric(bytes(cleanup.deleteReadyBytes), 'limpeza pronta', Number(cleanup.deleteReadyBytes || 0) ? 'attention' : '')}
           ${summaryMetric(`${num(audio.speechSliceMinutes, 2)} min`, 'audio em slices')}
           ${summaryMetric(money(ai.estimatedCostUsd), 'IA estimada')}

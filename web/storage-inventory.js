@@ -30,6 +30,12 @@
     return `${hours}h ${Math.round(rest)}min`;
   }
 
+  function percent(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '-';
+    return `${number}%`;
+  }
+
   function chip(text, tone = '') {
     if (typeof badge === 'function') return badge(text, tone);
     return `<span class="badge ${tone}">${esc(text)}</span>`;
@@ -103,6 +109,24 @@
     return 'blue';
   }
 
+  function statusTone(status = '') {
+    return {
+      ok: 'green',
+      attention: 'gold',
+      critical: 'red',
+      standby: 'blue'
+    }[status] || 'blue';
+  }
+
+  function statusText(status = '') {
+    return {
+      ok: 'dentro da politica',
+      attention: 'pede atencao',
+      critical: 'critico',
+      standby: 'standby'
+    }[status] || status || 'sem status';
+  }
+
   function normalizeStorageRow(row = {}) {
     const fileType = row.file_type || row.fileType || 'unknown';
     const sourceSystem = row.source_system || row.sourceSystem || 'unknown';
@@ -122,6 +146,14 @@
   function inventoryFromMonitoring(payload) {
     const rows = metricById(payload, 'storage')?.data || [];
     const cleanup = metricById(payload, 'audio-cleanup')?.data || null;
+    const budget = metricById(payload, 'storage-budget')?.data || {};
+    const policy = budget.policy || {
+      totalSoftLimitBytes: 5 * 1024 * 1024 * 1024,
+      sessionRetainedTargetBytes: 250 * 1024 * 1024,
+      sessionActiveWarningBytes: 1500 * 1024 * 1024,
+      uploadZipWarningBytes: 1200 * 1024 * 1024,
+      note: 'Inventario rastreado pelo banco. Defaults locais aplicados quando a API nao retorna politica.'
+    };
     const categories = rows.map(normalizeStorageRow).sort((a, b) => b.bytes - a.bytes);
     const totals = categories.reduce((acc, item) => {
       acc.objects += item.objects;
@@ -129,6 +161,22 @@
       acc.audioMinutes += item.audioMinutes;
       return acc;
     }, { objects: 0, bytes: 0, audioMinutes: 0, latestModified: null });
+    const sessions = (budget.largestSessions || []).map(session => {
+      const sessionBytes = Number(session.bytes || 0);
+      return {
+        sourceSessionId: session.source_session_id || session.sourceSessionId || 'unknown',
+        title: session.session_title || session.sessionTitle || '',
+        objects: Number(session.files || session.objects || 0),
+        bytes: sessionBytes,
+        audioMinutes: Number(session.audio_minutes || session.audioMinutes || 0),
+        warning: sessionBytes >= Number(policy.sessionActiveWarningBytes || 0)
+          ? 'red'
+          : sessionBytes >= Number(policy.sessionRetainedTargetBytes || 0)
+            ? 'yellow'
+            : '',
+        categories: []
+      };
+    });
     return {
       ok: true,
       mode: 'db_recording_files_inventory',
@@ -139,12 +187,10 @@
       totals,
       categories,
       cleanup,
-      sessions: [],
+      budget,
+      sessions,
       largestObjects: [],
-      policy: {
-        targetPermanentBytes: 150 * 1024 * 1024,
-        note: 'Inventario rastreado pelo banco. Listagem R2 direta sera acoplada ao monitoramento sem criar nova Function.'
-      }
+      policy
     };
   }
 
@@ -287,33 +333,42 @@
 
   function renderSessionRows(data) {
     const sessions = data?.sessions || [];
+    const policy = data?.policy || {};
     if (!sessions.length) {
-      return '<div class="empty">A visao por sessao entra quando a listagem R2 for acoplada ao monitoramento ou quando o banco registrar storage por sessao com objetos detalhados.</div>';
+      return '<div class="empty">Nenhuma sessao com arquivo rastreado no snapshot atual.</div>';
     }
     return `
       <div class="storage-session-list">
-        ${sessions.slice(0, 12).map(session => `
-          <div class="storage-session-row ${esc(session.warning || '')}">
-            <div class="row between">
-              <div>
-                <strong>${esc(session.sourceSessionId || 'unknown')}</strong>
-                <small>${esc(session.objects || 0)} objetos • atualizado ${esc(session.latestModified || '-')}</small>
+        ${sessions.slice(0, 12).map(session => {
+          const warningTone = session.warning === 'red' ? 'red' : session.warning === 'yellow' ? 'gold' : 'green';
+          const warningLabel = session.warning === 'red'
+            ? `acima de ${bytes(policy.sessionActiveWarningBytes)}`
+            : session.warning === 'yellow'
+              ? `acima da meta ${bytes(policy.sessionRetainedTargetBytes)}`
+              : 'dentro da meta';
+          return `
+            <div class="storage-session-row ${esc(session.warning || '')}">
+              <div class="row between">
+                <div>
+                  <strong>${esc(session.title || session.sourceSessionId || 'unknown')}</strong>
+                  <small>${esc(session.sourceSessionId || 'unknown')} • ${esc(session.objects || 0)} arquivos • ${esc(minutes(session.audioMinutes))}</small>
+                </div>
+                <div class="badges">
+                  ${chip(bytes(session.bytes), warningTone)}
+                  ${chip(warningLabel, warningTone)}
+                </div>
               </div>
-              <div class="badges">
-                ${chip(bytes(session.bytes), session.warning === 'red' ? 'red' : session.warning === 'yellow' ? 'gold' : 'green')}
-                ${chip(session.warning === 'red' ? 'acima de 500 MB' : session.warning === 'yellow' ? 'acima de 250 MB' : 'ok', session.warning === 'red' ? 'red' : session.warning === 'yellow' ? 'gold' : 'green')}
-              </div>
+              ${(session.categories || []).length ? session.categories.map(category => `
+                <div class="storage-category-line">
+                  <div>${chip(category.label || category.category, categoryTone(category.category, category.retentionClass))}<small>${esc(category.retentionClass || '')}</small></div>
+                  <strong>${esc(bytes(category.bytes))}</strong>
+                  <small>${esc(category.objects)} objetos</small>
+                  <div class="storage-bar"><span style="width:100%"></span></div>
+                </div>
+              `).join('') : '<small>Resumo agregado por sessao; categorias detalhadas aparecem acima em tipos de artefato.</small>'}
             </div>
-            ${session.categories.map(category => `
-              <div class="storage-category-line">
-                <div>${chip(category.label || category.category, categoryTone(category.category, category.retentionClass))}<small>${esc(category.retentionClass || '')}</small></div>
-                <strong>${esc(bytes(category.bytes))}</strong>
-                <small>${esc(category.objects)} objetos</small>
-                <div class="storage-bar"><span style="width:100%"></span></div>
-              </div>
-            `).join('')}
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     `;
   }
@@ -349,7 +404,7 @@
           <div>
             <span class="label">Storage de audio</span>
             <h2>Inventario de audio e artefatos</h2>
-            <p>${esc(data?.policy?.note || 'Leitura segura por monitoramento. Nada e apagado nesta etapa.')}</p>
+            <p>${esc(data?.policy?.note || 'Leitura segura por monitoramento. Nada e apagado nesta etapa.')} ${data?.budget?.status ? chip(statusText(data.budget.status), statusTone(data.budget.status)) : ''}</p>
           </div>
           <div class="actions">
             <button onclick="loadStorageInventory(true)" ${inventory.loading ? 'disabled' : ''}>${inventory.loading ? 'Atualizando...' : 'Atualizar inventario'}</button>
@@ -362,6 +417,9 @@
         ${data ? `
           <div class="storage-grid">
             <div class="storage-tile"><span class="label">Total rastreado</span><strong>${esc(bytes(data.totals?.bytes))}</strong><small>${esc(data.totals?.objects || 0)} arquivos</small></div>
+            <div class="storage-tile"><span class="label">Uso da politica</span><strong>${esc(percent(data.budget?.usagePercent))}</strong><small>limite ${esc(bytes(data.policy?.totalSoftLimitBytes))}</small></div>
+            <div class="storage-tile"><span class="label">Media/sessao</span><strong>${esc(bytes(data.budget?.averageSessionBytes))}</strong><small>${esc(percent(data.budget?.averageRetainedTargetPercent))} da meta ${esc(bytes(data.policy?.sessionRetainedTargetBytes))}</small></div>
+            <div class="storage-tile"><span class="label">Maior sessao</span><strong>${esc(bytes(data.budget?.largestSessionBytes))}</strong><small>alerta em ${esc(bytes(data.policy?.sessionActiveWarningBytes))}</small></div>
             <div class="storage-tile"><span class="label">Audio rastreado</span><strong>${esc(minutes(data.totals?.audioMinutes))}</strong><small>antes da compactacao final</small></div>
             <div class="storage-tile"><span class="label">Liberavel</span><strong>${esc(bytes(data.cleanup?.deleteReadyBytes))}</strong><small>sem deletar automaticamente</small></div>
             <div class="storage-tile"><span class="label">Bloqueado</span><strong>${esc(bytes(data.cleanup?.blockedBytes))}</strong><small>aguarda evidencia/compactacao</small></div>
