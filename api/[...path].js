@@ -3027,6 +3027,9 @@ async function runPipelineControlAction(req, campaign, body) {
 
   if (action === 'dispatch_transcription') {
     const execute = body.execute === true;
+    if (execute && body.confirm !== 'RUN_TRANSCRIPTION_AI') {
+      throw httpError(400, 'Transcricao real exige confirm="RUN_TRANSCRIPTION_AI".');
+    }
     const limit = normalizeWorkflowLimit(body.limit || body.transcriptionLimit, DEFAULT_TRANSCRIPTION_LIMIT, 1, 100);
     const costPerMinute = normalizeMoney(body.transcriptionCostUsdPerMinute || body.costPerMinute, DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE);
     const metrics = await pipelineControlMetrics(getPool(), campaign, sourceSessionId, limit);

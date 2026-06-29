@@ -781,6 +781,7 @@
       options.limit = numberInput(`pipelineTranscriptionLimit_${variant}`, 50);
       options.approveCostUsd = numberInput(`pipelineApproveCost_${variant}`, 0.08);
       options.maxEstimatedCostUsd = options.approveCostUsd;
+      if (options.execute) options.confirm = 'RUN_TRANSCRIPTION_AI';
     }
     if (action === 'dispatch_review_generation') {
       options.batchSize = numberInput(`pipelineReviewBatchSize_${variant}`, 80);
