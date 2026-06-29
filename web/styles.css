@@ -271,6 +271,49 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   display: block;
   margin-top: 3px;
 }
+.upload-readiness {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #101820;
+}
+.upload-readiness > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+.upload-readiness-signals {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(72px, 1fr));
+  gap: 8px;
+}
+.upload-readiness-signals div {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+}
+.upload-readiness-signals .ok {
+  border-color: #3f855c;
+}
+.upload-readiness-signals .warn {
+  border-color: #8d6834;
+  background: #17140d;
+}
+.upload-readiness-signals .info {
+  border-color: #426f98;
+}
+.upload-readiness-signals strong {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .upload-step-list {
   display: grid;
   gap: 8px;
@@ -789,8 +832,11 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .workspace { padding: 12px 12px 118px; }
   .rail { padding: 12px; }
-  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-page-head, .upload-summary-grid, .pipeline-control {
+  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-readiness, .upload-page-head, .upload-summary-grid, .pipeline-control {
     grid-template-columns: 1fr;
+  }
+  .upload-readiness-signals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .upload-step {
     grid-template-columns: 18px minmax(0, 1fr);

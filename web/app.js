@@ -1495,6 +1495,7 @@ function renderCraigIngestPanel() {
           ${badge(recordingId ? `Craig ${recordingId}` : 'novo ZIP', 'gold')}
         </div>
       </div>
+      ${renderUploadOperationalReadiness(upload, fileName, recordingId)}
       <label><span class="label">Sessao alvo</span>
         <select id="ingestSessionId">
           <option value="">Criar nova sessao pelo ZIP (recomendado)</option>
@@ -1542,6 +1543,79 @@ function renderCraigIngestPanel() {
       ${state.ingest.busy ? renderIngestProgress() : ''}
       ${state.ingest.error ? `<div class="empty">${escapeHtml(state.ingest.error)}</div>` : ''}
       ${state.ingest.result ? renderIngestResult(state.ingest.result) : ''}
+    </div>
+  `;
+}
+
+function renderUploadOperationalReadiness(upload, fileName, recordingId) {
+  const fileSize = state.ingest.file?.size || upload?.sizeBytes || 0;
+  const sizeAssessment = craigUploadSizeAssessment(fileSize);
+  const jobs = uploadRelevantJobs();
+  const failed = jobs.filter(job => job.status === 'failed').length;
+  const running = jobs.filter(job => job.status === 'running').length;
+  const queued = jobs.filter(job => ['queued', 'retrying'].includes(job.status)).length;
+  const succeeded = jobs.filter(job => job.status === 'succeeded').length;
+  const sourceSessionId = ingestSourceSessionId();
+  const runnable = jobs.find(job => ['cloud_ingest_craig', 'cloud_extract_craig_tracks', 'cloud_plan_audio_chunks'].includes(job.type) && ['queued', 'retrying'].includes(job.status));
+  const signals = [
+    {
+      label: 'Arquivo',
+      value: fileName ? 'selecionado' : 'aguardando',
+      tone: fileName ? 'ok' : 'warn'
+    },
+    {
+      label: 'Tamanho',
+      value: sizeAssessment ? sizeAssessment.level : 'sem arquivo',
+      tone: !sizeAssessment ? 'warn' : (sizeAssessment.level === 'ok' ? 'ok' : 'info')
+    },
+    {
+      label: 'Craig ID',
+      value: recordingId || 'inferir',
+      tone: recordingId ? 'ok' : 'info'
+    },
+    {
+      label: 'Sessao',
+      value: sourceSessionId ? 'definida' : 'nova',
+      tone: sourceSessionId ? 'ok' : 'info'
+    },
+    {
+      label: 'Jobs',
+      value: `${succeeded}/${jobs.length || 0} ok`,
+      tone: failed ? 'warn' : (running || queued ? 'info' : 'ok')
+    },
+    {
+      label: 'Proxima',
+      value: failed ? 'revisar falha' : (runnable ? 'continuar' : (jobs.length ? 'acompanhar' : 'upload')),
+      tone: failed ? 'warn' : (runnable ? 'info' : 'ok')
+    },
+    {
+      label: 'OpenAI',
+      value: 'bloqueado',
+      tone: 'ok'
+    }
+  ];
+  const status = state.ingest.busy
+    ? 'em andamento'
+    : failed
+      ? 'atenção'
+      : fileName || sourceSessionId || jobs.length
+        ? 'operável'
+        : 'preparar';
+  return `
+    <div class="upload-readiness">
+      <div>
+        <span class="label">Prontidao operacional</span>
+        <strong>${escapeHtml(status)}</strong>
+        <small>${escapeHtml(failed ? 'Ha job com falha; revise antes de seguir.' : 'Upload direto para R2, jobs cloud e custo OpenAI controlado por etapa.')}</small>
+      </div>
+      <div class="upload-readiness-signals">
+        ${signals.map(signal => `
+          <div class="${escapeHtml(signal.tone)}">
+            <span class="label">${escapeHtml(signal.label)}</span>
+            <strong>${escapeHtml(signal.value)}</strong>
+          </div>
+        `).join('')}
+      </div>
     </div>
   `;
 }
