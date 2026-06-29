@@ -904,13 +904,29 @@ body.auth-locked .music-dock { display: none; }
   gap: 10px;
 }
 .timeline-toolbar {
-  grid-template-columns: minmax(150px, 220px) minmax(220px, 1fr) minmax(180px, 260px) auto;
+  grid-template-columns: minmax(140px, 200px) minmax(220px, 1fr) minmax(170px, 240px) minmax(180px, auto) auto;
   align-items: end;
   padding: 0 14px 14px;
 }
 .timeline-toolbar label {
   display: grid;
   gap: 5px;
+}
+.timeline-nav {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) auto minmax(70px, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+.timeline-nav strong {
+  min-width: 42px;
+  text-align: center;
+  color: var(--muted);
+  font-size: .82rem;
+}
+.timeline-nav button {
+  min-height: 38px;
+  padding: 0 9px;
 }
 .timeline-anchor-warning,
 .timeline-anchor-ok {

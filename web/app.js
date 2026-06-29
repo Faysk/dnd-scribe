@@ -2251,6 +2251,7 @@ function renderTimeline() {
           </select>
           <input value="${escapeHtml(state.timeline.query || '')}" placeholder="Buscar fala, jogador, Discord, Roll20..." oninput="state.timeline.query=this.value; render();" />
           <label><span class="label">Zoom</span><input type="range" min="1" max="6" step="1" value="${Number(state.timeline.zoom || 1)}" oninput="state.timeline.zoom=Number(this.value); render();" /></label>
+          ${renderTimelineNavigation(items)}
           <button onclick="loadTimelineData(true)">Atualizar</button>
         </div>
         ${renderDiscordSyncControls()}
@@ -2445,6 +2446,29 @@ function timelineSelectedItem() {
   return (data?.items || []).find(item => item.id === id) || null;
 }
 
+function timelineSortedItems(items = filteredTimelineItems()) {
+  return [...items].sort((a, b) => {
+    const aRange = timelineItemRange(a);
+    const bRange = timelineItemRange(b);
+    return aRange.start - bRange.start
+      || aRange.end - bRange.end
+      || String(a.kind || '').localeCompare(String(b.kind || ''))
+      || String(a.id || '').localeCompare(String(b.id || ''));
+  });
+}
+
+function timelineNavigationState(items = filteredTimelineItems()) {
+  const sorted = timelineSortedItems(items);
+  const index = sorted.findIndex(item => item.id === state.timeline.selectedItemId);
+  return {
+    sorted,
+    total: sorted.length,
+    index,
+    previous: index > 0 ? sorted[index - 1] : null,
+    next: index >= 0 && index < sorted.length - 1 ? sorted[index + 1] : null
+  };
+}
+
 function timelineDuration(data, items) {
   return Math.max(
     Number(data?.session?.durationMs || 0),
@@ -2548,6 +2572,18 @@ function renderOverviewSegment(kind, value, total) {
   return `<span class="${kind}" style="height:${Math.max(8, Math.round((value / total) * 100))}%"></span>`;
 }
 
+function renderTimelineNavigation(items) {
+  const nav = timelineNavigationState(items);
+  const label = nav.total ? `${Math.max(0, nav.index + 1)}/${nav.total}` : '0/0';
+  return `
+    <div class="timeline-nav" aria-label="Navegacao da timeline">
+      <button ${nav.previous ? '' : 'disabled'} onclick="navigateTimeline(-1)" title="Item anterior">Anterior</button>
+      <strong>${escapeHtml(label)}</strong>
+      <button ${nav.next ? '' : 'disabled'} onclick="navigateTimeline(1)" title="Proximo item">Proximo</button>
+    </div>
+  `;
+}
+
 function renderTimelineScale(data, items) {
   const duration = timelineDuration(data, items);
   const markers = Array.from({ length: 7 }, (_, index) => Math.round(duration * (index / 6)));
@@ -2642,7 +2678,7 @@ function renderTimelineBlock(item, duration) {
   const row = Math.max(0, Number(item.timelineRow || 0));
   const top = 9 + (row * 28);
   return `
-    <button class="timeline-block ${item.kind} ${selected ? 'selected' : ''}" style="left:${left}%;width:${width}%;top:${top}px;" onclick="selectTimelineItem('${escapeHtml(item.id)}')" title="${escapeHtml(item.text || title)}">
+    <button class="timeline-block ${item.kind} ${selected ? 'selected' : ''}" data-timeline-block-id="${escapeHtml(item.id)}" aria-pressed="${selected ? 'true' : 'false'}" style="left:${left}%;width:${width}%;top:${top}px;" onclick="selectTimelineItem('${escapeHtml(item.id)}')" title="${escapeHtml(item.text || title)}">
       <span>${escapeHtml(title || item.kind)}</span>
     </button>
   `;
@@ -2658,7 +2694,7 @@ function renderTimelineTranscript(items) {
       </div>
       <div class="timeline-table">
         ${speechItems.map(item => `
-          <button class="${item.id === state.timeline.selectedItemId ? 'active' : ''}" onclick="selectTimelineItem('${escapeHtml(item.id)}')">
+          <button class="${item.id === state.timeline.selectedItemId ? 'active' : ''}" data-timeline-row-id="${escapeHtml(item.id)}" onclick="selectTimelineItem('${escapeHtml(item.id)}')">
             <span>${escapeHtml(fmtDuration(item.startMs))}</span>
             <strong>${escapeHtml(item.title || '-')}</strong>
             <p>${escapeHtml(item.text || '')}</p>
@@ -2679,7 +2715,7 @@ function renderTimelineEvents(items) {
       </div>
       <div class="timeline-table event-table">
         ${eventItems.map(item => `
-          <button class="${item.id === state.timeline.selectedItemId ? 'active' : ''}" onclick="selectTimelineItem('${escapeHtml(item.id)}')">
+          <button class="${item.id === state.timeline.selectedItemId ? 'active' : ''}" data-timeline-row-id="${escapeHtml(item.id)}" onclick="selectTimelineItem('${escapeHtml(item.id)}')">
             <span>${escapeHtml(item.startMs === null || item.startMs === undefined ? '--:--:--' : fmtDuration(item.startMs))}</span>
             <strong>${escapeHtml(item.kind === 'roll20' ? eventTypeLabel(item.title) : item.title || item.kind)}</strong>
             <p>${escapeHtml(item.text || '')}</p>
@@ -2821,6 +2857,30 @@ function timelineAudioPanel(item) {
 function selectTimelineItem(id) {
   state.timeline.selectedItemId = id;
   render();
+  window.setTimeout(scrollSelectedTimelineItemIntoView, 0);
+}
+
+function navigateTimeline(direction) {
+  const nav = timelineNavigationState();
+  if (!nav.total) return;
+  const currentIndex = nav.index >= 0 ? nav.index : 0;
+  const nextIndex = Math.max(0, Math.min(nav.total - 1, currentIndex + Number(direction || 0)));
+  const item = nav.sorted[nextIndex];
+  if (item) selectTimelineItem(item.id);
+}
+
+function timelineAttributeSelector(attribute, value) {
+  const escaped = String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `[${attribute}="${escaped}"]`;
+}
+
+function scrollSelectedTimelineItemIntoView() {
+  const id = state.timeline.selectedItemId;
+  if (!id || typeof document === 'undefined') return;
+  const block = document.querySelector(timelineAttributeSelector('data-timeline-block-id', id));
+  if (block) {
+    block.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
 }
 
 function copyTimelineSelected() {
