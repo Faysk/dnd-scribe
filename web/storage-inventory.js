@@ -45,9 +45,12 @@
     window.state.storageInventory ||= {
       loading: false,
       objectLoading: false,
+      r2Loading: false,
       cleanupRunning: false,
       error: null,
       objectError: null,
+      r2Error: null,
+      r2Data: null,
       data: null,
       loadedAt: null
     };
@@ -76,6 +79,8 @@
       .storage-object-row code { display: block; color: var(--muted); overflow-wrap: anywhere; }
       .storage-object-row small { display: block; overflow-wrap: anywhere; }
       .storage-object-footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 8px; }
+      .r2-audit-panel { border: 1px solid var(--line); border-radius: var(--radius); background: #080c12; padding: 10px; margin-top: 10px; }
+      .r2-audit-panel.red { border-color: var(--red); background: #1d1011; }
       .cleanup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
       .cleanup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: #070a0f; padding: 8px; }
       .cleanup-row.red { border-color: var(--red); background: #1d1011; }
@@ -232,6 +237,62 @@
       page: payload.page || { limit, offset, hasMore: false, nextOffset: null, totalObjects: 0, totalBytes: 0 },
       categories: payload.categories || []
     };
+  }
+
+  function normalizeR2Object(row = {}) {
+    return {
+      key: row.key || '',
+      sizeBytes: Number(row.sizeBytes || row.size_bytes || 0),
+      lastModified: row.lastModified || row.last_modified || null,
+      etag: row.etag || '',
+      tracked: Boolean(row.tracked),
+      status: row.status || (row.tracked ? 'tracked' : 'orphan_candidate')
+    };
+  }
+
+  function r2Tone(status = '') {
+    if (status === 'tracked') return 'green';
+    if (status === 'orphan_candidate') return 'gold';
+    return 'blue';
+  }
+
+  async function loadR2InventoryPage(reset = false) {
+    const inventory = ensureState();
+    if (inventory.r2Loading) return null;
+    const token = reset ? '' : inventory.r2Data?.nextContinuationToken;
+    if (!reset && !token) return null;
+    inventory.r2Loading = true;
+    inventory.r2Error = null;
+    try { render?.(); } catch (_error) {}
+    try {
+      const path = `/api/r2-inventory?limit=100${token ? `&continuationToken=${encodeURIComponent(token)}` : ''}`;
+      const payload = await api(path);
+      const objects = (payload.objects || []).map(normalizeR2Object);
+      inventory.r2Data = reset || !inventory.r2Data
+        ? { ...payload, objects }
+        : {
+            ...payload,
+            objects: [...(inventory.r2Data.objects || []), ...objects],
+            summary: {
+              ...payload.summary,
+              loadedObjects: (inventory.r2Data.objects || []).length + objects.length
+            }
+          };
+      inventory.r2Error = null;
+      remember?.('Auditoria R2 carregada.', {
+        loaded: inventory.r2Data.objects.length,
+        orphanCandidates: inventory.r2Data.objects.filter(item => !item.tracked).length,
+        truncated: inventory.r2Data.isTruncated
+      });
+      return inventory.r2Data;
+    } catch (error) {
+      inventory.r2Error = error.message;
+      toast?.(error.message);
+      return null;
+    } finally {
+      inventory.r2Loading = false;
+      try { render?.(); } catch (_error) {}
+    }
   }
 
   async function loadStorageObjectsPage(reset = false) {
@@ -453,6 +514,61 @@
     `;
   }
 
+  function renderR2Audit() {
+    const inventory = ensureState();
+    const audit = inventory.r2Data;
+    if (!audit) {
+      return `
+        <div class="r2-audit-panel">
+          <div class="row between">
+            <div>
+              <strong>Auditoria direta do bucket R2</strong>
+              <small>Consulta sob demanda para comparar objetos reais do bucket com os registros do banco.</small>
+            </div>
+            <button onclick="loadR2InventoryPage(true)" ${inventory.r2Loading ? 'disabled' : ''}>${inventory.r2Loading ? 'Auditando...' : 'Auditar R2'}</button>
+          </div>
+        </div>
+      `;
+    }
+    const objects = audit.objects || [];
+    const orphanCount = objects.filter(item => !item.tracked).length;
+    const orphanBytes = objects.filter(item => !item.tracked).reduce((total, item) => total + Number(item.sizeBytes || 0), 0);
+    return `
+      <div class="r2-audit-panel ${orphanCount ? 'red' : ''}">
+        <div class="row between">
+          <div>
+            <strong>Auditoria direta do bucket R2</strong>
+            <small>Objetos sem rastro sao candidatos a revisao, nao a delete automatico.</small>
+          </div>
+          <div class="actions">
+            <button onclick="loadR2InventoryPage(true)" ${inventory.r2Loading ? 'disabled' : ''}>Reauditar</button>
+            <button onclick="loadR2InventoryPage(false)" ${inventory.r2Loading || !audit.nextContinuationToken ? 'disabled' : ''}>${inventory.r2Loading ? 'Carregando...' : audit.nextContinuationToken ? 'Carregar mais R2' : 'Tudo lido'}</button>
+          </div>
+        </div>
+        <div class="storage-grid">
+          <div class="storage-tile"><span class="label">Pagina R2</span><strong>${esc(objects.length)}</strong><small>${esc(bytes(objects.reduce((total, item) => total + Number(item.sizeBytes || 0), 0)))}</small></div>
+          <div class="storage-tile"><span class="label">Rastreados</span><strong>${esc(objects.length - orphanCount)}</strong><small>recording_files/audio_artifacts</small></div>
+          <div class="storage-tile"><span class="label">Orfaos candidatos</span><strong>${esc(orphanCount)}</strong><small>${esc(bytes(orphanBytes))}</small></div>
+        </div>
+        <div class="storage-object-list">
+          ${objects.slice(-100).map(item => `
+            <div class="storage-object-row">
+              <div>
+                <strong>${esc(item.key.split('/').pop() || item.key)}</strong>
+                <code>${esc(item.key)}</code>
+                <small>${esc(item.lastModified || '')}</small>
+              </div>
+              <div class="badges">
+                ${chip(bytes(item.sizeBytes), r2Tone(item.status))}
+                ${chip(item.status, r2Tone(item.status))}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   function renderLargestObjects(data) {
     const inventory = ensureState();
     const objects = data?.largestObjects || [];
@@ -508,6 +624,7 @@
         </div>
         ${inventory.error ? `<div class="empty">${esc(inventory.error)}</div>` : ''}
         ${inventory.objectError ? `<div class="empty">${esc(inventory.objectError)}</div>` : ''}
+        ${inventory.r2Error ? `<div class="empty">${esc(inventory.r2Error)}</div>` : ''}
         ${inventory.loading && !data ? '<div class="empty">Lendo metricas de storage...</div>' : ''}
         ${data ? `
           <div class="storage-grid">
@@ -519,7 +636,7 @@
             <div class="storage-tile"><span class="label">Liberavel</span><strong>${esc(bytes(data.cleanup?.deleteReadyBytes))}</strong><small>sem deletar automaticamente</small></div>
             <div class="storage-tile"><span class="label">Bloqueado</span><strong>${esc(bytes(data.cleanup?.blockedBytes))}</strong><small>aguarda evidencia/compactacao</small></div>
           </div>
-          ${data.truncated ? '<div class="empty">Inventario truncado. A proxima etapa adiciona paginacao por continuation token.</div>' : ''}
+          ${renderR2Audit()}
           <h3>Readiness de limpeza</h3>
           ${renderCleanupReadiness(data)}
           ${renderCategorySummary(data)}
@@ -577,6 +694,7 @@
   injectStyles();
   window.loadStorageInventory = loadStorageInventory;
   window.loadStorageObjectsPage = loadStorageObjectsPage;
+  window.loadR2InventoryPage = loadR2InventoryPage;
   window.runStorageCleanup = runStorageCleanup;
   window.renderStorageInventoryCard = renderStorageInventoryCard;
   try { renderOps = renderOpsWithStorage; } catch (_error) {}

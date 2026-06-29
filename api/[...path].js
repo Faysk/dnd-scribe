@@ -2077,7 +2077,7 @@ function canonicalQuery(params) {
   return Object.keys(params).sort().map(key => `${encodeRfc3986(key)}=${encodeRfc3986(params[key])}`).join('&');
 }
 
-function createR2SignedUrl(key, expiresSeconds, bucketOverride = '', method = 'GET') {
+function createR2SignedUrl(key, expiresSeconds, bucketOverride = '', method = 'GET', extraQuery = {}) {
   const config = r2Config();
   if (!config.endpoint || !config.bucket || !config.accessKey || !config.secretKey) {
     throw httpError(500, 'R2 config ausente no ambiente.');
@@ -2088,7 +2088,8 @@ function createR2SignedUrl(key, expiresSeconds, bucketOverride = '', method = 'G
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
   const dateStamp = amzDate.slice(0, 8);
   const credentialScope = `${dateStamp}/auto/s3/aws4_request`;
-  const canonicalUri = `/${encodeRfc3986(bucket)}/${String(key).split('/').map(encodeRfc3986).join('/')}`;
+  const encodedKey = String(key || '').split('/').filter((part, index, all) => part || index < all.length - 1).map(encodeRfc3986).join('/');
+  const canonicalUri = encodedKey ? `/${encodeRfc3986(bucket)}/${encodedKey}` : `/${encodeRfc3986(bucket)}`;
   const params = {
     'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
     'X-Amz-Credential': `${config.accessKey}/${credentialScope}`,
@@ -2096,6 +2097,10 @@ function createR2SignedUrl(key, expiresSeconds, bucketOverride = '', method = 'G
     'X-Amz-Expires': String(expiresSeconds),
     'X-Amz-SignedHeaders': 'host'
   };
+  for (const [keyName, value] of Object.entries(extraQuery || {})) {
+    if (value === null || value === undefined || value === '') continue;
+    params[keyName] = String(value);
+  }
   const query = canonicalQuery(params);
   const canonicalRequest = [
     method,
@@ -2113,6 +2118,130 @@ function createR2SignedUrl(key, expiresSeconds, bucketOverride = '', method = 'G
   ].join('\n');
   const signature = hmac(r2SigningKey(config.secretKey, dateStamp), stringToSign, 'hex');
   return `${endpoint.protocol}//${endpoint.host}${canonicalUri}?${query}&X-Amz-Signature=${signature}`;
+}
+
+function decodeXmlText(value = '') {
+  return String(value || '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+function xmlText(block = '', tag = '') {
+  const match = String(block || '').match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+  return match ? decodeXmlText(match[1]) : '';
+}
+
+function xmlBlocks(xml = '', tag = '') {
+  return [...String(xml || '').matchAll(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g'))].map(match => match[1]);
+}
+
+function parseR2ListObjectsXml(xml = '') {
+  const contents = xmlBlocks(xml, 'Contents').map(block => ({
+    key: xmlText(block, 'Key'),
+    lastModified: xmlText(block, 'LastModified') || null,
+    etag: xmlText(block, 'ETag').replace(/^"|"$/g, ''),
+    sizeBytes: Number(xmlText(block, 'Size') || 0),
+    storageClass: xmlText(block, 'StorageClass') || null
+  })).filter(item => item.key);
+  const isTruncated = xmlText(xml, 'IsTruncated') === 'true';
+  const nextContinuationToken = xmlText(xml, 'NextContinuationToken') || null;
+  return { contents, isTruncated, nextContinuationToken };
+}
+
+function normalizeR2ListLimit(value) {
+  const limit = Number(value || 100);
+  if (!Number.isFinite(limit) || limit <= 0) return 100;
+  return Math.max(10, Math.min(1000, Math.floor(limit)));
+}
+
+async function trackedStoragePathSet(db, campaign, keys) {
+  if (!keys.length) return new Set();
+  const recording = await db.query(
+    `
+select distinct rf.storage_path
+from recording_files rf
+join sessions s on s.id = rf.session_id
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1
+  and rf.storage_path = any($2::text[]);`,
+    [campaign, keys]
+  );
+  const tracked = new Set(recording.rows.map(row => row.storage_path).filter(Boolean));
+  try {
+    const artifact = await db.query(
+      `
+select distinct aa.storage_path
+from audio_artifacts aa
+join sessions s on s.id = aa.session_id
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1
+  and aa.storage_path = any($2::text[]);`,
+      [campaign, keys]
+    );
+    for (const row of artifact.rows) if (row.storage_path) tracked.add(row.storage_path);
+  } catch (_error) {
+    // audio_artifacts is optional in older environments; recording_files is enough for a safe baseline.
+  }
+  return tracked;
+}
+
+async function r2InventoryPayload(req, campaign, query) {
+  const access = await requirePermission(req, campaign, {
+    action: 'project.monitor.read',
+    scopeType: 'project',
+    scopeId: PROJECT_SCOPE_ID,
+    legacyRoles: ['owner', 'master'],
+    error: 'Auditoria R2 exige permissao project.monitor.read.'
+  });
+  const config = r2Config();
+  const limit = normalizeR2ListLimit(query.get('limit') || query.get('maxKeys'));
+  const prefix = cleanText(query.get('prefix') || '', 500);
+  const continuationToken = cleanText(query.get('continuationToken') || query.get('continuation_token') || '', 2000);
+  const listUrl = createR2SignedUrl('', 120, config.bucket, 'GET', {
+    'list-type': '2',
+    'max-keys': String(limit),
+    prefix,
+    'continuation-token': continuationToken
+  });
+  const response = await fetch(listUrl, { method: 'GET' });
+  const text = await response.text().catch(() => '');
+  if (!response.ok) {
+    throw httpError(502, `Falha ao listar R2 (${response.status}): ${text.slice(0, 240)}`);
+  }
+  const parsed = parseR2ListObjectsXml(text);
+  const keys = parsed.contents.map(item => item.key);
+  const tracked = await trackedStoragePathSet(getPool(), campaign, keys);
+  const objects = parsed.contents.map(item => ({
+    ...item,
+    tracked: tracked.has(item.key),
+    status: tracked.has(item.key) ? 'tracked' : 'orphan_candidate'
+  }));
+  const orphanObjects = objects.filter(item => !item.tracked);
+  return {
+    ok: true,
+    mode: 'r2_list_objects_v2_audit',
+    campaignSlug: campaign,
+    bucket: config.bucket,
+    prefix: prefix || null,
+    limit,
+    isTruncated: parsed.isTruncated,
+    nextContinuationToken: parsed.nextContinuationToken,
+    objects,
+    summary: {
+      returnedObjects: objects.length,
+      returnedBytes: objects.reduce((total, item) => total + Number(item.sizeBytes || 0), 0),
+      trackedObjects: objects.length - orphanObjects.length,
+      orphanCandidateObjects: orphanObjects.length,
+      orphanCandidateBytes: orphanObjects.reduce((total, item) => total + Number(item.sizeBytes || 0), 0)
+    },
+    actor: {
+      profileId: access.profile?.id || null,
+      displayName: access.profile?.displayName || access.user?.displayName || null
+    }
+  };
 }
 
 async function deleteR2Object(bucket, key) {
@@ -6248,6 +6377,9 @@ async function handleGet(req, res, path, query) {
   }
   if (path === '/api/storage-inventory' || path === '/api/storage/inventory') {
     return sendJson(res, 200, await storageInventoryPayload(req, campaign, query));
+  }
+  if (path === '/api/r2-inventory' || path === '/api/r2/inventory') {
+    return sendJson(res, 200, await r2InventoryPayload(req, campaign, query));
   }
   if (path === '/api/monitoring') {
     const access = await requirePermission(req, campaign, {

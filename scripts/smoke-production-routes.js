@@ -7,6 +7,7 @@ const routes = [
   { path: '/api/health', expected: [200], label: 'health' },
   { path: '/api/monitoring', expected: [401], label: 'monitor protegido' },
   { path: '/api/storage-inventory', expected: [401], label: 'storage protegido' },
+  { path: '/api/r2-inventory', expected: [401], label: 'r2 audit protegido' },
   { path: '/api/roll20-bridge/config', expected: [401], label: 'roll20 config protegida' },
   { path: '/api/pipeline-control?sourceSessionId=route-smoke', expected: [401], label: 'pipeline protegido' }
 ];
