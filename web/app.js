@@ -2284,13 +2284,17 @@ function renderDiscordSyncControls() {
 
 function discordSyncResultText(result = {}) {
   if (result.warning) return result.warning;
-  return [
+  const parts = [
     `${result.fetched || 0} buscadas`,
     `${result.accepted || 0} aceitas`,
     `${result.persisted || 0} novas`,
     `${result.updated || 0} atualizadas`,
     `${result.skipped || 0} ignoradas`
-  ].join(', ');
+  ];
+  if (result.syncMode === 'session_window' && Array.isArray(result.pages) && result.pages.length) {
+    parts.push(`${result.pages.length} paginas`);
+  }
+  return parts.join(', ');
 }
 
 function discordCursorLabel(value) {
@@ -2314,11 +2318,16 @@ function discordSyncWindowDetails(result) {
     `newest=${newest}`,
     `mode=${page.cursorMode || result.cursor?.mode || 'latest'}`
   ].join(' ');
+  const sessionRange = result.sessionStartedAt || result.sessionEndedAt
+    ? `${fmtDateTime(result.sessionStartedAt || '')} -> ${fmtDateTime(result.sessionEndedAt || '')}`
+    : '-';
   return `
     <div class="discord-sync-window">
       <div class="source-detail-grid">
         <div><span class="label">Janela</span><strong>${escapeHtml(discordCursorLabel(page.cursorMode))}</strong></div>
         <div><span class="label">Modo</span><strong>${escapeHtml(result.syncMode || 'page')}${pages.length ? ` (${pages.length} paginas)` : ''}</strong></div>
+        <div><span class="label">Sessao</span><strong>${escapeHtml(sessionRange)}</strong></div>
+        ${result.sessionWindowBeforeMessageId ? `<div><span class="label">Cursor tecnico</span><strong>${escapeHtml(result.sessionWindowBeforeMessageId)}</strong></div>` : ''}
         <div><span class="label">Conteudo visivel</span><strong>${Number(page.contentVisible || 0)}/${Number(page.fetched || 0)}</strong></div>
         <div><span class="label">Mais antiga</span><strong>${oldest ? `${escapeHtml(fmtDateTime(page.oldestCreatedAt))} ${escapeHtml(oldest)}` : '-'}</strong></div>
         <div><span class="label">Mais nova</span><strong>${newest ? `${escapeHtml(fmtDateTime(page.newestCreatedAt))} ${escapeHtml(newest)}` : '-'}</strong></div>

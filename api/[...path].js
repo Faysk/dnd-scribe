@@ -21,6 +21,7 @@ const PROJECT_SCOPE_ID = 'dnd-scribe';
 const CRAIG_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
 const DISCORD_API = 'https://discord.com/api/v10';
+const DISCORD_EPOCH_MS = 1420070400000n;
 const DISCORD_SYNC_MAX_MESSAGES = 100;
 const DISCORD_SYNC_MAX_PAGES = 10;
 const ROLL20_BRIDGE_MAX_EVENTS = 100;
@@ -1686,6 +1687,14 @@ function dateMs(value) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function discordSnowflakeFromMs(value) {
+  const ms = Number(value);
+  if (!Number.isFinite(ms)) return '';
+  const timestamp = BigInt(Math.max(0, Math.floor(ms)));
+  if (timestamp <= DISCORD_EPOCH_MS) return '0';
+  return String((timestamp - DISCORD_EPOCH_MS) << 22n);
+}
+
 function discordAttachmentSummary(message = {}) {
   return (message.attachments || [])
     .map(item => [item.filename || item.id || 'anexo', item.url || item.proxy_url || ''].filter(Boolean).join(' '))
@@ -1901,11 +1910,16 @@ async function persistDiscordMessages(db, campaign, sourceSessionId, body, acces
   const sessionEndedAt = sessionEndMs(session, sessionStartedAt);
   let pages = [];
   let rawMessages = suppliedMessages || null;
+  const sessionWindowMode = ['session', 'session_window', 'full_session'].includes(syncMode) && cursor.mode === 'latest';
+  const sessionWindowBefore = sessionWindowMode && sessionEndedAt !== null
+    ? discordSnowflakeFromMs(sessionEndedAt + 1)
+    : '';
   if (!rawMessages) {
-    if (['session', 'session_window', 'full_session'].includes(syncMode) && cursor.mode === 'latest') {
+    if (sessionWindowMode) {
       const paged = await fetchDiscordChannelMessagePages(channelId, {
         limit,
         maxPages,
+        before: sessionWindowBefore || undefined,
         sessionStartedAt
       });
       rawMessages = paged.messages;
@@ -1954,6 +1968,7 @@ async function persistDiscordMessages(db, campaign, sourceSessionId, body, acces
     updated: 0,
     sessionStartedAt: session.started_at || null,
     sessionEndedAt: session.ended_at || (sessionEndedAt ? new Date(sessionEndedAt).toISOString() : null),
+    sessionWindowBeforeMessageId: sessionWindowBefore || null,
     includeBeforeStart,
     includeAfterEnd,
     cursor: {
@@ -1982,7 +1997,8 @@ async function persistDiscordMessages(db, campaign, sourceSessionId, body, acces
         channelId,
         maxPages,
         sessionStartedAt: session.started_at || null,
-        sessionEndedAt: session.ended_at || (sessionEndedAt ? new Date(sessionEndedAt).toISOString() : null)
+        sessionEndedAt: session.ended_at || (sessionEndedAt ? new Date(sessionEndedAt).toISOString() : null),
+        sessionWindowBeforeMessageId: sessionWindowBefore || null
       }
     };
     const upsert = await db.query(
