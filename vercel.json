@@ -3,6 +3,22 @@
   "outputDirectory": "public",
   "rewrites": [
     {
+      "source": "/api/jobs/retry",
+      "destination": "/api/job-retry"
+    },
+    {
+      "source": "/api/jobs/control",
+      "destination": "/api/job-control"
+    },
+    {
+      "source": "/api/jobs/pipeline-continue",
+      "destination": "/api/pipeline-continue"
+    },
+    {
+      "source": "/api/jobs/run-cloud-plan-chunks",
+      "destination": "/api/run-cloud-plan-chunks"
+    },
+    {
       "source": "/api/discord/interactions",
       "destination": "/api/ai-cost?discordInteractions=1"
     },
