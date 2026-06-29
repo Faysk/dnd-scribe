@@ -449,6 +449,7 @@ async function boot() {
     state.tab = button.dataset.tab;
     render();
   });
+  $('#tabs').addEventListener('keydown', handleTabsKeydown);
   document.addEventListener('keydown', handleTimelineKeydown);
   window.addEventListener('hashchange', () => applyTimelineHash());
   initMusicDock();
@@ -456,6 +457,59 @@ async function boot() {
   await initAuth();
   if (canReadCampaign()) await loadCampaignData();
 }
+
+function handleTabsKeydown(event) {
+  const current = event.target.closest('button[data-tab]');
+  if (!current) return;
+  const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+  if (!keys.includes(event.key)) return;
+
+  const tabs = Array.from(document.querySelectorAll('#tabs button[data-tab]'));
+  const currentIndex = tabs.indexOf(current);
+  if (currentIndex < 0) return;
+
+  let nextIndex = currentIndex;
+  if (event.key === 'Home') nextIndex = 0;
+  if (event.key === 'End') nextIndex = tabs.length - 1;
+  if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+  if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
+
+  event.preventDefault();
+  const next = tabs[nextIndex];
+  state.tab = next.dataset.tab;
+  render();
+  next.focus();
+}
+
+function syncTabsA11y() {
+  const tablist = $('#tabs');
+  const view = $('#view');
+  if (!tablist || !view) return;
+
+  tablist.setAttribute('role', 'tablist');
+  tablist.setAttribute('aria-label', 'Areas do projeto');
+  const tabs = Array.from(tablist.querySelectorAll('button[data-tab]'));
+  let activeTab = null;
+
+  tabs.forEach(button => {
+    const tabName = button.dataset.tab;
+    const selected = tabName === state.tab;
+    if (!button.id) button.id = `tab-${tabName}`;
+    button.type = 'button';
+    button.setAttribute('role', 'tab');
+    button.setAttribute('aria-controls', 'view');
+    button.setAttribute('aria-selected', selected ? 'true' : 'false');
+    button.tabIndex = selected ? 0 : -1;
+    button.classList.toggle('active', selected);
+    if (selected) activeTab = button;
+  });
+
+  view.setAttribute('role', 'tabpanel');
+  view.setAttribute('tabindex', '0');
+  if (activeTab?.id) view.setAttribute('aria-labelledby', activeTab.id);
+}
+
+window.syncTabsA11y = syncTabsA11y;
 
 async function initAuth() {
   try {
@@ -1088,13 +1142,11 @@ function render() {
   renderHeader();
   renderStatusStrip();
   updateActionButtons();
+  syncTabsA11y();
   if (state.auth.ready && !canReadCampaign() && state.tab !== 'access') {
     $('#view').innerHTML = authGateView();
     return;
   }
-  document.querySelectorAll('#tabs button').forEach(button => {
-    button.classList.toggle('active', button.dataset.tab === state.tab);
-  });
   if (!state.review && !['sessions', 'upload', 'ops'].includes(state.tab)) {
     $('#view').innerHTML = loadingView();
     return;

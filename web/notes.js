@@ -44,14 +44,17 @@
 
   function ensureNotesTab() {
     const tabs = q('#tabs');
-    if (!tabs || tabs.querySelector('[data-tab="notes"]')) return;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.tab = 'notes';
-    button.textContent = 'Notas';
-    const access = tabs.querySelector('[data-tab="access"]');
-    if (access) tabs.insertBefore(button, access);
-    else tabs.appendChild(button);
+    if (!tabs) return;
+    if (!tabs.querySelector('[data-tab="notes"]')) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.tab = 'notes';
+      button.textContent = 'Notas';
+      const access = tabs.querySelector('[data-tab="access"]');
+      if (access) tabs.insertBefore(button, access);
+      else tabs.appendChild(button);
+    }
+    window.syncTabsA11y?.();
   }
 
   async function loadNotesDirectory(force = false) {
@@ -86,9 +89,7 @@
 
   function renderNotesPanel() {
     if (window.state?.tab !== 'notes') return;
-    document.querySelectorAll('#tabs button').forEach(button => {
-      button.classList.toggle('active', button.dataset.tab === 'notes');
-    });
+    window.syncTabsA11y?.();
     const view = q('#view');
     if (!view) return;
     view.innerHTML = renderNotes();

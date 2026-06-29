@@ -70,12 +70,15 @@
 
   function ensureAccessTab() {
     const tabs = q('#tabs');
-    if (!tabs || tabs.querySelector('[data-tab="access"]')) return;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.tab = 'access';
-    button.textContent = 'Acesso';
-    tabs.appendChild(button);
+    if (!tabs) return;
+    if (!tabs.querySelector('[data-tab="access"]')) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.tab = 'access';
+      button.textContent = 'Acesso';
+      tabs.appendChild(button);
+    }
+    window.syncTabsA11y?.();
   }
 
   function supabaseClient() {
@@ -209,9 +212,7 @@
 
   function renderAccessPanel() {
     if (window.state?.tab !== 'access') return;
-    document.querySelectorAll('#tabs button').forEach(button => {
-      button.classList.toggle('active', button.dataset.tab === 'access');
-    });
+    window.syncTabsA11y?.();
     const view = q('#view');
     if (!view) return;
     view.innerHTML = renderAccess();

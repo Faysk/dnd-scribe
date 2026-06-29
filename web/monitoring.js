@@ -76,12 +76,15 @@
 
   function injectTab() {
     const tabs = document.getElementById('tabs');
-    if (!tabs || tabs.querySelector('[data-tab="monitoring"]')) return;
-    const button = document.createElement('button');
-    button.dataset.tab = 'monitoring';
-    button.textContent = 'Monitor';
-    const ops = tabs.querySelector('[data-tab="ops"]');
-    tabs.insertBefore(button, ops || null);
+    if (!tabs) return;
+    if (!tabs.querySelector('[data-tab="monitoring"]')) {
+      const button = document.createElement('button');
+      button.dataset.tab = 'monitoring';
+      button.textContent = 'Monitor';
+      const ops = tabs.querySelector('[data-tab="ops"]');
+      tabs.insertBefore(button, ops || null);
+    }
+    window.syncTabsA11y?.();
   }
 
   async function loadMonitoring(deep = false, force = false) {
@@ -374,9 +377,7 @@
       document.getElementById('view').innerHTML = authGateView();
       return;
     }
-    document.querySelectorAll('#tabs button').forEach(button => {
-      button.classList.toggle('active', button.dataset.tab === window.state.tab);
-    });
+    window.syncTabsA11y?.();
     renderMonitoringOnly();
     loadMonitoring(false, false);
   }

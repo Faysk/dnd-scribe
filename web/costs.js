@@ -29,12 +29,15 @@
 
   function injectTab() {
     const tabs = document.getElementById('tabs');
-    if (!tabs || tabs.querySelector('[data-tab="costs"]')) return;
-    const button = document.createElement('button');
-    button.dataset.tab = 'costs';
-    button.textContent = 'Custos';
-    const ops = tabs.querySelector('[data-tab="ops"]');
-    tabs.insertBefore(button, ops || null);
+    if (!tabs) return;
+    if (!tabs.querySelector('[data-tab="costs"]')) {
+      const button = document.createElement('button');
+      button.dataset.tab = 'costs';
+      button.textContent = 'Custos';
+      const ops = tabs.querySelector('[data-tab="ops"]');
+      tabs.insertBefore(button, ops || null);
+    }
+    window.syncTabsA11y?.();
   }
 
   async function loadAiCost(force = false) {
@@ -182,9 +185,7 @@
     renderHeader();
     renderStatusStrip();
     updateActionButtons();
-    document.querySelectorAll('#tabs button').forEach(button => {
-      button.classList.toggle('active', button.dataset.tab === window.state.tab);
-    });
+    window.syncTabsA11y?.();
     renderCostsOnly();
     loadAiCost(false);
   }

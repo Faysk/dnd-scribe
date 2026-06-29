@@ -69,18 +69,18 @@
 
       <section id="statusStrip" class="status-strip"></section>
 
-      <nav class="tabs" id="tabs">
-        <button data-tab="sessions">Sessoes</button>
-        <button data-tab="upload">Upload</button>
-        <button data-tab="review" class="active">Review</button>
-        <button data-tab="timeline">Timeline</button>
-        <button data-tab="candidates">Candidatos</button>
-        <button data-tab="roll20">Roll20</button>
-        <button data-tab="publications">Publicacoes</button>
-        <button data-tab="ops">Operacao</button>
+      <nav class="tabs" id="tabs" role="tablist" aria-label="Areas do projeto">
+        <button id="tab-sessions" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="sessions">Sessoes</button>
+        <button id="tab-upload" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="upload">Upload</button>
+        <button id="tab-review" role="tab" aria-controls="view" aria-selected="true" tabindex="0" data-tab="review" class="active">Review</button>
+        <button id="tab-timeline" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="timeline">Timeline</button>
+        <button id="tab-candidates" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="candidates">Candidatos</button>
+        <button id="tab-roll20" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="roll20">Roll20</button>
+        <button id="tab-publications" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="publications">Publicacoes</button>
+        <button id="tab-ops" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="ops">Operacao</button>
       </nav>
 
-      <section id="view" class="view"></section>
+      <section id="view" class="view" role="tabpanel" tabindex="0" aria-labelledby="tab-review"></section>
     </main>
   </div>
 
