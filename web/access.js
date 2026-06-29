@@ -271,6 +271,7 @@
             </div>
           </div>
         </article>
+        ${accessGovernancePanel(viewer, canManage)}
         <article class="panel access-card">
           <div class="panel-head"><h2>Solicitar vinculo</h2>${chip('DM aprova', 'gold')}</div>
           <div class="panel-body">${claimForm()}</div>
@@ -286,6 +287,84 @@
         ${canManage ? rbacAdminPanel() : ''}
       </section>
     `);
+  }
+
+  function accessGovernancePanel(viewer = {}, canManage = false) {
+    const directory = accessState.directory || {};
+    const profiles = directory.profiles || [];
+    const linked = profiles.filter(profile => profile.linked).length;
+    const pending = pendingClaims().length;
+    const rbac = accessState.rbac.data || {};
+    const rbacLoaded = Boolean(accessState.rbac.loaded);
+    const assignments = rbac.assignments || [];
+    const activeAssignments = assignments.filter(item => item.status === 'active');
+    const technicalAssignments = activeAssignments.filter(item => item.plane === 'technical' || item.scopeType === 'project');
+    const activeDm = rbacActiveDm();
+    const hasProfile = Boolean(viewer.profileId);
+    let toneName = 'blue';
+    let title = 'Acesso em observacao';
+    let action = 'Atualizar dados de acesso antes da proxima revisao.';
+    let detail = 'A hierarquia separa operador tecnico, DM narrativo e jogador.';
+
+    if (!hasProfile) {
+      toneName = 'orange';
+      title = 'Login ainda nao vinculado';
+      action = 'Enviar solicitacao de vinculo com Discord, Roll20 e personagens.';
+      detail = 'Sem vinculo aprovado, o usuario ve apenas a propria tela de acesso.';
+    } else if (canManage && pending) {
+      toneName = 'orange';
+      title = `${pending} solicitacao(oes) pendente(s)`;
+      action = 'Revisar solicitacoes antes de liberar dados da mesa.';
+      detail = 'O DM/admin aprova vinculo; jogadores nao concedem acesso por conta propria.';
+    } else if (canManage && rbacLoaded && !activeDm) {
+      toneName = 'red';
+      title = 'Sem DM ativo no RBAC';
+      action = 'Definir ou transferir DM para manter canon e permissoes coerentes.';
+      detail = 'DM e mandato, nao propriedade permanente de um usuario.';
+    } else if (canManage) {
+      toneName = 'green';
+      title = 'Governanca operavel';
+      action = 'Auditar funcoes ativas e manter escopos separados.';
+      detail = 'Papeis tecnicos ficam no projeto; papeis narrativos ficam na campanha.';
+    } else {
+      toneName = 'green';
+      title = 'Acesso aprovado';
+      action = 'Usar o site dentro das permissoes atribuidas.';
+      detail = 'Alteracoes de canon e vinculos continuam sob aprovacao do DM/admin.';
+    }
+
+    return `
+      <article class="panel access-card wide access-governance ${esc(toneName)}">
+        <div class="panel-head">
+          <div>
+            <h2>Governanca da mesa</h2>
+            <small>${esc(detail)}</small>
+          </div>
+          <div class="badges">
+            ${chip(title, toneName === 'red' ? 'red' : toneName === 'orange' ? 'orange' : 'green')}
+            ${chip(canManage ? 'admin' : 'membro', canManage ? 'blue' : 'green')}
+          </div>
+        </div>
+        <div class="panel-body access-governance-body">
+          <div>
+            <span class="label">Acao segura</span>
+            <strong>${esc(action)}</strong>
+          </div>
+          <div class="access-governance-grid">
+            <div><span class="label">DM atual</span><strong>${esc(activeDm?.displayName || (rbacLoaded ? 'sem DM ativo' : 'carregar RBAC'))}</strong></div>
+            <div><span class="label">Perfis vinculados</span><strong>${esc(linked)}/${esc(profiles.length)}</strong></div>
+            <div><span class="label">Solicitacoes</span><strong>${esc(pending)} pendente(s)</strong></div>
+            <div><span class="label">Funcoes ativas</span><strong>${esc(rbacLoaded ? activeAssignments.length : 'carregar')}</strong></div>
+            <div><span class="label">Tecnicas</span><strong>${esc(technicalAssignments.length || 0)}</strong></div>
+            <div><span class="label">Seu papel</span><strong>${esc(roleLabel(viewer.campaignRole))}</strong></div>
+          </div>
+          <div class="actions">
+            <button onclick="loadAccessDirectory(true)">Atualizar acesso</button>
+            ${canManage ? `<button class="primary" onclick="loadRbacAdmin(true)" ${accessState.rbac.loading || accessState.rbac.busy ? 'disabled' : ''}>Atualizar RBAC</button>` : ''}
+          </div>
+        </div>
+      </article>
+    `;
   }
 
   function accessShell(title, body) {
