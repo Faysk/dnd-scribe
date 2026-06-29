@@ -79,6 +79,15 @@
       .storage-object-row code { display: block; color: var(--muted); overflow-wrap: anywhere; }
       .storage-object-row small { display: block; overflow-wrap: anywhere; }
       .storage-object-footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 8px; }
+      .ops-priority-card { grid-column: 1 / -1; }
+      .ops-priority-layout { display: grid; grid-template-columns: minmax(190px, 260px) minmax(0, 1fr); gap: 12px; align-items: center; }
+      .ops-priority-signals { display: grid; grid-template-columns: repeat(5, minmax(90px, 1fr)); gap: 8px; }
+      .ops-priority-signal { border: 1px solid var(--line); border-radius: var(--radius); background: #0d1219; padding: 9px; min-width: 0; }
+      .ops-priority-signal.green { border-color: var(--green); }
+      .ops-priority-signal.gold { border-color: var(--gold); background: #1a1710; }
+      .ops-priority-signal.red { border-color: var(--red); background: #1d1011; }
+      .ops-priority-signal.blue { border-color: var(--blue); }
+      .ops-priority-signal strong { display: block; margin-top: 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
       .r2-audit-panel { border: 1px solid var(--line); border-radius: var(--radius); background: #080c12; padding: 10px; margin-top: 10px; }
       .r2-audit-panel.red { border-color: var(--red); background: #1d1011; }
       .cleanup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
@@ -89,7 +98,7 @@
       .cleanup-row code { display: block; color: var(--muted); overflow-wrap: anywhere; }
       .cleanup-row small { overflow-wrap: anywhere; }
       @media (max-width: 900px) {
-        .storage-inventory-head, .storage-grid, .storage-category-line, .storage-object-row, .cleanup-grid, .cleanup-row { grid-template-columns: 1fr; }
+        .storage-inventory-head, .storage-grid, .storage-category-line, .storage-object-row, .cleanup-grid, .cleanup-row, .ops-priority-layout, .ops-priority-signals { grid-template-columns: 1fr; }
       }
     `;
     document.head.appendChild(style);
@@ -649,6 +658,81 @@
     `;
   }
 
+  function opsDraftCounts() {
+    if (typeof buildDecisionPayload !== 'function') return { segmentDecisions: [], candidateDecisions: [] };
+    return buildDecisionPayload();
+  }
+
+  function renderOpsPrioritySummary() {
+    const jobs = window.state?.jobs || [];
+    const failedJobs = jobs.filter(job => job.status === 'failed').length;
+    const runningJobs = jobs.filter(job => job.status === 'running').length;
+    const queuedJobs = jobs.filter(job => ['queued', 'retrying'].includes(job.status)).length;
+    const control = window.state?.pipelineControl || null;
+    const storage = ensureState().data || null;
+    const storageStatus = storage?.budget?.status || storage?.status || 'desconhecido';
+    const cleanupBytes = Number(storage?.cleanup?.deleteReadyBytes || 0);
+    const draft = opsDraftCounts();
+    const draftTotal = Number(draft.segmentDecisions?.length || 0) + Number(draft.candidateDecisions?.length || 0);
+    const priority = failedJobs
+      ? 'corrigir falhas'
+      : window.state?.pipelineControlError
+        ? 'recarregar esteira'
+        : queuedJobs
+          ? 'continuar pipeline'
+          : cleanupBytes
+            ? 'revisar limpeza'
+            : draftTotal
+              ? 'aplicar decisoes'
+              : 'estavel';
+    const signals = [
+      {
+        label: 'Prioridade',
+        value: priority,
+        tone: failedJobs || window.state?.pipelineControlError ? 'red' : queuedJobs || cleanupBytes || draftTotal ? 'gold' : 'green'
+      },
+      {
+        label: 'Jobs',
+        value: `${failedJobs} falha / ${runningJobs} rodando / ${queuedJobs} fila`,
+        tone: failedJobs ? 'red' : runningJobs || queuedJobs ? 'gold' : 'green'
+      },
+      {
+        label: 'Esteira',
+        value: control?.stage || (window.state?.pipelineControlError ? 'erro' : 'carregar'),
+        tone: window.state?.pipelineControlError ? 'red' : control ? 'blue' : 'gold'
+      },
+      {
+        label: 'Storage',
+        value: storageStatus,
+        tone: ['critical', 'attention'].includes(storageStatus) ? 'red' : storage ? 'green' : 'gold'
+      },
+      {
+        label: 'Liberavel',
+        value: bytes(cleanupBytes),
+        tone: cleanupBytes ? 'gold' : 'green'
+      }
+    ];
+    return `
+      <article class="ops-card ops-priority-card">
+        <div class="ops-priority-layout">
+          <div>
+            <span class="label">Resumo operacional</span>
+            <h2>${esc(priority)}</h2>
+            <small>${esc(window.state?.selectedSourceSessionId || 'Sem sessao selecionada')}</small>
+          </div>
+          <div class="ops-priority-signals">
+            ${signals.map(signal => `
+              <div class="ops-priority-signal ${esc(signal.tone)}">
+                <span class="label">${esc(signal.label)}</span>
+                <strong>${esc(signal.value)}</strong>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
   function renderOpsWithStorage() {
     const payload = typeof buildDecisionPayload === 'function'
       ? buildDecisionPayload()
@@ -656,6 +740,7 @@
     const draft = typeof hasDraftChanges === 'function' ? hasDraftChanges() : false;
     return `
       <section class="ops-grid">
+        ${renderOpsPrioritySummary()}
         <article class="ops-card">
           <h2>Pacote local</h2>
           <p>Decisoes ainda nao aplicadas no banco.</p>
@@ -676,6 +761,13 @@
           ${typeof renderRoll20Events === 'function' ? renderRoll20Events() : '<div class="empty">Roll20 indisponivel.</div>'}
         </article>
         ${renderStorageInventoryCard()}
+        <article class="ops-card">
+          <div class="row between">
+            <h2>Esteira automatica</h2>
+            <button onclick="refreshPipelineControl(true)">Atualizar</button>
+          </div>
+          ${typeof window.renderPipelineControl === 'function' ? window.renderPipelineControl('ops') : '<div class="empty">Modulo de esteira carregando.</div>'}
+        </article>
         <article class="ops-card">
           <div class="row between">
             <h2>Jobs de producao</h2>
