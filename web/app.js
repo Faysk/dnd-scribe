@@ -2942,6 +2942,7 @@ function renderTimelineInspector(item) {
         <div class="actions">
           ${canPlay ? `<button onclick="loadTimelineAudio('${escapeHtml(item.id)}')">Ouvir aqui</button>` : ''}
           <button onclick="copyTimelineSelected()">Copiar texto</button>
+          <button onclick="copyTimelineMarker()">Copiar marcador</button>
         </div>
       </div>
     </aside>
@@ -3101,6 +3102,26 @@ function scrollSelectedTimelineItemIntoView() {
 function copyTimelineSelected() {
   const item = timelineSelectedItem();
   copyText(item?.text || '', 'Texto copiado.');
+}
+
+function timelineMarkerText(item) {
+  if (!item) return '';
+  const session = state.timeline.data?.session || {};
+  const timing = timelineTimingConfidence(item);
+  return [
+    `Sessao: ${session.title || state.timeline.data?.sourceSessionId || state.selectedSourceSessionId || '-'}`,
+    `Tempo: ${fmtDuration(item.startMs)} (${timing.label})`,
+    `Fonte: ${item.kind || '-'}`,
+    `Item: ${item.title || item.subtitle || item.id || '-'}`,
+    `Lane: ${item.laneId || '-'}`,
+    '',
+    item.text || '-'
+  ].join('\n');
+}
+
+function copyTimelineMarker() {
+  const item = timelineSelectedItem();
+  copyText(timelineMarkerText(item), 'Marcador copiado.');
 }
 
 async function syncDiscordTimeline() {
