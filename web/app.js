@@ -450,6 +450,7 @@ async function boot() {
     render();
   });
   document.addEventListener('keydown', handleTimelineKeydown);
+  window.addEventListener('hashchange', () => applyTimelineHash());
   initMusicDock();
   render();
   await initAuth();
@@ -912,8 +913,11 @@ async function loadSessions(force = false) {
     setBusy(true);
     const payload = await api(`/api/sessions?runId=${encodeURIComponent(DEFAULT_RUN)}`);
     state.sessions = payload.sessions || [];
+    const hashTarget = parseTimelineHash();
     if (!state.selectedSourceSessionId || force) {
-      state.selectedSourceSessionId = state.sessions[0]?.sourceSessionId || null;
+      const hashSessionExists = hashTarget?.sourceSessionId && state.sessions.some(session => session.sourceSessionId === hashTarget.sourceSessionId);
+      state.selectedSourceSessionId = hashSessionExists ? hashTarget.sourceSessionId : (state.sessions[0]?.sourceSessionId || null);
+      if (hashSessionExists) state.tab = 'timeline';
     }
     renderSessions();
     if (state.selectedSourceSessionId) {
@@ -1040,14 +1044,19 @@ async function loadTimelineData(force = false) {
   try {
     const payload = await api(`/api/timeline?sourceSessionId=${encodeURIComponent(sourceSessionId)}`);
     const firstItem = (payload.items || [])[0] || null;
+    const hashTarget = parseTimelineHash();
+    const hashItem = hashTarget?.sourceSessionId === sourceSessionId
+      ? (payload.items || []).find(item => item.id === hashTarget.itemId)
+      : null;
     state.timeline = {
       ...state.timeline,
       sourceSessionId,
       loading: false,
       error: null,
       data: payload,
-      selectedItemId: state.timeline.selectedItemId || firstItem?.id || null
+      selectedItemId: hashItem?.id || state.timeline.selectedItemId || firstItem?.id || null
     };
+    if (hashItem) window.setTimeout(scrollSelectedTimelineItemIntoView, 0);
   } catch (error) {
     state.timeline = {
       ...state.timeline,
@@ -3108,15 +3117,50 @@ function timelineMarkerText(item) {
   if (!item) return '';
   const session = state.timeline.data?.session || {};
   const timing = timelineTimingConfidence(item);
+  const link = timelineMarkerUrl(item);
   return [
     `Sessao: ${session.title || state.timeline.data?.sourceSessionId || state.selectedSourceSessionId || '-'}`,
     `Tempo: ${fmtDuration(item.startMs)} (${timing.label})`,
     `Fonte: ${item.kind || '-'}`,
     `Item: ${item.title || item.subtitle || item.id || '-'}`,
     `Lane: ${item.laneId || '-'}`,
+    `Link: ${link}`,
     '',
     item.text || '-'
   ].join('\n');
+}
+
+function timelineMarkerUrl(item) {
+  const params = new URLSearchParams({
+    sourceSessionId: state.timeline.data?.sourceSessionId || state.selectedSourceSessionId || '',
+    itemId: item?.id || ''
+  });
+  return `${window.location.origin}${window.location.pathname}#timeline?${params.toString()}`;
+}
+
+function parseTimelineHash() {
+  const hash = String(window.location.hash || '');
+  if (!hash.startsWith('#timeline')) return null;
+  const query = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(query);
+  const sourceSessionId = params.get('sourceSessionId') || '';
+  const itemId = params.get('itemId') || '';
+  if (!sourceSessionId && !itemId) return null;
+  return { sourceSessionId, itemId };
+}
+
+async function applyTimelineHash() {
+  const target = parseTimelineHash();
+  if (!target) return;
+  state.tab = 'timeline';
+  if (target.sourceSessionId && target.sourceSessionId !== state.selectedSourceSessionId) {
+    await loadSession(target.sourceSessionId);
+  }
+  if (target.itemId) {
+    state.timeline.selectedItemId = target.itemId;
+  }
+  render();
+  window.setTimeout(scrollSelectedTimelineItemIntoView, 0);
 }
 
 function copyTimelineMarker() {
