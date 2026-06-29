@@ -7,8 +7,10 @@ import argparse
 import datetime as dt
 import json
 import os
+import socket
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -18,6 +20,9 @@ from typing import Any
 
 NAMESPACE = uuid.UUID("0e5b216d-7b46-48dd-83dd-6e5b4f27a614")
 PROMPT_VERSION = "classify_candidates_v2"
+OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_CHAT_TIMEOUT_SECONDS = int(os.environ.get("OPENAI_CHAT_TIMEOUT_SECONDS") or "300")
+OPENAI_CHAT_MAX_ATTEMPTS = int(os.environ.get("OPENAI_CHAT_MAX_ATTEMPTS") or "3")
 
 SEGMENT_TYPES = [
     "dm_narration",
@@ -274,31 +279,38 @@ def call_openai(values: dict[str, str], messages: list[dict[str, str]], model: s
 
 
 def post_chat_completion(api_key: str, payload: dict) -> dict:
-    request = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
-            return json.loads(response.read().decode("utf-8"))
+        return post_chat_completion_with_retries(api_key, payload)
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         if "json_schema" in json.dumps(payload):
             fallback = dict(payload)
             fallback["response_format"] = {"type": "json_object"}
-            with urllib.request.urlopen(
-                urllib.request.Request(
-                    "https://api.openai.com/v1/chat/completions",
-                    data=json.dumps(fallback).encode("utf-8"),
-                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                    method="POST",
-                ),
-                timeout=180,
-            ) as response:
-                return json.loads(response.read().decode("utf-8"))
+            return post_chat_completion_with_retries(api_key, fallback)
         raise SystemExit(f"OpenAI API error status={exc.code} body={body[:500]}")
+
+
+def post_chat_completion_with_retries(api_key: str, payload: dict) -> dict:
+    last_error: BaseException | None = None
+    attempts = max(1, OPENAI_CHAT_MAX_ATTEMPTS)
+    for attempt in range(1, attempts + 1):
+        request = urllib.request.Request(
+            OPENAI_CHAT_COMPLETIONS_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=OPENAI_CHAT_TIMEOUT_SECONDS) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError:
+            raise
+        except (TimeoutError, socket.timeout, urllib.error.URLError) as exc:
+            last_error = exc
+            if attempt >= attempts:
+                break
+            time.sleep(min(20, attempt * 3))
+    raise SystemExit(f"OpenAI API retry exhausted attempts={attempts} error={last_error}")
 
 
 def normalize_result(result: dict, master: dict, candidate_prefix: str = "") -> dict:

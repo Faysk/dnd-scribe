@@ -102,13 +102,6 @@ def chunks(values: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]
 
 def batch_candidate_prefix(source_session_id: str, source_run_id: str, batch: list[dict[str, Any]], fallback: int) -> str:
     if batch:
-        sequence = batch[0].get("source_sequence")
-        try:
-            number = int(sequence)
-        except (TypeError, ValueError):
-            number = -1
-        if number >= 0:
-            return f"s{number:06d}_"
         segment_id = str(batch[0].get("id") or "")
         if segment_id:
             return f"h{stable_uuid(source_session_id, source_run_id, segment_id)[:8]}_"
