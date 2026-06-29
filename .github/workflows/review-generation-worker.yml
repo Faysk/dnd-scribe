@@ -109,3 +109,20 @@ jobs:
           name: review-generation-worker-log
           path: review-generation-worker.log
           if-no-files-found: ignore
+
+      - name: Notify Discord
+        if: always()
+        env:
+          DND_DISCORD_WEBHOOK_URL: ${{ secrets.DND_DISCORD_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          python tools/notify_discord_webhook.py \
+            --title "Review Generation Worker" \
+            --status "${{ job.status }}" \
+            --session "${{ github.event.inputs.source_session_id }}" \
+            --campaign "${{ github.event.inputs.campaign }}" \
+            --workflow "${{ github.workflow }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --field "execute=${{ github.event.inputs.execute }}" \
+            --field "batch_size=${{ github.event.inputs.batch_size }}" \
+            --field "max_batches=${{ github.event.inputs.max_batches }}"
