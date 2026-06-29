@@ -5641,6 +5641,23 @@ async function handleGet(req, res, path, query) {
   if (path === '/api/health') {
     return sendJson(res, 200, { ok: true, app: 'dnd-scribe-vercel', campaignSlug: campaign });
   }
+  if (path === '/api/roll20-bridge/config' || path === '/api/roll20/bridge/config') {
+    const access = await requireCampaignAccess(req, campaign, ['owner', 'master']);
+    const token = roll20BridgeToken();
+    return sendJson(res, 200, {
+      ok: true,
+      campaignSlug: campaign,
+      apiBase: process.env.DND_PUBLIC_SITE_URL || 'https://dnd.faysk.dev',
+      source: 'roll20_bridge_config',
+      tokenConfigured: Boolean(token),
+      bridgeToken: token,
+      actor: {
+        profileId: access.profile?.id || null,
+        displayName: access.profile?.displayName || access.user?.displayName || null,
+        role: access.campaignRole || null
+      }
+    });
+  }
   if (path === '/api/jobs') {
     await requireCampaignAccess(req, campaign);
     return sendJson(res, 200, {

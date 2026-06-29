@@ -5,7 +5,10 @@
     ready: false,
     error: '',
     client: null,
-    user: null
+    user: null,
+    session: null,
+    bridgeConfig: null,
+    bridgeConfigError: ''
   };
 
   function escapeHtml(value) {
@@ -48,6 +51,7 @@
     if (!gate) return;
     if (!locked) {
       gate.innerHTML = '';
+      renderBridgeConfig();
       return;
     }
     if (!state.ready) {
@@ -67,6 +71,47 @@
     );
   }
 
+  function renderBridgeConfig() {
+    const panel = document.getElementById('bridgeConfigPanel');
+    if (!panel) return;
+    if (state.bridgeConfigError) {
+      panel.innerHTML = [
+        '<span class="label">Token da ponte</span>',
+        '<p>' + escapeHtml(state.bridgeConfigError) + '</p>',
+        '<button onclick="loadBridgeConfig()">Tentar de novo</button>'
+      ].join('');
+      return;
+    }
+    if (!state.bridgeConfig) {
+      panel.innerHTML = '<span class="label">Token da ponte</span><p>Carregando configuracao segura...</p>';
+      return;
+    }
+    if (!state.bridgeConfig.tokenConfigured) {
+      panel.innerHTML = '<span class="label">Token da ponte</span><p>ROLL20_BRIDGE_TOKEN ainda nao esta configurado em producao.</p>';
+      return;
+    }
+    panel.innerHTML = [
+      '<span class="label">Token da ponte</span>',
+      '<p>Disponivel para DM/Owner autenticado. Use quando o bridge pedir o token no Roll20.</p>',
+      '<div class="actions"><button class="primary" onclick="copyBridgeToken()">Copiar token</button><button onclick="copyBridgeDefaults()">Copiar config</button></div>'
+    ].join('');
+  }
+
+  async function loadBridgeConfig(session = state.session) {
+    state.bridgeConfigError = '';
+    renderBridgeConfig();
+    try {
+      if (!session?.access_token) throw new Error('Sessao autenticada ausente.');
+      const payload = await apiJson('/api/roll20-bridge/config?campaignSlug=yuhara-main', {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      state.bridgeConfig = payload;
+    } catch (error) {
+      state.bridgeConfigError = error.message || String(error);
+    }
+    renderBridgeConfig();
+  }
+
   async function initBridgeAuth() {
     state.ready = false;
     state.error = '';
@@ -84,12 +129,16 @@
       });
       const { data, error } = await state.client.auth.getSession();
       if (error) throw error;
-      state.user = data?.session?.user || null;
+      state.session = data?.session || null;
+      state.user = state.session?.user || null;
       state.client.auth.onAuthStateChange((_event, session) => {
+        state.session = session || null;
         state.user = session?.user || null;
         state.ready = true;
         render();
+        if (state.user) loadBridgeConfig(session);
       });
+      if (state.user) await loadBridgeConfig(state.session);
     } catch (error) {
       state.error = error.message || String(error);
     } finally {
@@ -113,5 +162,22 @@
   window.initBridgeAuth = initBridgeAuth;
   window.signInBridgeDiscord = () => signInProvider('discord');
   window.signInBridgeGoogle = () => signInProvider('google');
+  window.loadBridgeConfig = () => loadBridgeConfig();
+  window.copyBridgeToken = async () => {
+    const token = state.bridgeConfig?.bridgeToken || '';
+    if (!token) return;
+    await navigator.clipboard.writeText(token);
+    const panel = document.getElementById('bridgeConfigPanel');
+    if (panel) panel.querySelector('p').textContent = 'Token copiado.';
+  };
+  window.copyBridgeDefaults = async () => {
+    const config = state.bridgeConfig || {};
+    await navigator.clipboard.writeText(JSON.stringify({
+      apiBase: config.apiBase || 'https://dnd.faysk.dev',
+      campaignSlug: config.campaignSlug || 'yuhara-main'
+    }, null, 2));
+    const panel = document.getElementById('bridgeConfigPanel');
+    if (panel) panel.querySelector('p').textContent = 'Config copiada.';
+  };
   document.addEventListener('DOMContentLoaded', initBridgeAuth);
 }());
