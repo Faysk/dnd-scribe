@@ -449,6 +449,7 @@ async function boot() {
     state.tab = button.dataset.tab;
     render();
   });
+  document.addEventListener('keydown', handleTimelineKeydown);
   initMusicDock();
   render();
   await initAuth();
@@ -3054,6 +3055,33 @@ function navigateTimeline(direction) {
   const nextIndex = Math.max(0, Math.min(nav.total - 1, currentIndex + Number(direction || 0)));
   const item = nav.sorted[nextIndex];
   if (item) selectTimelineItem(item.id);
+}
+
+function isEditableKeyTarget(target) {
+  if (!target) return false;
+  const tag = String(target.tagName || '').toLowerCase();
+  return ['input', 'textarea', 'select', 'button'].includes(tag) || Boolean(target.isContentEditable);
+}
+
+function handleTimelineKeydown(event) {
+  if (state.tab !== 'timeline' || !state.timeline.data || isEditableKeyTarget(event.target)) return;
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault();
+    navigateTimeline(-1);
+    return;
+  }
+  if (event.key === 'ArrowRight') {
+    event.preventDefault();
+    navigateTimeline(1);
+    return;
+  }
+  if (event.key === 'Home' || event.key === 'End') {
+    const nav = timelineNavigationState();
+    if (!nav.total) return;
+    event.preventDefault();
+    const item = event.key === 'Home' ? nav.sorted[0] : nav.sorted[nav.total - 1];
+    if (item) selectTimelineItem(item.id);
+  }
 }
 
 function timelineAttributeSelector(attribute, value) {
