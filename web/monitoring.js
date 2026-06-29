@@ -243,6 +243,8 @@
     const sessions = metricById(data, 'sessions');
     const content = metricById(data, 'content');
     const storage = metricById(data, 'storage');
+    const roll20Bridge = metricById(data, 'roll20-bridge-events');
+    const cleanup = metricById(data, 'audio-cleanup');
     const audio = metricById(data, 'audio-pipeline');
     const ai = metricById(data, 'ai-usage');
     const jobs = metricById(data, 'jobs');
@@ -266,10 +268,13 @@
           ${summaryMetric(num(sessions.total), 'sessoes')}
           ${summaryMetric(num(content.segments), 'segmentos')}
           ${summaryMetric(num(content.roll20Events), 'eventos Roll20')}
+          ${summaryMetric(num(roll20Bridge.total), 'ponte Roll20', Number(roll20Bridge.total || 0) ? 'ok' : 'attention')}
           ${summaryMetric(bytes(totals.bytes), 'dados em arquivos')}
+          ${summaryMetric(bytes(cleanup.deleteReadyBytes), 'limpeza pronta', Number(cleanup.deleteReadyBytes || 0) ? 'attention' : '')}
           ${summaryMetric(`${num(audio.speechSliceMinutes, 2)} min`, 'audio em slices')}
           ${summaryMetric(money(ai.estimatedCostUsd), 'IA estimada')}
           ${summaryMetric(num(jobs.failedLast24h), 'falhas 24h', Number(jobs.failedLast24h || 0) ? 'critical' : '')}
+          ${summaryMetric(num(cleanup.blockedObjects), 'limpeza bloqueada', Number(cleanup.blockedObjects || 0) ? 'attention' : '')}
         </div>
 
         ${renderReadiness(data.readiness || {})}
