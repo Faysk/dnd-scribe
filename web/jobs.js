@@ -189,6 +189,30 @@
     return badges.join('');
   }
 
+  function pipelineOperatorStats(status) {
+    const jobs = status.relevant || [];
+    return [
+      { label: 'Retry', value: jobs.filter(canRetry).length, tone: status.failed.length ? 'red' : 'blue', detail: 'falha/cancelado' },
+      { label: 'Pausar', value: jobs.filter(canPauseJob).length, tone: status.paused ? 'orange' : 'gold', detail: 'fila/retry' },
+      { label: 'Retomar', value: jobs.filter(canResumeJob).length, tone: status.paused ? 'orange' : 'blue', detail: 'pausado' },
+      { label: 'Descartar', value: jobs.filter(canDiscardJob).length, tone: status.discarded.length ? 'red' : 'blue', detail: 'nao rodando' }
+    ];
+  }
+
+  function renderPipelineOperatorBoard(status) {
+    return `
+      <div class="operator-board" aria-label="Acoes operacionais disponiveis">
+        ${pipelineOperatorStats(status).map(item => `
+          <div class="operator-stat ${esc(item.tone)}">
+            <span class="label">${esc(item.label)}</span>
+            <strong>${esc(item.value)}</strong>
+            <small>${esc(item.detail)}</small>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
   function stageTone(stage = '', fallback = '') {
     if (fallback) return fallback;
     if (stage.includes('failed') || stage.includes('attention')) return 'red';
@@ -684,6 +708,7 @@
           <button class="primary" onclick="continuePipeline('${esc(controlSourceSessionId)}')" ${canContinue ? '' : 'disabled'}>${esc(controlLabel)}</button>
         </div>
       </div>
+      ${renderPipelineOperatorBoard(status)}
       <div class="job-list">
         ${jobs.slice(0, 12).map(renderJobRow).join('')}
       </div>
