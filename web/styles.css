@@ -986,6 +986,130 @@ body.auth-locked .music-dock { display: none; }
   gap: 12px;
   align-items: start;
 }
+.timeline-overview {
+  display: grid;
+  gap: 10px;
+}
+.timeline-overview-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+.timeline-overview-head h2 {
+  margin-top: 2px;
+}
+.timeline-overview-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 8px;
+}
+.timeline-overview-kpis div {
+  min-width: 82px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+}
+.timeline-overview-kpis strong {
+  display: block;
+  margin-top: 2px;
+  font-size: .9rem;
+}
+.timeline-overview-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: .8rem;
+}
+.timeline-overview-legend span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.timeline-overview-legend span::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.timeline-overview-legend .speech {
+  color: #6ca2d2;
+}
+.timeline-overview-legend .roll20 {
+  color: #62a87d;
+}
+.timeline-overview-legend .discord {
+  color: #8b9cf0;
+}
+.timeline-overview-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--overview-bins, 48), minmax(4px, 1fr));
+  gap: 2px;
+  align-items: end;
+  min-height: 58px;
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--line);
+}
+.timeline-overview-bin {
+  display: grid;
+  align-items: end;
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.timeline-overview-bin:hover .timeline-overview-stack,
+.timeline-overview-bin:focus-visible .timeline-overview-stack {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.timeline-overview-bin.empty {
+  opacity: .35;
+}
+.timeline-overview-stack {
+  display: flex;
+  flex-direction: column-reverse;
+  width: 100%;
+  min-height: 2px;
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+  background: #17202c;
+}
+.timeline-overview-stack span {
+  display: block;
+  min-height: 2px;
+}
+.timeline-overview-stack .speech {
+  background: #426f98;
+}
+.timeline-overview-stack .roll20 {
+  background: #3f855c;
+}
+.timeline-overview-stack .discord {
+  background: #687bd0;
+}
+.timeline-overview-stack .other {
+  background: #8d6834;
+}
+.timeline-overview-marker {
+  position: absolute;
+  top: 5px;
+  bottom: 3px;
+  width: 2px;
+  transform: translateX(-1px);
+  border-radius: 2px;
+  background: var(--gold);
+  box-shadow: 0 0 0 3px rgba(217, 178, 92, .16);
+  pointer-events: none;
+}
 .timeline-main {
   display: grid;
   gap: 12px;
@@ -1033,6 +1157,10 @@ body.auth-locked .music-dock { display: none; }
 .timeline-lane-label strong,
 .timeline-lane-label small {
   display: block;
+}
+.timeline-lane-metrics {
+  color: var(--muted);
+  font-size: .74rem;
 }
 .timeline-lane-track {
   position: relative;
@@ -1146,6 +1274,12 @@ body.auth-locked .music-dock { display: none; }
   .timeline-discord-sync,
   .discord-sync-fields {
     grid-template-columns: 1fr;
+  }
+  .timeline-overview-head {
+    grid-template-columns: 1fr;
+  }
+  .timeline-overview-kpis {
+    justify-content: start;
   }
   .discord-sync-actions,
   .discord-window-actions {

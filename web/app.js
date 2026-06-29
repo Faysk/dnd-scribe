@@ -2256,6 +2256,8 @@ function renderTimeline() {
         ${renderDiscordSyncControls()}
       </div>
 
+      ${renderTimelineOverview(data, items)}
+
       <section class="timeline-layout">
         <div class="timeline-main">
           ${renderTimelineScale(data, items)}
@@ -2451,6 +2453,101 @@ function timelineDuration(data, items) {
   );
 }
 
+function timelineItemRange(item) {
+  const start = Number(item?.startMs || 0);
+  const end = Number(item?.endMs || item?.startMs || start + 500);
+  return {
+    start: Number.isFinite(start) ? Math.max(0, start) : 0,
+    end: Number.isFinite(end) ? Math.max(0, end) : 500
+  };
+}
+
+function timelineOverviewBins(items, duration) {
+  const binCount = Math.max(24, Math.min(96, Math.ceil(Number(state.timeline.zoom || 1) * 18)));
+  const binSize = duration / binCount;
+  const bins = Array.from({ length: binCount }, (_, index) => ({
+    index,
+    startMs: Math.round(index * binSize),
+    endMs: Math.round((index + 1) * binSize),
+    speech: 0,
+    roll20: 0,
+    discord: 0,
+    other: 0,
+    total: 0
+  }));
+  items.forEach(item => {
+    const range = timelineItemRange(item);
+    const startIndex = Math.max(0, Math.min(binCount - 1, Math.floor(range.start / binSize)));
+    const endIndex = Math.max(startIndex, Math.min(binCount - 1, Math.floor(Math.max(range.start, range.end - 1) / binSize)));
+    const kind = ['speech', 'roll20', 'discord'].includes(item.kind) ? item.kind : 'other';
+    for (let index = startIndex; index <= endIndex; index += 1) {
+      bins[index][kind] += 1;
+      bins[index].total += 1;
+    }
+  });
+  return bins;
+}
+
+function renderTimelineOverview(data, items) {
+  const duration = timelineDuration(data, items);
+  const bins = timelineOverviewBins(items, duration);
+  const maxTotal = Math.max(1, ...bins.map(bin => bin.total));
+  const selected = timelineSelectedItem();
+  const selectedStart = selected ? timelineItemRange(selected).start : null;
+  const selectedLeft = selectedStart === null ? null : Math.min(100, Math.max(0, (selectedStart / duration) * 100));
+  const speechMs = items
+    .filter(item => item.kind === 'speech')
+    .reduce((sum, item) => sum + Math.max(0, timelineItemRange(item).end - timelineItemRange(item).start), 0);
+  const externalEvents = items.filter(item => item.kind !== 'speech').length;
+  const unsynced = items.filter(item => item.startMs === null || item.startMs === undefined).length;
+  return `
+    <section class="panel timeline-overview">
+      <div class="timeline-overview-head">
+        <div>
+          <span class="label">Mapa da sessao</span>
+          <h2>Densidade sincronizada</h2>
+        </div>
+        <div class="timeline-overview-kpis">
+          <div><span class="label">Duracao</span><strong>${escapeHtml(fmtDuration(duration))}</strong></div>
+          <div><span class="label">Itens visiveis</span><strong>${items.length}</strong></div>
+          <div><span class="label">Falas</span><strong>${escapeHtml(fmtDuration(speechMs))}</strong></div>
+          <div><span class="label">Eventos</span><strong>${externalEvents}</strong></div>
+          <div><span class="label">Sem tempo</span><strong>${unsynced}</strong></div>
+        </div>
+      </div>
+      <div class="timeline-overview-legend">
+        <span class="speech">Falas</span>
+        <span class="roll20">Roll20</span>
+        <span class="discord">Discord</span>
+      </div>
+      <div class="timeline-overview-track" style="--overview-bins:${bins.length}">
+        ${bins.map(bin => renderTimelineOverviewBin(bin, maxTotal)).join('')}
+        ${selectedLeft === null ? '' : `<span class="timeline-overview-marker" style="left:${selectedLeft}%"></span>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderTimelineOverviewBin(bin, maxTotal) {
+  const density = bin.total ? Math.max(5, Math.round((bin.total / maxTotal) * 44)) : 2;
+  const title = `${fmtDuration(bin.startMs)} - ${fmtDuration(bin.endMs)} | ${bin.speech} falas, ${bin.roll20} Roll20, ${bin.discord} Discord`;
+  return `
+    <button class="timeline-overview-bin ${bin.total ? '' : 'empty'}" ${bin.total ? '' : 'disabled'} onclick="selectTimelineNearest(${bin.startMs}, ${bin.endMs})" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">
+      <span class="timeline-overview-stack" style="height:${density}px">
+        ${renderOverviewSegment('speech', bin.speech, bin.total)}
+        ${renderOverviewSegment('roll20', bin.roll20, bin.total)}
+        ${renderOverviewSegment('discord', bin.discord, bin.total)}
+        ${renderOverviewSegment('other', bin.other, bin.total)}
+      </span>
+    </button>
+  `;
+}
+
+function renderOverviewSegment(kind, value, total) {
+  if (!value || !total) return '';
+  return `<span class="${kind}" style="height:${Math.max(8, Math.round((value / total) * 100))}%"></span>`;
+}
+
 function renderTimelineScale(data, items) {
   const duration = timelineDuration(data, items);
   const markers = Array.from({ length: 7 }, (_, index) => Math.round(duration * (index / 6)));
@@ -2472,17 +2569,48 @@ function renderTimelineLanes(data, items) {
 }
 
 function renderTimelineLane(lane, laneItems, duration) {
+  const stats = timelineLaneStats(laneItems);
+  const meta = [`${stats.count} itens`];
+  if (stats.speechMs) meta.push(`${fmtDuration(stats.speechMs)} fala`);
+  if (stats.events) meta.push(`${stats.events} eventos`);
+  if (stats.overlaps) meta.push(`${stats.overlaps} sobreposicoes`);
   return `
     <div class="timeline-lane">
       <div class="timeline-lane-label">
         <strong>${escapeHtml(lane.label || lane.id)}</strong>
         <small>${escapeHtml(lane.subtitle || lane.trackKey || lane.type || '')}</small>
+        <small class="timeline-lane-metrics">${escapeHtml(meta.join(' / '))}</small>
       </div>
       <div class="timeline-lane-track">
         ${laneItems.map(item => renderTimelineBlock(item, duration)).join('')}
       </div>
     </div>
   `;
+}
+
+function timelineLaneStats(laneItems) {
+  const speech = laneItems.filter(item => item.kind === 'speech');
+  return {
+    count: laneItems.length,
+    speechMs: speech.reduce((sum, item) => sum + Math.max(0, timelineItemRange(item).end - timelineItemRange(item).start), 0),
+    events: laneItems.filter(item => item.kind !== 'speech').length,
+    overlaps: timelineOverlapCount(speech)
+  };
+}
+
+function timelineOverlapCount(items) {
+  const ranges = items
+    .map(timelineItemRange)
+    .filter(range => range.end > range.start)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+  let activeEnds = [];
+  let overlaps = 0;
+  ranges.forEach(range => {
+    activeEnds = activeEnds.filter(end => end > range.start);
+    if (activeEnds.length) overlaps += 1;
+    activeEnds.push(range.end);
+  });
+  return overlaps;
 }
 
 function renderTimelineBlock(item, duration) {
@@ -2541,6 +2669,19 @@ function renderTimelineEvents(items) {
       </div>
     </section>
   `;
+}
+
+function selectTimelineNearest(startMs, endMs) {
+  const items = filteredTimelineItems();
+  const target = (Number(startMs || 0) + Number(endMs || 0)) / 2;
+  const candidates = items
+    .filter(item => {
+      const range = timelineItemRange(item);
+      return range.end >= startMs && range.start <= endMs;
+    })
+    .sort((a, b) => Math.abs(timelineItemRange(a).start - target) - Math.abs(timelineItemRange(b).start - target));
+  const selected = candidates[0];
+  if (selected) selectTimelineItem(selected.id);
 }
 
 function renderTimelineInspector(item) {
