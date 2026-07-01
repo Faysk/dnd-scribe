@@ -6,19 +6,21 @@
 var DndScribeBridge = DndScribeBridge || (function () {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.0.1';
   var MARKER = 'DND_SCRIBE_EVENT:';
   var COMMAND = '!dndscribe';
   var MAX_CONTENT = 3500;
 
   function ensureState() {
     state.DndScribeBridge = state.DndScribeBridge || {
-      enabled: true,
+      enabled: false,
       seq: 0,
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
+      version: VERSION
     };
-    if (typeof state.DndScribeBridge.enabled !== 'boolean') state.DndScribeBridge.enabled = true;
+    if (typeof state.DndScribeBridge.enabled !== 'boolean') state.DndScribeBridge.enabled = false;
     if (typeof state.DndScribeBridge.seq !== 'number') state.DndScribeBridge.seq = 0;
+    state.DndScribeBridge.version = VERSION;
     return state.DndScribeBridge;
   }
 
@@ -53,7 +55,7 @@ var DndScribeBridge = DndScribeBridge || (function () {
     var encoded = encodeURIComponent(JSON.stringify(packet));
     sendChat(
       'DnD Scribe',
-      '/w gm /direct <code>' + MARKER + encoded + '</code>',
+      '/w gm <span style="display:none" data-dnd-scribe-packet="1">' + MARKER + encoded + '</span>',
       null,
       { noarchive: true }
     );
@@ -83,6 +85,13 @@ var DndScribeBridge = DndScribeBridge || (function () {
     }
     if (content === COMMAND + ' off' || content === COMMAND + ' pausar') {
       data.enabled = false;
+      status();
+      return true;
+    }
+    if (content === COMMAND + ' reset') {
+      data.enabled = false;
+      data.seq = 0;
+      data.startedAt = new Date().toISOString();
       status();
       return true;
     }

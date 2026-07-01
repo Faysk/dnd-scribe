@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const VERSION = 'chrome-extension-1.0.0';
+  const VERSION = 'chrome-extension-1.0.1';
   const MARKER = 'DND_SCRIBE_EVENT:';
   const STORAGE_KEY = 'dndScribeRoll20Bridge';
   const QUEUE_KEY = 'dndScribeRoll20BridgeQueue';
@@ -72,19 +72,54 @@
     render();
   }
 
-  function scanNode(node) {
-    if (!node || node.nodeType !== 1 || node.dataset.dndScribeRead === '1') return;
-    const text = node.textContent || '';
+  function packetCarrier(element) {
+    if (!element || !element.closest) return element;
+    const carrier = element.closest(
+      '.message, .chatmessage, .textchatcontainer .message, [class*="message"], li, code, pre'
+    ) || element;
+    if (!carrier || carrier === document.body || carrier === document.documentElement) return element;
+    return carrier;
+  }
+
+  function hidePacketTextNode(textNode) {
+    const parent = textNode?.parentElement;
+    if (!parent) return;
+    const target = packetCarrier(parent);
+    target.dataset.dndScribeRead = '1';
+    target.style.display = 'none';
+  }
+
+  function scanTextNode(textNode) {
+    const text = textNode?.nodeValue || '';
     if (text.indexOf(MARKER) === -1) return;
-    node.dataset.dndScribeRead = '1';
-    node.style.display = 'none';
+    const parent = textNode.parentElement;
+    if (parent?.dataset?.dndScribeRead === '1') return;
+    hidePacketTextNode(textNode);
     extractPacketsFromText(text).forEach(packet => enqueue(packet));
   }
 
   function scanTree(root) {
-    scanNode(root);
-    if (!root || !root.querySelectorAll) return;
-    root.querySelectorAll('*').forEach(scanNode);
+    if (!root) return;
+    if (root.nodeType === 3) {
+      scanTextNode(root);
+      return;
+    }
+    if (root.nodeType !== 1) return;
+    if (root.dataset?.dndScribeRead === '1') return;
+    if (root.matches?.('script, style, textarea, input')) return;
+
+    const text = root.textContent || '';
+    if (text.indexOf(MARKER) === -1) return;
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return (node.nodeValue || '').indexOf(MARKER) === -1
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    let node;
+    while ((node = walker.nextNode())) scanTextNode(node);
   }
 
   function scheduleFlush(delay) {
