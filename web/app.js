@@ -4331,10 +4331,130 @@ async function convertRoll20EventToNote(eventId) {
 function renderPublications() {
   const publications = state.review?.ai?.publications || [];
   return `
+    ${renderPublicationAudit(publications)}
     <section class="publication-grid">
       ${publications.map(publicationCard).join('') || `<div class="empty">Nenhuma publicacao gerada.</div>`}
     </section>
   `;
+}
+
+function publicationSourceIds(item = {}) {
+  const ids = new Set();
+  const fromMetadata = item.metadata?.source_segment_ids || item.metadata?.sourceSegmentIds || [];
+  for (const id of fromMetadata) if (id) ids.add(String(id));
+  const content = String(item.content || '');
+  const regex = /Fontes:\s*`([^`]+)`/gi;
+  let match = regex.exec(content);
+  while (match) {
+    match[1]
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean)
+      .forEach(value => ids.add(value));
+    match = regex.exec(content);
+  }
+  return Array.from(ids);
+}
+
+function renderPublicationAudit(publications = []) {
+  const withSources = publications.filter(item => publicationSourceIds(item).length).length;
+  const reviewOnly = publications.filter(item => item.visibility === 'review_only').length;
+  const publicItems = publications.filter(item => item.visibility && item.visibility !== 'review_only').length;
+  const drafts = publications.filter(item => item.status === 'draft').length;
+  const missingSources = publications.length - withSources;
+  const tone = missingSources ? 'gold' : publications.length ? 'green' : 'blue';
+  const action = missingSources
+    ? 'Conferir publicacoes sem fonte direta antes de divulgar fora da mesa.'
+    : publications.length
+      ? 'Abrir fontes das publicacoes e validar evidencias finais.'
+      : 'Gerar ou reconstruir publicacoes depois de aplicar decisoes.';
+  return `
+    <section class="publication-audit ${tone}">
+      <div class="publication-audit-head">
+        <div>
+          <span class="label">Auditabilidade</span>
+          <h2>${escapeHtml(publications.length ? `${publications.length} publicacao(oes)` : 'Sem publicacoes')}</h2>
+          <p>${escapeHtml(action)}</p>
+        </div>
+        <div class="badges">
+          ${badge(`${withSources} com fonte`, withSources ? 'green' : 'gold')}
+          ${badge(`${missingSources} sem fonte`, missingSources ? 'gold' : 'green')}
+          ${badge(`${reviewOnly} review`, reviewOnly ? 'blue' : 'green')}
+          ${badge(`${publicItems} divulgaveis`, publicItems ? 'green' : 'blue')}
+          ${badge(`${drafts} draft`, drafts ? 'orange' : 'green')}
+        </div>
+      </div>
+      <div class="actions publication-audit-actions">
+        <button onclick="state.tab='candidates'; render();">Abrir candidatos</button>
+        <button onclick="state.tab='review'; render();">Abrir review</button>
+        <button onclick="rebuildPublications(true)">Simular rebuild</button>
+        <button class="primary" onclick="rebuildPublications(false)">Reconstruir publicacoes</button>
+      </div>
+    </section>
+  `;
+}
+
+function publicationSourcesPanel(item) {
+  const ids = publicationSourceIds(item);
+  if (!ids.length) {
+    return `
+      <div class="publication-source-list missing">
+        <span class="label">Fontes</span>
+        <small>Sem segmento fonte direto nesta publicacao. Use candidatos/review para auditoria manual antes de divulgar.</small>
+      </div>
+    `;
+  }
+  return `
+    <div class="publication-source-list">
+      <span class="label">Fontes</span>
+      ${ids.map(id => {
+        const segment = state.review?.segments?.find(item => item.id === id);
+        const label = segment
+          ? `${fmtDuration(segment.start_ms)} - ${segment.speaker_name || segment.track_key}`
+          : String(id).slice(0, 8);
+        return `
+          <div class="publication-source-row">
+            <div>
+              <strong>${escapeHtml(label)}</strong>
+              <small>${escapeHtml(segment ? (segment.text || '').slice(0, 150) : 'Fonte citada no texto, mas segmento nao veio no payload atual.')}</small>
+            </div>
+            <div class="actions">
+              <button onclick="openCandidateSource('${escapeHtml(id)}', false)" ${segment ? '' : 'disabled'}>Abrir</button>
+              <button onclick="openCandidateSource('${escapeHtml(id)}', true)" ${segment ? '' : 'disabled'}>Ouvir</button>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+async function rebuildPublications(dryRun = false) {
+  if (!state.selectedSourceSessionId) {
+    toast('Selecione uma sessao antes de reconstruir publicacoes.');
+    return;
+  }
+  if (!dryRun && !window.confirm('Reconstruir publicacoes aprovadas no banco para esta sessao?')) return;
+  try {
+    setBusy(true);
+    const payload = await api('/api/publications/rebuild', {
+      method: 'POST',
+      body: JSON.stringify({
+        sourceSessionId: state.selectedSourceSessionId,
+        runId: DEFAULT_RUN,
+        dryRun
+      })
+    });
+    if (payload.review) state.review = payload.review;
+    if (payload.summary) state.summary = payload.summary;
+    remember(dryRun ? 'Simulacao de publicacoes concluida.' : 'Publicacoes reconstruidas.', payload.publicationResult || payload.summary || payload);
+    toast(dryRun ? 'Simulacao de publicacoes concluida.' : 'Publicacoes reconstruidas.');
+    render();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    setBusy(false);
+  }
 }
 
 function publicationCard(item) {
@@ -4345,6 +4465,7 @@ function publicationCard(item) {
         <div class="badges">${badge(item.visibility, item.visibility === 'review_only' ? 'gold' : 'green')}${badge(item.status, item.status === 'draft' ? 'orange' : 'green')}</div>
       </div>
       <small>${escapeHtml(item.publication_type)} • ${escapeHtml(item.source_publication_id)}</small>
+      ${publicationSourcesPanel(item)}
       <pre>${escapeHtml((item.content || '').slice(0, 1400))}${(item.content || '').length > 1400 ? '\n...' : ''}</pre>
     </article>
   `;

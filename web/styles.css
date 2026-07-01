@@ -726,6 +726,30 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
+.publication-audit {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.publication-audit.green { border-color: var(--green); background: #0f1914; }
+.publication-audit.gold { border-color: var(--gold); background: #1a1710; }
+.publication-audit.blue { border-color: var(--blue); background: #101822; }
+.publication-audit-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.publication-audit-head p {
+  margin-top: 5px;
+}
+.publication-audit-actions {
+  justify-content: flex-end;
+}
 .roll20-review-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr);
@@ -828,6 +852,33 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   overflow-wrap: anywhere;
 }
 .candidate-source-row .actions {
+  justify-content: flex-end;
+}
+.publication-source-list {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 9px;
+  margin-top: 9px;
+}
+.publication-source-list.missing {
+  border-color: var(--gold);
+  background: #1a1710;
+}
+.publication-source-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.publication-source-row strong,
+.publication-source-row small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.publication-source-row .actions {
   justify-content: flex-end;
 }
 .publication-card pre, .ops-card pre {
@@ -974,7 +1025,7 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .workspace { padding: 12px 12px 118px; }
   .rail { padding: 12px; }
-  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-readiness, .upload-page-head, .upload-summary-grid, .upload-action-metrics, .pipeline-control, .review-queue-head, .review-queue-grid {
+  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-readiness, .upload-page-head, .upload-summary-grid, .upload-action-metrics, .pipeline-control, .review-queue-head, .review-queue-grid, .publication-audit-head {
     grid-template-columns: 1fr;
   }
   .upload-readiness-signals {
@@ -1004,11 +1055,19 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   .review-queue-head {
     display: grid;
   }
+  .publication-audit-head {
+    display: grid;
+  }
   .candidate-source-row {
     grid-template-columns: 1fr;
   }
-  .candidate-source-row .actions {
+  .candidate-source-row .actions,
+  .publication-source-row .actions,
+  .publication-audit-actions {
     justify-content: stretch;
+  }
+  .publication-source-row {
+    grid-template-columns: 1fr;
   }
   .top-actions button { width: 100%; }
   .music-dock {
