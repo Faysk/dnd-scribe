@@ -726,6 +726,93 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
+.tutorial-page {
+  display: grid;
+  gap: 12px;
+}
+.tutorial-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+}
+.tutorial-hero h2 {
+  margin-top: 3px;
+  font-size: 1.35rem;
+}
+.tutorial-flow {
+  overflow: hidden;
+}
+.tutorial-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
+  gap: 1px;
+  background: var(--line);
+}
+.tutorial-flow-item {
+  display: grid;
+  gap: 7px;
+  min-height: 150px;
+  align-content: start;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: #0d1219;
+  padding: 12px;
+}
+.tutorial-flow-item span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  color: var(--gold);
+  font-weight: 900;
+}
+.tutorial-flow-item strong {
+  line-height: 1.15;
+}
+.tutorial-flow-item small {
+  line-height: 1.35;
+}
+.tutorial-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.tutorial-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px;
+  min-width: 0;
+}
+.tutorial-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 10px;
+}
+.tutorial-card h3 {
+  margin-top: 3px;
+  font-size: 1.05rem;
+}
+.tutorial-steps {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 22px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.tutorial-steps li::marker {
+  color: var(--gold);
+  font-weight: 800;
+}
 .publication-audit {
   display: grid;
   gap: 12px;
@@ -1014,6 +1101,7 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
   .rail { position: relative; height: auto; }
   .session-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .status-strip, .candidate-grid, .publication-grid, .ops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tutorial-flow-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .review-queue-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .roll20-review-layout { grid-template-columns: 1fr; }
   .review-layout { grid-template-columns: 1fr; }
@@ -1025,7 +1113,7 @@ h1, h2, h3, p, small, strong { overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .workspace { padding: 12px 12px 118px; }
   .rail { padding: 12px; }
-  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-readiness, .upload-page-head, .upload-summary-grid, .upload-action-metrics, .pipeline-control, .review-queue-head, .review-queue-grid, .publication-audit-head {
+  .topbar, .toolbar, .field-grid, .status-strip, .candidate-grid, .publication-grid, .ops-grid, .tutorial-hero, .tutorial-grid, .tutorial-flow-grid, .roll20-review-layout, .roll20-review-meta, .roll20-metric-grid, .session-list, .session-row, .upload-brief, .upload-readiness, .upload-page-head, .upload-summary-grid, .upload-action-metrics, .pipeline-control, .review-queue-head, .review-queue-grid, .publication-audit-head {
     grid-template-columns: 1fr;
   }
   .upload-readiness-signals {

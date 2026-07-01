@@ -82,25 +82,25 @@
     if (!panel) return;
     if (state.bridgeConfigError) {
       panel.innerHTML = [
-        '<span class="label">Token da ponte</span>',
+        '<span class="label">4. Copiar token e sessao alvo</span>',
         '<p>' + escapeHtml(state.bridgeConfigError) + '</p>',
         '<button onclick="loadBridgeConfig()">Tentar de novo</button>'
       ].join('');
       return;
     }
     if (!state.bridgeConfig) {
-      panel.innerHTML = '<span class="label">Token da ponte</span><p>Carregando configuracao segura...</p>';
+      panel.innerHTML = '<span class="label">4. Copiar token e sessao alvo</span><p>Carregando configuracao segura...</p>';
       return;
     }
     if (!state.bridgeConfig.tokenConfigured) {
-      panel.innerHTML = '<span class="label">Token da ponte</span><p>ROLL20_BRIDGE_TOKEN ainda nao esta configurado em producao.</p>';
+      panel.innerHTML = '<span class="label">4. Copiar token e sessao alvo</span><p>ROLL20_BRIDGE_TOKEN ainda nao esta configurado em producao.</p>';
       return;
     }
     const recent = Array.isArray(state.bridgeConfig.recentSessions) ? state.bridgeConfig.recentSessions.filter(item => item.sourceSessionId) : [];
     const selectedSourceSessionId = bridgeSelectedSourceSessionId();
     panel.innerHTML = [
-      '<span class="label">Token da ponte</span>',
-      '<p>Disponivel para DM/Owner autenticado. Escolha a sessao alvo e copie os dados para o painel da extensao no Roll20.</p>',
+      '<span class="label">4. Copiar token e sessao alvo</span>',
+      '<p>Disponivel somente para DM/Owner autenticado. Escolha a sessao alvo e use os botoes abaixo para preencher o painel da extensao no Roll20.</p>',
       recent.length ? [
         '<label><span class="label">Sessao alvo</span>',
         '<select onchange="setBridgeSourceSessionId(this.value)">',
@@ -108,7 +108,7 @@
         '</select></label>'
       ].join('') : '<p>Nenhuma sessao recente encontrada. Crie ou selecione uma sessao antes de ligar a ponte.</p>',
       '<div class="actions"><button class="primary" onclick="copyBridgeToken()">Copiar token</button><button onclick="copyBridgeSourceSessionId()">Copiar sourceSessionId</button><button onclick="copyBridgeDefaults()">Copiar config</button></div>',
-      selectedSourceSessionId ? '<small>Selecionada: ' + escapeHtml(selectedSourceSessionId) + '</small>' : ''
+      selectedSourceSessionId ? '<small>Prompt da extensao: URL = https://dnd.faysk.dev | campaignSlug = yuhara-main | sourceSessionId = ' + escapeHtml(selectedSourceSessionId) + ' | token = copiar pelo botao acima.</small>' : ''
     ].join('');
   }
 

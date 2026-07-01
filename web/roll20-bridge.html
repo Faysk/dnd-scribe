@@ -32,55 +32,83 @@
         <a class="button-link" href="/">Voltar</a>
       </div>
       <div class="panel-body detail-grid">
+        <section class="audio-card">
+          <span class="label">Fluxo seguro</span>
+          <strong>Pause primeiro, configure, teste, depois ligue.</strong>
+          <p>A ponte usa um script no Roll20 para gerar pacotes tecnicos e uma extensao do navegador do GM para enviar esses pacotes para o DnD Scribe. Jogadores nao precisam ver nem digitar token.</p>
+        </section>
+
         <div class="field-grid">
-          <div>
+          <div class="audio-card">
             <span class="label">Camada 1</span>
             <strong>Mod/API Roll20</strong>
-            <p>Instale o script no Roll20 para transformar cada `chat:message` em pacote tecnico.</p>
+            <p>Roda no Roll20 e transforma chat, rolagens e comandos em pacotes tecnicos.</p>
           </div>
-          <div>
+          <div class="audio-card">
             <span class="label">Camada 2</span>
-            <strong>Bridge do navegador</strong>
-            <p>Use a extensao local no tab do jogo. Ela envia os pacotes para producao com token.</p>
+            <strong>Extensao do GM</strong>
+            <p>Le os pacotes no navegador, esconde o texto tecnico e envia para producao.</p>
           </div>
-          <div>
+          <div class="audio-card">
             <span class="label">Camada 3</span>
             <strong>Timeline</strong>
-            <p>Eventos entram em `roll20_events`, sincronizados com a sessao pelo timestamp.</p>
+            <p>Eventos entram em <code>roll20_events</code> para sincronizar com audio e Discord.</p>
+          </div>
+          <div class="audio-card">
+            <span class="label">Seguranca</span>
+            <strong>Token dedicado</strong>
+            <p>A API aceita somente <code>ROLL20_BRIDGE_TOKEN</code>. Sem ele, nada e gravado.</p>
           </div>
         </div>
 
         <section class="audio-card">
-          <span class="label">1. Instalar Mod/API no Roll20</span>
-          <p>Abra a pagina do jogo no Roll20, va em Settings -> Mod (API) Scripts -> New Script e cole o script abaixo.</p>
-          <a class="button-link primary" href="/integrations/roll20/dnd-scribe-mod.js" target="_blank" rel="noreferrer">Abrir script Mod</a>
+          <span class="label">1. Pausar antes de configurar</span>
+          <p>No chat do Roll20, rode este comando antes de mexer na extensao. Isso evita spam tecnico para o GM.</p>
+          <div class="actions">
+            <button onclick="navigator.clipboard.writeText('!dndscribe off')">Copiar pausa</button>
+          </div>
+          <code>!dndscribe off</code>
         </section>
 
         <section class="audio-card">
-          <span class="label">2. Instalar extensao Chrome local</span>
-          <p>O Roll20 bloqueia scripts externos por CSP. Use a extensao local do projeto em vez de bookmarklet.</p>
-          <a class="button-link primary" href="/integrations/roll20/chrome-extension/manifest.json" target="_blank" rel="noreferrer">Ver manifest</a>
-          <p>No Chrome, abra <code>chrome://extensions</code>, ative Developer mode, clique Load unpacked e selecione <code>D:\Projects\dnd\integrations\roll20\chrome-extension</code>.</p>
+          <span class="label">2. Instalar ou atualizar Mod/API</span>
+          <p>Abra a pagina do jogo no Roll20, va em Settings -> Mod (API) Scripts -> New Script, cole o script e salve. Use sempre a versao publicada abaixo.</p>
+          <div class="actions">
+            <a class="button-link primary" href="/integrations/roll20/dnd-scribe-mod.js" target="_blank" rel="noreferrer">Abrir script Mod</a>
+          </div>
         </section>
 
         <section class="audio-card">
-          <span class="label">3. Rodar na mesa</span>
-          <p>Abra o jogo no Roll20. Primeiro pause com <code>!dndscribe off</code>. Quando o painel pequeno da extensao aparecer, clique em Config e informe URL, campaign slug, sourceSessionId selecionado acima e token. Depois ligue com <code>!dndscribe on</code>.</p>
+          <span class="label">3. Instalar extensao Chrome local</span>
+          <p>No Chrome, abra <code>chrome://extensions</code>, ative Developer mode, clique Load unpacked e selecione a pasta local da extensao.</p>
+          <code>D:\Projects\dnd\integrations\roll20\chrome-extension</code>
+          <div class="actions">
+            <a class="button-link" href="/integrations/roll20/chrome-extension/manifest.json" target="_blank" rel="noreferrer">Ver manifest</a>
+          </div>
         </section>
 
         <section class="audio-card" id="bridgeConfigPanel">
-          <span class="label">Token da ponte</span>
+          <span class="label">4. Copiar token e sessao alvo</span>
           <p>Carregando configuracao segura...</p>
         </section>
 
         <section class="audio-card">
-          <span class="label">Comandos no chat Roll20</span>
-          <p><code>!dndscribe status</code> mostra o estado. <code>!dndscribe off</code> pausa. <code>!dndscribe on</code> religa. Se aparecer pacote grande <code>DND_SCRIBE_EVENT</code> no chat do GM, pause, recarregue a mesa e confira a extensao.</p>
+          <span class="label">5. Configurar no Roll20 editor</span>
+          <p>Abra a mesa em <code>https://app.roll20.net/editor/...</code>. No painel pequeno <strong>DnD Scribe</strong>, clique em Config e cole URL, campaign slug, sourceSessionId e token.</p>
+          <code>URL: https://dnd.faysk.dev<br />Campaign: yuhara-main</code>
         </section>
 
         <section class="audio-card">
-          <span class="label">Seguranca</span>
-          <p>A API aceita somente `ROLL20_BRIDGE_TOKEN`. Sem esse token, a rota responde erro e nada e gravado.</p>
+          <span class="label">6. Testar e ligar</span>
+          <p>Depois de configurar, confira status, ligue a ponte e envie uma acao teste.</p>
+          <code>!dndscribe status<br />!dndscribe on<br />!dnd acao teste da ponte roll20</code>
+        </section>
+
+        <section class="audio-card error">
+          <span class="label">Emergencia</span>
+          <strong>Se aparecer texto gigante <code>DND_SCRIBE_EVENT</code> para o GM</strong>
+          <p>Pause imediatamente, recarregue a extensao e a mesa, confirme que o painel DnD Scribe apareceu e configure novamente antes de religar.</p>
+          <code>!dndscribe off</code>
         </section>
       </div>
     </section>

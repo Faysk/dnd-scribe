@@ -1147,7 +1147,7 @@ function render() {
     $('#view').innerHTML = authGateView();
     return;
   }
-  if (!state.review && !['sessions', 'upload', 'ops'].includes(state.tab)) {
+  if (!state.review && !['sessions', 'upload', 'ops', 'tutorials'].includes(state.tab)) {
     $('#view').innerHTML = loadingView();
     return;
   }
@@ -1163,7 +1163,8 @@ function render() {
     candidates: renderCandidates,
     roll20: renderRoll20Review,
     publications: renderPublications,
-    ops: renderOps
+    ops: renderOps,
+    tutorials: renderTutorials
   };
   $('#view').innerHTML = (routes[state.tab] || renderReview)();
 }
@@ -1175,6 +1176,209 @@ function loadingView(message = 'Carregando dados reais do Supabase...') {
       <h2>${escapeHtml(message)}</h2>
       <p>O backend esta buscando sessao, transcricao, candidatos, publicacoes e resumo operacional.</p>
     </section>
+  `;
+}
+
+function renderTutorials() {
+  return `
+    <section class="tutorial-page">
+      <div class="tutorial-hero panel">
+        <div>
+          <span class="label">Manual operacional</span>
+          <h2>Como usar o DnD Scribe em mesa real</h2>
+          <p>Guia rapido para preparar a sessao, gravar com Craig, capturar Roll20/Discord, acompanhar o processamento e revisar canon com seguranca.</p>
+        </div>
+        <div class="actions">
+          <button onclick="state.tab='upload'; render();">Abrir upload</button>
+          <a class="button-link" href="/roll20-bridge.html">Ponte Roll20</a>
+          <button onclick="state.tab='timeline'; render();">Abrir timeline</button>
+        </div>
+      </div>
+
+      <section class="tutorial-flow panel">
+        <div class="panel-head">
+          <h2>Ordem recomendada</h2>
+          ${badge('producao', 'green')}
+        </div>
+        <div class="tutorial-flow-grid">
+          ${tutorialFlowItem('01', 'Antes da sessao', 'Criar sessao, conferir acesso, deixar Craig e Roll20 prontos.', 'sessions')}
+          ${tutorialFlowItem('02', 'Durante a sessao', 'Craig gravando, ponte Roll20 ligada, Discord sincronizavel.', 'roll20')}
+          ${tutorialFlowItem('03', 'Depois da sessao', 'Enviar ZIP Craig, acompanhar jobs e validar armazenamento.', 'upload')}
+          ${tutorialFlowItem('04', 'Timeline', 'Ouvir falas, conferir rolagens, Discord e eventos sincronizados.', 'timeline')}
+          ${tutorialFlowItem('05', 'Review e canon', 'Transformar evidencias em notas, canon, bastidores e publicacoes.', 'review')}
+          ${tutorialFlowItem('06', 'Operacao', 'Monitorar tokens, APIs, custo, fila, R2, Vercel e falhas.', 'ops')}
+        </div>
+      </section>
+
+      <div class="tutorial-grid">
+        ${tutorialCard({
+          label: 'Etapa 1',
+          title: 'Preparar a sessao',
+          tone: 'blue',
+          body: 'Use antes do jogo. A sessao precisa existir para receber audio, Roll20, Discord e decisoes.',
+          steps: [
+            'Crie ou selecione a sessao correta na aba Sessoes.',
+            'Confirme data de inicio, titulo e status.',
+            'Confira se DM/Owner tem permissao para acessar Ponte Roll20 e Operacao.',
+            'Combine quem vai rodar Craig e quem vai abrir o Roll20 com a extensao.'
+          ],
+          actions: [
+            "<button onclick=\"state.tab='sessions'; render();\">Abrir sessoes</button>",
+            "<button onclick=\"copyText('Antes da sessao: criar sessao, conferir DM/Owner, preparar Craig e Roll20.', 'Checklist copiado.')\">Copiar checklist</button>"
+          ]
+        })}
+
+        ${tutorialCard({
+          label: 'Etapa 2',
+          title: 'Ligar Craig',
+          tone: 'green',
+          body: 'Craig e a fonte primaria de audio. O ZIP vem depois, mas a organizacao comeca antes.',
+          steps: [
+            'No Discord, coloque Craig no canal de voz correto.',
+            'Use /join no Craig e confirme que ele entrou.',
+            'Se possivel, use /note para marcar cenas importantes.',
+            'Ao finalizar, use /stop e guarde o ZIP gerado.'
+          ],
+          actions: [
+            "<button onclick=\"copyText('/join', 'Comando Craig copiado.')\">Copiar /join</button>",
+            "<button onclick=\"copyText('/stop', 'Comando Craig copiado.')\">Copiar /stop</button>"
+          ]
+        })}
+
+        ${tutorialCard({
+          label: 'Etapa 3',
+          title: 'Ponte Roll20',
+          tone: 'violet',
+          body: 'Captura chat, dados e comandos do Roll20 para a timeline. O token e tecnico e fica so com DM/Owner.',
+          steps: [
+            'No Roll20, instale ou atualize o Mod/API Script.',
+            'No Chrome, carregue a extensao local em chrome://extensions.',
+            'Abra /roll20-bridge.html, escolha a sessao e copie token/sourceSessionId.',
+            'No Roll20 editor, clique Config no painel DnD Scribe.',
+            'Rode !dndscribe off antes de configurar e !dndscribe on depois.'
+          ],
+          actions: [
+            '<a class="button-link primary" href="/roll20-bridge.html">Abrir ponte</a>',
+            "<button onclick=\"copyText('!dndscribe off\\n!dndscribe status\\n!dndscribe on', 'Comandos Roll20 copiados.')\">Copiar comandos</button>"
+          ]
+        })}
+
+        ${tutorialCard({
+          label: 'Etapa 4',
+          title: 'Enviar ZIP Craig',
+          tone: 'gold',
+          body: 'Upload em producao envia o ZIP direto para R2 e cria jobs acompanhaveis pelo site.',
+          steps: [
+            'Abra a aba Upload e escolha Criar nova sessao pelo ZIP quando for uma gravacao nova.',
+            'Confira tamanho, aviso de armazenamento e sessao alvo.',
+            'Envie o ZIP e acompanhe cada etapa visualmente.',
+            'Se uma etapa falhar, use as acoes de continuar, tentar novamente, pausar ou arquivar.'
+          ],
+          actions: [
+            "<button onclick=\"state.tab='upload'; render();\">Abrir upload</button>",
+            "<button onclick=\"state.tab='ops'; render();\">Abrir jobs</button>"
+          ]
+        })}
+
+        ${tutorialCard({
+          label: 'Etapa 5',
+          title: 'Acompanhar timeline',
+          tone: 'blue',
+          body: 'A timeline e a mesa de evidencia: falas, audio, Roll20, Discord e marcadores precisam bater no tempo.',
+          steps: [
+            'Use filtros de Falas, Roll20 e Discord para reduzir ruido.',
+            'Clique nos blocos para abrir o inspetor e ouvir audio quando existir.',
+            'Copie marcadores para discutir com o DM.',
+            'Use sincronizar Discord para puxar mensagens do canal configurado.'
+          ],
+          actions: [
+            "<button onclick=\"state.tab='timeline'; render();\">Abrir timeline</button>",
+            "<button onclick=\"copyText('Timeline: filtrar, ouvir trecho, conferir Roll20/Discord e copiar marcador.', 'Resumo copiado.')\">Copiar resumo</button>"
+          ]
+        })}
+
+        ${tutorialCard({
+          label: 'Etapa 6',
+          title: 'Review, canon e publicacao',
+          tone: 'orange',
+          body: 'Nada vira canon automaticamente. O DM bate o martelo final, com evidencia visivel.',
+          steps: [
+            'Revise candidatos de canon, falas, bastidores e acoes.',
+            'Crie notas quando um evento Roll20 ou trecho de audio precisar virar registro.',
+            'Aplique decisoes apenas quando estiver confiante.',
+            'Confira publicacoes e use auditoria de fontes antes de compartilhar.'
+          ],
+          actions: [
+            "<button onclick=\"state.tab='review'; render();\">Abrir review</button>",
+            "<button onclick=\"state.tab='publications'; render();\">Abrir publicacoes</button>"
+          ]
+        })}
+
+        ${tutorialCard({
+          label: 'Etapa 7',
+          title: 'Monitorar producao',
+          tone: 'red',
+          body: 'Use Operacao para ver se APIs, tokens, jobs, custo e storage estao saudaveis.',
+          steps: [
+            'Verifique falhas criticas antes de gastar com transcricao.',
+            'Olhe tamanho do R2 e objetos por sessao.',
+            'Use acoes de retry/continue somente quando a tela indicar que e seguro.',
+            'Arquive sessoes ruins em vez de apagar evidencias importantes sem revisao.'
+          ],
+          actions: [
+            "<button onclick=\"state.tab='ops'; render();\">Abrir operacao</button>",
+            "<button onclick=\"copyText('Se falhar: olhar Operacao, identificar etapa, tentar novamente ou pausar antes de custo pago.', 'Procedimento copiado.')\">Copiar falha padrao</button>"
+          ]
+        })}
+
+        ${tutorialCard({
+          label: 'Emergencia',
+          title: 'Pacote tecnico apareceu no Roll20',
+          tone: 'red',
+          body: 'Se o GM ver um texto gigante DND_SCRIBE_EVENT, o Mod/API esta ativo mas a extensao nao capturou.',
+          steps: [
+            'Rode !dndscribe off imediatamente.',
+            'Recarregue a extensao no Chrome.',
+            'Recarregue a mesa do Roll20 em /editor.',
+            'Confirme o painel DnD Scribe no canto inferior direito.',
+            'Configure token/sourceSessionId e so depois rode !dndscribe on.'
+          ],
+          actions: [
+            "<button class=\"danger\" onclick=\"copyText('!dndscribe off', 'Comando de pausa copiado.')\">Copiar pausa</button>",
+            '<a class="button-link" href="/integrations/roll20/dnd-scribe-mod.js" target="_blank" rel="noreferrer">Script Mod</a>'
+          ]
+        })}
+      </div>
+    </section>
+  `;
+}
+
+function tutorialFlowItem(number, title, body, tab) {
+  return `
+    <button class="tutorial-flow-item" onclick="state.tab='${escapeHtml(tab)}'; render();">
+      <span>${escapeHtml(number)}</span>
+      <strong>${escapeHtml(title)}</strong>
+      <small>${escapeHtml(body)}</small>
+    </button>
+  `;
+}
+
+function tutorialCard(config) {
+  return `
+    <article class="tutorial-card">
+      <div class="tutorial-card-head">
+        <div>
+          <span class="label">${escapeHtml(config.label)}</span>
+          <h3>${escapeHtml(config.title)}</h3>
+        </div>
+        ${badge('guia', config.tone || '')}
+      </div>
+      <p>${escapeHtml(config.body)}</p>
+      <ol class="tutorial-steps">
+        ${config.steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}
+      </ol>
+      <div class="actions">${config.actions.join('')}</div>
+    </article>
   `;
 }
 

@@ -3,6 +3,9 @@
 Este guia descreve como ligar a ponte Roll20 em producao para capturar chat,
 rolagens, comandos e eventos da mesa no DnD Scribe.
 
+Para o fluxo completo da mesa, veja tambem
+`docs/project/190-dnd-scribe-operator-tutorials.md` e a aba `Tutoriais` no site.
+
 ## Objetivo
 
 A ponte tem duas camadas:

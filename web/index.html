@@ -59,6 +59,7 @@
           <h1 id="title">DnD Scribe</h1>
         </div>
         <div class="top-actions">
+          <button onclick="state.tab='tutorials'; render();">Tutoriais</button>
           <a class="button-link" href="/roll20.html">Roll20</a>
           <a class="button-link" href="/roll20-bridge.html">Ponte Roll20</a>
           <button id="downloadTemplateBtn">Template DM</button>
@@ -78,6 +79,7 @@
         <button id="tab-roll20" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="roll20">Roll20</button>
         <button id="tab-publications" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="publications">Publicacoes</button>
         <button id="tab-ops" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="ops">Operacao</button>
+        <button id="tab-tutorials" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="tutorials">Tutoriais</button>
       </nav>
 
       <section id="view" class="view" role="tabpanel" tabindex="0" aria-labelledby="tab-review"></section>
