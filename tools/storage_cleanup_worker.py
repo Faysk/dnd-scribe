@@ -271,7 +271,7 @@ def main() -> int:
     database_url = env.get("DATABASE_URL")
     if not database_url:
         raise SystemExit("DATABASE_URL is required")
-    limit = max(1, min(50, int(args.limit or 5)))
+    limit = max(1, min(200, int(args.limit or 5)))
     if args.execute and args.confirm != CONFIRM_TOKEN:
         raise SystemExit(f"--execute requires --confirm {CONFIRM_TOKEN}")
 
@@ -283,6 +283,8 @@ def main() -> int:
         candidates = select_candidates(conn, args.campaign, args.source_session_id, limit)
         if not args.execute:
             conn.rollback()
+        else:
+            conn.commit()
         output: dict[str, Any] = {
             "execute": args.execute,
             "campaign": args.campaign,
@@ -328,7 +330,7 @@ def main() -> int:
                             "error": result.get("error"),
                         }
                     )
-            conn.commit()
+                conn.commit()
             output["objects"] = [
                 {
                     "artifactId": str(item["artifact_id"]),

@@ -299,6 +299,9 @@ function printHuman(report) {
   console.log(`transcription=${report.transcription.objects} objects ${report.transcription.minutes}m estimate=$${report.transcription.estimatedCostUsd}`);
   console.log(`transcriptionStatus=${report.transcription.statuses.map(item => `${item.status}:${item.objects}/${item.minutes}m`).join(', ')}`);
   console.log(`transcript=${report.transcript.segments} segments ${report.transcript.nonEmptySegments} non_empty chars=${report.transcript.textChars} words=${report.transcript.textWords} tracks=${report.transcript.tracks}`);
+  console.log(`artifacts=${report.artifacts.map(item => `${item.artifact_type}:${item.lifecycle_status}:${item.count}/${item.bytes}b`).join(', ') || 'none'}`);
+  console.log(`cleanup=${report.cleanup.map(item => `${item.readiness_status}:${item.count}/${item.bytes}b`).join(', ') || 'none'}`);
+  console.log(`ledger=${report.ledger.map(item => `${item.operation_type}:${item.entries}/${item.minutes}m/$${item.cost_usd}`).join(', ') || 'none'}`);
   console.log(`roll20Events=${report.roll20Events ?? 'n/a'} discordInteractions24h=${report.discordInteractions24h ?? 'n/a'}`);
   for (const issue of report.evaluation.issues) console.log(`issue=${issue}`);
   for (const warning of report.evaluation.warnings) console.log(`warning=${warning}`);
