@@ -1,0 +1,98 @@
+name: Pipeline Supervisor Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_session_id:
+        description: "Craig source_session_id to supervise"
+        required: true
+        type: string
+      campaign:
+        description: "Campaign slug"
+        required: true
+        default: "yuhara-main"
+        type: string
+      site_url:
+        description: "Production site URL"
+        required: true
+        default: "https://dnd.faysk.dev"
+        type: string
+      max_iterations:
+        description: "Maximum supervisor calls while only zero-cost work is progressing"
+        required: true
+        default: "12"
+        type: string
+      max_runs_per_call:
+        description: "Maximum zero-cost jobs per supervisor call"
+        required: true
+        default: "1"
+        type: string
+      approve_autopilot_paid:
+        description: "Explicitly approve paid autopilot for this supervised run"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: pipeline-supervisor-${{ github.event.inputs.source_session_id }}
+  cancel-in-progress: false
+
+jobs:
+  supervise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET || secrets.DND_CRON_SECRET }}
+      DND_PUBLIC_SITE_URL: ${{ github.event.inputs.site_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate supervisor secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CRON_SECRET}" || (echo "CRON_SECRET or DND_CRON_SECRET secret is missing" && exit 1)
+
+      - name: Run supervisor loop
+        shell: bash
+        run: |
+          set -euo pipefail
+          max_iterations="${{ github.event.inputs.max_iterations }}"
+          max_runs_per_call="${{ github.event.inputs.max_runs_per_call }}"
+          approve_arg=()
+          if [ "${{ github.event.inputs.approve_autopilot_paid }}" = "true" ]; then
+            approve_arg+=(--approve-autopilot-paid)
+          fi
+          for iteration in $(seq 1 "${max_iterations}"); do
+            output_file="pipeline-supervisor-${iteration}.json"
+            echo "::group::Pipeline supervisor iteration ${iteration}"
+            python tools/trigger_pipeline_supervisor.py \
+              --source-session-id "${{ github.event.inputs.source_session_id }}" \
+              --campaign "${{ github.event.inputs.campaign }}" \
+              --site-url "${DND_PUBLIC_SITE_URL}" \
+              --max-runs "${max_runs_per_call}" \
+              "${approve_arg[@]}" | tee "${output_file}"
+            echo "::endgroup::"
+            decision="$(
+              python -c "import json,sys; data=json.load(open(sys.argv[1])); workflows=int(data.get('workflowsDispatched') or 0); processed=int(data.get('processed') or 0); print('wait_for_worker' if workflows > 0 else 'continue' if processed > 0 else 'idle')" "${output_file}"
+            )"
+            echo "supervisor_decision=${decision}"
+            if [ "${decision}" = "wait_for_worker" ]; then
+              echo "A downstream workflow was dispatched; it will call the supervisor again when it completes."
+              break
+            fi
+            if [ "${decision}" = "idle" ]; then
+              echo "No more progress is currently available."
+              break
+            fi
+            sleep 8
+          done
+
+      - name: Upload supervisor summaries
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipeline-supervisor-summaries
+          path: pipeline-supervisor-*.json
+          if-no-files-found: ignore

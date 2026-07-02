@@ -131,6 +131,19 @@ The supervisor is not a canon publisher. It only advances technical processing:
 
 DM approval and review decisions stay manual.
 
+## Self-Chaining
+
+New uploads dispatch `pipeline-supervisor-worker.yml` after the upload transaction commits.
+
+Each heavy worker also calls the supervisor after successful real work:
+
+- speech slicing after `write=true`;
+- transcription after `execute=true`;
+- review generation after `execute=true`;
+- storage cleanup after `execute=true`.
+
+This lets production continue without waiting for the daily cron. The daily cron stays as a recovery layer.
+
 ## Verification
 
 Local syntax:

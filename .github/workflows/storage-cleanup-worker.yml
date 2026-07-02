@@ -96,6 +96,19 @@ jobs:
           fi
           python tools/storage_cleanup_worker.py "${args[@]}" 2>&1 | tee storage-cleanup-worker.log
 
+      - name: Continue pipeline supervisor
+        if: success() && github.event.inputs.execute == 'true'
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET || secrets.DND_CRON_SECRET }}
+        shell: bash
+        run: |
+          python tools/trigger_pipeline_supervisor.py \
+            --source-session-id "${{ github.event.inputs.source_session_id }}" \
+            --campaign "${{ github.event.inputs.campaign }}" \
+            --site-url "https://dnd.faysk.dev" \
+            --max-runs 1
+
       - name: Upload worker log
         if: always()
         uses: actions/upload-artifact@v7

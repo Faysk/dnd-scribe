@@ -4021,6 +4021,33 @@ async function supervisorDispatchCleanup(db, campaign, sourceSessionId, config) 
   return { ok: true, processed: true, dispatched: true, action, sourceSessionId, dispatch };
 }
 
+async function dispatchPipelineSupervisorWorkflow(db, campaign, sourceSessionId, options = {}) {
+  const action = 'dispatch_pipeline_supervisor';
+  const cleanSource = cleanText(sourceSessionId || '', 180);
+  if (!cleanSource) return { ok: false, dispatched: false, action, reason: 'sourceSessionId ausente.' };
+  if (!workflowDispatchStatus().configured) return workflowDispatchUnavailableResult(action);
+  const inputs = {
+    source_session_id: cleanSource,
+    campaign,
+    site_url: process.env.DND_PUBLIC_SITE_URL || 'https://dnd.faysk.dev',
+    max_iterations: String(options.maxIterations || 12),
+    max_runs_per_call: String(options.maxRunsPerCall || 1),
+    approve_autopilot_paid: String(options.approveAutopilotPaid === true)
+  };
+  const dispatch = await dispatchGithubWorkflow('pipeline-supervisor-worker.yml', inputs);
+  await recordWorkflowDispatch(
+    db,
+    campaign,
+    cleanSource,
+    'pipeline_supervisor_workflow_dispatch',
+    inputs,
+    dispatch,
+    options.actorId || PIPELINE_SUPERVISOR_ACTOR
+  );
+  await notifyWorkflowDispatch(action, cleanSource, dispatch, options.actorId || PIPELINE_SUPERVISOR_ACTOR);
+  return { ok: true, dispatched: true, action, sourceSessionId: cleanSource, dispatch };
+}
+
 async function supervisorAutopilotStage(db, campaign, sourceSessionId, config) {
   if (!config.enabled) {
     return { ok: true, processed: false, skipped: true, reason: 'Autopilot desativado por configuracao.' };
@@ -5321,7 +5348,6 @@ where id = $1::uuid;`,
       })
     ]
   );
-
   return {
     ok: true,
     mode: 'prod_upload_confirmed',
@@ -5337,6 +5363,11 @@ where id = $1::uuid;`,
       sizeBytes: raw.sizeBytes || context.size_bytes || null
     },
     job: jobResponse(ingestJobResult.rows[0]),
+    supervisorDispatchRequest: {
+      sourceSessionId: context.source_session_id,
+      maxIterations: 12,
+      maxRunsPerCall: 1
+    },
     cost: {
       paidAiCostUsd: 0,
       note: 'Upload confirmado. O job cloud_ingest_craig esta pronto para execucao sem IA paga.'
@@ -7119,17 +7150,39 @@ async function handlePost(req, res, path) {
   if (path === '/api/uploads/craig-complete') {
     await requireCampaignAccess(req, campaign, ['owner', 'master']);
     const client = await getPool().connect();
+    let payload = null;
     try {
       await client.query('begin');
-      const payload = await completeCraigUpload(client, campaign, body);
+      payload = await completeCraigUpload(client, campaign, body);
       await client.query('commit');
-      return sendJson(res, 200, { ...payload, jobs: await listJobs(campaign), sessions: await listSessions(campaign, runId) });
     } catch (error) {
       await client.query('rollback').catch(() => {});
       throw error;
     } finally {
       client.release();
     }
+    let supervisorDispatch = null;
+    try {
+      supervisorDispatch = await dispatchPipelineSupervisorWorkflow(getPool(), campaign, payload.session.sourceSessionId, {
+        actorId: 'upload-confirmation',
+        maxIterations: payload.supervisorDispatchRequest?.maxIterations || 12,
+        maxRunsPerCall: payload.supervisorDispatchRequest?.maxRunsPerCall || 1
+      });
+    } catch (error) {
+      supervisorDispatch = {
+        ok: false,
+        dispatched: false,
+        action: 'dispatch_pipeline_supervisor',
+        reason: error.message || String(error)
+      };
+      console.warn('pipeline_supervisor_dispatch_after_upload_failed', supervisorDispatch.reason);
+    }
+    return sendJson(res, 200, {
+      ...payload,
+      supervisorDispatch,
+      jobs: await listJobs(campaign),
+      sessions: await listSessions(campaign, runId)
+    });
   }
   if (path === '/api/craig-map/update') {
     await requireCampaignAccess(req, campaign, ['owner', 'master']);
