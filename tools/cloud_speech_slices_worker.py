@@ -893,6 +893,24 @@ where ac.session_id = %s::uuid
     return int((row or {}).get("remaining") or 0)
 
 
+def compact_chunk_summary(chunk_result: dict[str, Any]) -> dict[str, Any]:
+    slices = chunk_result.get("slices") or []
+    source_ms = int(chunk_result.get("sourceDurationMs") or 0)
+    speech_ms = int(chunk_result.get("speechDurationMs") or 0)
+    return {
+        "chunkId": chunk_result.get("chunkId"),
+        "trackKey": chunk_result.get("trackKey"),
+        "chunkIndex": chunk_result.get("chunkIndex"),
+        "sourceDurationMs": source_ms,
+        "speechDurationMs": speech_ms,
+        "slices": len(slices),
+        "reductionPercent": chunk_result.get("reductionPercent"),
+        "rawSpeechIntervals": chunk_result.get("rawSpeechIntervals"),
+        "mergedSpeechIntervals": chunk_result.get("mergedSpeechIntervals"),
+        "error": chunk_result.get("error"),
+    }
+
+
 def finish_job(conn: psycopg.Connection, job: dict[str, Any], summary: dict[str, Any], failed: bool = False) -> None:
     status = "failed" if failed else ("retrying" if summary.get("remainingChunks", 0) else "succeeded")
     worker_status = "speech_slices_failed" if failed else ("speech_slices_partial" if status == "retrying" else "speech_slices_succeeded")
@@ -956,7 +974,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "speechAudioMinutes": 0,
             "slices": 0,
             "tracks": [],
-            "chunks": [],
+            "chunkSamples": [],
+            "chunkSampleLimit": 12,
+            "omittedChunkDetails": 0,
             "compactTracks": [],
         }
 
@@ -968,14 +988,38 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 download_object(s3, first["source_bucket"], first["source_path"], local_track)
                 if args.make_compact:
                     summary["compactTracks"].append(process_compact_track(conn, s3, job, track_chunks, local_track, tmp_dir, args))
+                track_summary: dict[str, Any] = {
+                    "trackKey": track_key,
+                    "chunks": 0,
+                    "slices": 0,
+                    "sourceAudioMinutes": 0,
+                    "speechAudioMinutes": 0,
+                }
                 for chunk in track_chunks:
                     chunk_result = process_chunk(conn, s3, job, chunk, local_track, tmp_dir, args)
-                    summary["chunks"].append(chunk_result)
+                    compact_chunk = compact_chunk_summary(chunk_result)
+                    if len(summary["chunkSamples"]) < int(summary["chunkSampleLimit"]):
+                        summary["chunkSamples"].append(compact_chunk)
+                    else:
+                        summary["omittedChunkDetails"] += 1
                     summary["processedChunks"] += 1
-                    summary["sourceAudioMinutes"] += round((chunk_result.get("sourceDurationMs") or 0) / 60000, 3)
-                    summary["speechAudioMinutes"] += round((chunk_result.get("speechDurationMs") or 0) / 60000, 3)
-                    summary["slices"] += len(chunk_result.get("slices") or [])
-                summary["tracks"].append({"trackKey": track_key, "chunks": len(track_chunks)})
+                    source_minutes = round((chunk_result.get("sourceDurationMs") or 0) / 60000, 3)
+                    speech_minutes = round((chunk_result.get("speechDurationMs") or 0) / 60000, 3)
+                    slice_count = len(chunk_result.get("slices") or [])
+                    summary["sourceAudioMinutes"] += source_minutes
+                    summary["speechAudioMinutes"] += speech_minutes
+                    summary["slices"] += slice_count
+                    track_summary["chunks"] += 1
+                    track_summary["sourceAudioMinutes"] += source_minutes
+                    track_summary["speechAudioMinutes"] += speech_minutes
+                    track_summary["slices"] += slice_count
+                track_summary["sourceAudioMinutes"] = round(float(track_summary["sourceAudioMinutes"]), 3)
+                track_summary["speechAudioMinutes"] = round(float(track_summary["speechAudioMinutes"]), 3)
+                track_summary["estimatedReductionPercent"] = (
+                    round((1 - (track_summary["speechAudioMinutes"] / track_summary["sourceAudioMinutes"])) * 100, 2)
+                    if track_summary["sourceAudioMinutes"] else 0
+                )
+                summary["tracks"].append(track_summary)
 
         summary["sourceAudioMinutes"] = round(float(summary["sourceAudioMinutes"]), 3)
         summary["speechAudioMinutes"] = round(float(summary["speechAudioMinutes"]), 3)
