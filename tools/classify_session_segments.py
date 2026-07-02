@@ -8,7 +8,6 @@ import datetime as dt
 import json
 import os
 import socket
-import subprocess
 import tempfile
 import time
 import urllib.error
@@ -16,6 +15,8 @@ import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
+
+from safe_psql import execute_sql_file
 
 
 NAMESPACE = uuid.UUID("0e5b216d-7b46-48dd-83dd-6e5b4f27a614")
@@ -662,7 +663,7 @@ def apply_db_update(database_url: str, sql: str) -> None:
         handle.write(sql)
         temp_sql = Path(handle.name)
     try:
-        subprocess.check_call(["psql", database_url, "-v", "ON_ERROR_STOP=1", "-f", str(temp_sql)])
+        execute_sql_file(database_url, temp_sql)
     finally:
         temp_sql.unlink(missing_ok=True)
 
@@ -689,7 +690,7 @@ def main() -> int:
     source_session_id = args.source_session_id or master["session_id"]
 
     values = load_env(args.env_file)
-    model = args.model or values.get("OPENAI_TEXT_MODEL") or "gpt-4o"
+    model = args.model or values.get("OPENAI_TEXT_MODEL") or "gpt-5.4-mini"
     source_run_id = args.source_run_id or f"{args.prompt_version}_{model.replace('/', '_').replace(':', '_')}"
     out_dir = args.session_dir / "ai" / source_run_id
     raw_path = out_dir / "openai_raw_response.json"

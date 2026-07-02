@@ -64,6 +64,15 @@ O painel de pipeline agora mostra:
 
 O site dispara o workflow via `GITHUB_WORKFLOW_TOKEN`, igual aos workers de speech, transcricao e cleanup.
 
+## Modelo padrao
+
+O default operacional atual e:
+
+- `model`: `gpt-5.4-mini`;
+- `source_run_id`: `classify_candidates_v2_gpt-5.4-mini`.
+
+Ao sobrescrever o modelo, mantenha tambem um `source_run_id` compativel para separar os resultados por versao/modelo.
+
 ## Resumibilidade
 
 O classificador agora aceita:
@@ -94,5 +103,6 @@ Simulacao read-only em producao para `craig-BIRq3nIWB4v9`:
 
 - Rodar primeiro com lote pequeno para observar qualidade dos candidatos.
 - Ajustar `batch_size` se a resposta vier pobre ou se o modelo reclamar de contexto.
+- Manter `model` e `source_run_id` juntos quando sobrescrever o modelo.
 - Depois de todos os segmentos classificados, revisar o pacote `review_only` antes de aprovar canon/publicacoes.
 - Se o custo de texto crescer, adicionar uma estimativa formal de tokens antes do botao de execucao.

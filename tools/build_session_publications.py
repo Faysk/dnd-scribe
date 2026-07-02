@@ -7,11 +7,12 @@ import argparse
 import datetime as dt
 import json
 import os
-import subprocess
 import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
+
+from safe_psql import execute_sql_file, run_json_query
 
 
 NAMESPACE = uuid.UUID("0e5b216d-7b46-48dd-83dd-6e5b4f27a614")
@@ -55,13 +56,7 @@ def sql_literal(value: str) -> str:
 
 
 def run_json(database_url: str, sql: str) -> Any:
-    output = subprocess.check_output(
-        ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-tA", "-c", sql],
-        text=True,
-        encoding="utf-8",
-    )
-    text = output.strip()
-    return json.loads(text) if text else None
+    return run_json_query(database_url, sql)
 
 
 def fetch_publication_context(database_url: str, campaign_slug: str, source_session_id: str, source_run_id: str) -> dict:
@@ -415,7 +410,7 @@ def apply_db_update(database_url: str, sql: str) -> None:
         handle.write(sql)
         temp_sql = Path(handle.name)
     try:
-        subprocess.check_call(["psql", database_url, "-v", "ON_ERROR_STOP=1", "-f", str(temp_sql)])
+        execute_sql_file(database_url, temp_sql)
     finally:
         temp_sql.unlink(missing_ok=True)
 
@@ -425,8 +420,8 @@ def main() -> int:
     parser.add_argument("--env-file", type=Path, default=Path(".env.local"))
     parser.add_argument("--campaign-slug", default="yuhara-main")
     parser.add_argument("--source-session-id", default="craig-AdabEqbzngmT-stage1-full")
-    parser.add_argument("--source-run-id", default="classify_candidates_v2_gpt-4o")
-    parser.add_argument("--out-dir", type=Path, default=Path("tmp/sessions/craig-AdabEqbzngmT-stage1-full/publications/classify_candidates_v2_gpt-4o"))
+    parser.add_argument("--source-run-id", default="classify_candidates_v2_gpt-5.4-mini")
+    parser.add_argument("--out-dir", type=Path, default=Path("tmp/sessions/craig-AdabEqbzngmT-stage1-full/publications/classify_candidates_v2_gpt-5.4-mini"))
     parser.add_argument("--update-db", action="store_true")
     args = parser.parse_args()
 

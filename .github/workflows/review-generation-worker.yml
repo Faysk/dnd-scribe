@@ -35,7 +35,7 @@ on:
       source_run_id:
         description: "AI source_run_id"
         required: false
-        default: "classify_candidates_v2_gpt-4o"
+        default: "classify_candidates_v2_gpt-5.4-mini"
         type: string
       skip_publications:
         description: "Do not build review publication packet after final batch"

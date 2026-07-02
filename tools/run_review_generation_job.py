@@ -13,13 +13,15 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from safe_psql import execute_sql, run_json_query, sanitize_error_text
+
 
 ROOT = Path(__file__).resolve().parents[1]
 NAMESPACE = uuid.UUID("0e5b216d-7b46-48dd-83dd-6e5b4f27a614")
 DEFAULT_CAMPAIGN = "yuhara-main"
-DEFAULT_MODEL = "gpt-4o"
+DEFAULT_MODEL = "gpt-5.4-mini"
 DEFAULT_PROMPT_VERSION = "classify_candidates_v2"
-DEFAULT_SOURCE_RUN_ID = "classify_candidates_v2_gpt-4o"
+DEFAULT_SOURCE_RUN_ID = "classify_candidates_v2_gpt-5.4-mini"
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -54,17 +56,11 @@ def sql_json(value: Any) -> str:
 
 
 def run_json(database_url: str, sql: str) -> Any:
-    output = subprocess.check_output(
-        ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-tA", "-c", sql],
-        text=True,
-        encoding="utf-8",
-    )
-    text = output.strip()
-    return json.loads(text) if text else None
+    return run_json_query(database_url, sql)
 
 
 def execute(database_url: str, sql: str) -> None:
-    subprocess.check_call(["psql", database_url, "-v", "ON_ERROR_STOP=1", "-q", "-c", sql])
+    execute_sql(database_url, sql)
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -81,7 +77,8 @@ def run_command(label: str, cmd: list[str]) -> str:
     if result.stderr.strip():
         print(result.stderr.strip(), file=sys.stderr)
     if result.returncode != 0:
-        raise RuntimeError(f"{label} failed with exit code {result.returncode}")
+        details = sanitize_error_text(result.stderr or result.stdout)
+        raise RuntimeError(f"{label} failed with exit code {result.returncode}: {details[:2000]}")
     return result.stdout
 
 
