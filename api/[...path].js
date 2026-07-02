@@ -2956,6 +2956,7 @@ with target_session as (
 ), speech_stats as (
   select
     count(*)::int objects,
+    count(distinct source_chunk_id)::int covered_chunks,
     count(*) filter (where transcription_status = 'pending')::int pending,
     count(*) filter (where transcription_status = 'transcribed')::int transcribed,
     count(*) filter (where transcription_status = 'cached')::int cached,
@@ -3043,11 +3044,44 @@ select jsonb_build_object(
   return data;
 }
 
+function deriveSpeechProgress(metrics, speechJob = null) {
+  const totalChunks = Number(metrics.chunks?.objects || 0);
+  const coveredChunks = Number(metrics.speechSlices?.covered_chunks || 0);
+  const remainingChunks = Math.max(0, totalChunks - coveredChunks);
+  const objects = Number(metrics.speechSlices?.objects || 0);
+  const minutes = Number(metrics.speechSlices?.minutes || 0);
+  const percent = totalChunks > 0 ? Math.max(0, Math.min(100, Math.round((coveredChunks / totalChunks) * 100))) : 0;
+  const workerStatus = speechJob?.output?.workerStatus || '';
+  const summary = speechJob?.output?.summary || {};
+  const lastBatch = summary && typeof summary === 'object'
+    ? {
+        processedChunks: Number(summary.processedChunks || 0),
+        remainingChunks: Number(summary.remainingChunks || 0),
+        sourceAudioMinutes: Number(summary.sourceAudioMinutes || 0),
+        speechAudioMinutes: Number(summary.speechAudioMinutes || 0),
+        estimatedReductionPercent: Number(summary.estimatedReductionPercent || 0)
+      }
+    : null;
+  return {
+    totalChunks,
+    coveredChunks,
+    remainingChunks,
+    percent,
+    objects,
+    minutes,
+    workerStatus,
+    lastBatch,
+    complete: totalChunks > 0 && coveredChunks >= totalChunks
+  };
+}
+
 function derivePipelineControl(campaign, sourceSessionId, jobs, metrics) {
   const failed = jobs.filter(job => job.status === 'failed');
   const running = jobs.filter(job => job.status === 'running');
   const zeroCostNext = jobs.find(job => PIPELINE_RUNNABLE_JOB_TYPES.includes(job.type) && ['queued', 'retrying'].includes(job.status));
   const speechJob = jobs.find(job => job.type === 'cloud_detect_speech_slices' && ['queued', 'retrying', 'running', 'failed'].includes(job.status));
+  const runningSpeechJob = jobs.find(job => job.type === 'cloud_detect_speech_slices' && job.status === 'running');
+  const speechProgress = deriveSpeechProgress(metrics, speechJob);
   const pendingTranscription = Number(metrics.workUnits?.total_candidates || 0);
   const reviewPending = Number(metrics.segments?.pending_review || 0);
   const reviewSegments = Number(metrics.segments?.non_empty || metrics.segments?.segments || 0);
@@ -3066,6 +3100,11 @@ function derivePipelineControl(campaign, sourceSessionId, jobs, metrics) {
     tone = 'red';
     title = 'Falha exige acao';
     detail = 'Reenfileire ou investigue o job falho antes de continuar.';
+  } else if (runningSpeechJob) {
+    stage = 'speech_running';
+    tone = 'orange';
+    title = `Worker de fala em execucao: ${speechProgress.coveredChunks}/${speechProgress.totalChunks || '?'} chunks`;
+    detail = 'Aguarde o GitHub Actions terminar; a contagem sobe conforme slices entram no banco.';
   } else if (running.length) {
     stage = 'running';
     tone = 'orange';
@@ -3079,8 +3118,12 @@ function derivePipelineControl(campaign, sourceSessionId, jobs, metrics) {
   } else if (speechJob && ['queued', 'retrying'].includes(speechJob.status)) {
     stage = 'speech_ready';
     tone = 'blue';
-    title = 'Detectar fala e gerar Opus';
-    detail = 'Dispara worker GitHub Actions para slices e audio compacto.';
+    title = speechProgress.coveredChunks > 0
+      ? `Speech parcial: ${speechProgress.coveredChunks}/${speechProgress.totalChunks || '?'} chunks`
+      : 'Detectar fala e gerar Opus';
+    detail = speechProgress.coveredChunks > 0
+      ? `${speechProgress.remainingChunks} chunk(s) restantes; continue o worker em lote sem custo OpenAI.`
+      : 'Dispara worker GitHub Actions para slices e audio compacto.';
   } else if (speechJob?.status === 'failed') {
     stage = 'speech_failed';
     tone = 'red';
@@ -3114,8 +3157,9 @@ function derivePipelineControl(campaign, sourceSessionId, jobs, metrics) {
     actions.push({ id: 'continue_zero_cost', label: 'Continuar zero-cost', action: 'continue_zero_cost', dryRun: false, tone: 'primary' });
   }
   if (speechJob && ['queued', 'retrying', 'failed'].includes(speechJob.status)) {
-    actions.push({ id: 'dispatch_speech_dry', label: 'Simular fala', action: 'dispatch_speech_slices', write: false, tone: '' });
-    actions.push({ id: 'dispatch_speech', label: 'Rodar fala', action: 'dispatch_speech_slices', write: true, tone: 'primary' });
+    const speechLabel = speechProgress.coveredChunks > 0 && speechProgress.remainingChunks > 0 ? 'Continuar fala' : 'Rodar fala';
+    actions.push({ id: 'dispatch_speech_dry', label: `Simular ${speechLabel.toLowerCase()}`, action: 'dispatch_speech_slices', write: false, tone: '' });
+    actions.push({ id: 'dispatch_speech', label: speechLabel, action: 'dispatch_speech_slices', write: true, tone: 'primary' });
   }
   if (pendingTranscription > 0) {
     actions.push({
@@ -3178,6 +3222,7 @@ function derivePipelineControl(campaign, sourceSessionId, jobs, metrics) {
     reviewRunId: DEFAULT_RUN,
     transcriptionCostUsdPerMinute: DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE,
     estimatedBatchCostUsd: estimatedCostUsd,
+    speechProgress,
     jobs,
     metrics,
     actions

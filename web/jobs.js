@@ -403,6 +403,7 @@
     const ledger = metrics.ledger || {};
     const segments = metrics.segments || {};
     const review = metrics.reviewGeneration || {};
+    const speech = control.speechProgress || {};
     const github = control.workflowDispatch || {};
     const actions = control.actions || [];
     const reviewCandidateTotal = Number(review.canon_candidates || 0) + Number(review.quote_candidates || 0) + Number(review.outtake_candidates || 0);
@@ -421,6 +422,8 @@
           </div>
         </div>
         <div class="pipeline-metrics">
+          ${pipelineMetric('fala', `${Number(speech.coveredChunks || 0)}/${Number(speech.totalChunks || 0)} chunks`, Number(speech.remainingChunks || 0) ? 'gold' : Number(speech.coveredChunks || 0) ? 'green' : '')}
+          ${pipelineMetric('slices', `${Number(speech.objects || 0)} un`, Number(speech.objects || 0) ? 'blue' : '')}
           ${pipelineMetric('transcrever', `${Number(work.total_candidates || 0)} un`, Number(work.total_candidates || 0) ? 'gold' : 'green')}
           ${pipelineMetric('lote atual', `${Number(limited.billable_minutes || 0).toFixed(3)} min`, Number(limited.billable_minutes || 0) ? 'blue' : 'green')}
           ${pipelineMetric('custo lote', `$${Number(control.estimatedBatchCostUsd || 0).toFixed(6)}`, Number(control.estimatedBatchCostUsd || 0) ? 'gold' : 'green')}
@@ -493,10 +496,31 @@
 
   function renderPipelineControlDetail(control) {
     const byTrack = control.metrics?.limitedByTrack || [];
-    if (!byTrack.length && !control.workflowDispatch?.missingEnv) return '';
+    const speech = control.speechProgress || {};
+    const hasSpeech = Number(speech.totalChunks || 0) > 0 || Number(speech.objects || 0) > 0;
+    if (!byTrack.length && !control.workflowDispatch?.missingEnv && !hasSpeech) return '';
     return `
       <div class="autopilot-detail">
         ${control.workflowDispatch?.missingEnv ? `<p>Para disparar workers pelo site, configure ${esc(control.workflowDispatch.missingEnv)} na Vercel. Enquanto isso, o painel continua monitorando e as etapas locais zero-cost seguem funcionando.</p>` : ''}
+        ${hasSpeech ? `
+          <div class="speech-progress">
+            <div class="track-progress-head">
+              <strong>Speech slicing</strong>
+              <div class="badges">
+                ${chip(`${Number(speech.percent || 0)}%`, Number(speech.remainingChunks || 0) ? 'gold' : 'green')}
+                ${chip(`${Number(speech.coveredChunks || 0)}/${Number(speech.totalChunks || 0)} chunks`, 'blue')}
+                ${chip(`${Number(speech.objects || 0)} slices`, 'blue')}
+                ${speech.workerStatus ? chip(speech.workerStatus, 'gold') : ''}
+              </div>
+            </div>
+            <div class="track-progress-bar" aria-label="Progresso do speech slicing">
+              <span style="width:${Math.max(0, Math.min(100, Number(speech.percent || 0)))}%"></span>
+            </div>
+            <small>${Number(speech.remainingChunks || 0) > 0
+              ? `${Number(speech.remainingChunks || 0)} chunk(s) restantes. Isso e parcial esperado, nao falha.`
+              : 'Todos os chunks elegiveis ja tem slices de fala.'}</small>
+          </div>
+        ` : ''}
         ${byTrack.length ? `
           <div class="badges">
             ${byTrack.map(item => chip(`${item.track_key || 'track'} ${Number(item.minutes || 0).toFixed(2)}m`, 'blue')).join('')}

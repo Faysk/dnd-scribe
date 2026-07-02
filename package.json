@@ -7,12 +7,13 @@
     "build": "node scripts/sync-public.js",
     "check": "npm run check:web && npm run check:api && npm run check:workers && npm run check:roll20 && npm run check:monitoring",
     "check:web": "node --check web/app.js && node --check web/jobs.js && node --check web/storage-inventory.js && node --check web/costs.js && node --check web/ui-bridge.js && node --check web/auth-fetch.js && node --check web/access.js && node --check web/notes.js && node --check web/roll20.js && node --check web/roll20-bridge.js && node --check web/roll20-bridge-page.js",
-    "check:api": "node --check lib/discord.js && node --check lib/discord-interactions.js && node --check lib/pipeline-recovery.js && node --check lib/roll20-commands.js && node --check lib/monitoring.js && node --check lib/job-steps.js && node --check api/[...path].js && node --check api/ai-cost.js && node --check scripts/register-discord-commands.js && node --check scripts/smoke-production-routes.js",
+    "check:api": "node --check lib/discord.js && node --check lib/discord-interactions.js && node --check lib/pipeline-recovery.js && node --check lib/roll20-commands.js && node --check lib/monitoring.js && node --check lib/job-steps.js && node --check api/[...path].js && node --check api/ai-cost.js && node --check scripts/register-discord-commands.js && node --check scripts/smoke-production-routes.js && node --check tools/audit_production_session.js",
     "check:workers": "node --check api/jobs/run-cloud-ingest.js && node --check api/jobs/run-cloud-extract.js",
     "check:monitoring": "node --check lib/monitoring.js && node --check web/monitoring.js && node --check web/storage-inventory.js",
     "check:roll20": "node --check lib/roll20-commands.js && node --check tools/roll20_chat_to_events.js && node --check web/roll20.js",
     "discord:register": "node scripts/register-discord-commands.js",
     "sync:public": "node scripts/sync-public.js",
+    "audit:session": "node tools/audit_production_session.js",
     "smoke:routes": "node scripts/smoke-production-routes.js"
   },
   "dependencies": {
