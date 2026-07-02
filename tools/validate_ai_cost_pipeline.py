@@ -191,7 +191,7 @@ def validate_policy(
             "Custos unitarios obrigatorios para esta execucao ainda estao vazios.",
             keys=required_missing_prices,
         )
-    if missing_prices:
+    if missing_prices and (require_prices or not required_cost_keys):
         level = "error" if require_prices else "warning"
         add_issue(
             issues,

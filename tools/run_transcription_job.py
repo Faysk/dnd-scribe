@@ -79,7 +79,13 @@ def run_scalar(database_url: str, sql: str) -> str | None:
 
 
 def execute(database_url: str, sql: str) -> None:
-    subprocess.check_call(["psql", database_url, "-v", "ON_ERROR_STOP=1", "-q", "-c", sql])
+    subprocess.run(
+        ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-q"],
+        input=sql,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
 
 
 def unit_cost(policy: dict[str, Any], key: str) -> float | None:
@@ -701,6 +707,49 @@ def transcribe_unit(
     return {**base, "action": "failed", "error": message}
 
 
+def summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+    actions: dict[str, int] = {}
+    tracks: dict[str, int] = {}
+    failed: list[dict[str, Any]] = []
+    text_chars = 0
+    estimated_cost = 0.0
+
+    for result in results:
+        action = str(result.get("action") or "unknown")
+        track = str(result.get("trackKey") or "unknown")
+        actions[action] = actions.get(action, 0) + 1
+        tracks[track] = tracks.get(track, 0) + 1
+        text_chars += int(result.get("textChars") or 0)
+        estimated_cost += float(result.get("estimatedCostUsd") or 0)
+        if action in {"failed", "missing_file", "too_large"}:
+            failed.append(
+                {
+                    "action": action,
+                    "workUnitId": result.get("workUnitId"),
+                    "trackKey": result.get("trackKey"),
+                    "unitIndex": result.get("unitIndex"),
+                    "error": result.get("error"),
+                }
+            )
+
+    return {
+        "actions": actions,
+        "tracks": tracks,
+        "failed": failed[:25],
+        "failedTruncated": len(failed) > 25,
+        "textChars": text_chars,
+        "estimatedCostUsd": round(estimated_cost, 6),
+    }
+
+
+def compact_job_output(output: dict[str, Any]) -> dict[str, Any]:
+    results = output.get("results") or []
+    compact = dict(output)
+    compact["resultSummary"] = summarize_results(results)
+    compact["results"] = []
+    return compact
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source_session_id")
@@ -811,7 +860,13 @@ def main() -> int:
         "results": results,
     }
     if args.execute:
-        finish_job(database_url, job_id, "failed" if failed else "succeeded", output, "one_or_more_units_failed" if failed else None)
+        finish_job(
+            database_url,
+            job_id,
+            "failed" if failed else "succeeded",
+            compact_job_output(output),
+            "one_or_more_units_failed" if failed else None,
+        )
 
     if args.json:
         print(json.dumps(output, ensure_ascii=False, indent=2))

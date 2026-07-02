@@ -84,6 +84,9 @@ function evaluate(report) {
   if (transcription.objects > 0) {
     warnings.push(`paid transcription pending: ${transcription.objects} objects, ${transcription.minutes} minutes`);
   }
+  if (transcription.completedObjects > 0 && report.transcript?.segments === 0) {
+    issues.push('transcription work units completed but no transcript segments were materialized');
+  }
   if (report.roll20Events === 0) warnings.push('Roll20 events missing for this session');
   if (report.discordInteractions24h === 0) warnings.push('Discord interactions not observed in the last 24h');
   return {
@@ -164,6 +167,28 @@ where session_id=$1
   and coalesce(transcription_status, 'pending') not in ('skipped_silence', 'transcribed', 'cached')`,
     [session.id]
   );
+  const transcriptionStatuses = await db.query(
+    `
+select coalesce(transcription_status, 'pending') status,
+       count(*)::int objects,
+       coalesce(round(sum(duration_ms)::numeric / 60000, 3), 0)::text minutes
+from audio_transcription_work_units
+where session_id=$1
+group by coalesce(transcription_status, 'pending')
+order by status`,
+    [session.id]
+  );
+  const transcript = await db.query(
+    `
+select count(*)::int segments,
+       count(*) filter (where coalesce(is_empty, false) is false)::int non_empty_segments,
+       coalesce(sum(coalesce(text_chars, length(text))), 0)::int text_chars,
+       coalesce(sum(coalesce(text_words, cardinality(regexp_split_to_array(trim(text), '\\s+')))), 0)::int text_words,
+       count(distinct track_key)::int tracks
+from transcript_segments
+where session_id=$1`,
+    [session.id]
+  );
   const artifacts = await db.query(
     `
 select artifact_type, lifecycle_status, count(*)::int count, coalesce(sum(size_bytes), 0)::bigint::text bytes
@@ -202,6 +227,11 @@ order by operation_type`,
   const source = chunks.rows[0] || {};
   const speechRow = speech.rows[0] || {};
   const transcriptionRow = transcription.rows[0] || {};
+  const transcriptionStatusRows = transcriptionStatuses.rows || [];
+  const completedTranscription = transcriptionStatusRows
+    .filter(row => ['transcribed', 'cached'].includes(row.status))
+    .reduce((sum, row) => sum + asInt(row.objects), 0);
+  const transcriptRow = transcript.rows[0] || {};
   const report = {
     campaign,
     sourceSessionId,
@@ -235,7 +265,20 @@ order by operation_type`,
       objects: asInt(transcriptionRow.objects),
       minutes: asFloat(transcriptionRow.minutes),
       configuredCostUsdPerMinute: costPerMinute,
-      estimatedCostUsd: Number((asFloat(transcriptionRow.minutes) * costPerMinute).toFixed(6))
+      estimatedCostUsd: Number((asFloat(transcriptionRow.minutes) * costPerMinute).toFixed(6)),
+      completedObjects: completedTranscription,
+      statuses: transcriptionStatusRows.map(row => ({
+        status: row.status,
+        objects: asInt(row.objects),
+        minutes: asFloat(row.minutes)
+      }))
+    },
+    transcript: {
+      segments: asInt(transcriptRow.segments),
+      nonEmptySegments: asInt(transcriptRow.non_empty_segments),
+      textChars: asInt(transcriptRow.text_chars),
+      textWords: asInt(transcriptRow.text_words),
+      tracks: asInt(transcriptRow.tracks)
     },
     artifacts: artifacts.rows,
     cleanup: cleanup.rows,
@@ -254,6 +297,8 @@ function printHuman(report) {
   console.log(`audio=${report.sourceAudio.minutes}m/${report.sourceAudio.chunks} chunks`);
   console.log(`speech=${report.speech.minutes}m ${report.speech.coveredChunks}/${report.speech.totalChunks} chunks ${report.speech.slices} slices reduction=${report.speech.reductionPercent}%`);
   console.log(`transcription=${report.transcription.objects} objects ${report.transcription.minutes}m estimate=$${report.transcription.estimatedCostUsd}`);
+  console.log(`transcriptionStatus=${report.transcription.statuses.map(item => `${item.status}:${item.objects}/${item.minutes}m`).join(', ')}`);
+  console.log(`transcript=${report.transcript.segments} segments ${report.transcript.nonEmptySegments} non_empty chars=${report.transcript.textChars} words=${report.transcript.textWords} tracks=${report.transcript.tracks}`);
   console.log(`roll20Events=${report.roll20Events ?? 'n/a'} discordInteractions24h=${report.discordInteractions24h ?? 'n/a'}`);
   for (const issue of report.evaluation.issues) console.log(`issue=${issue}`);
   for (const warning of report.evaluation.warnings) console.log(`warning=${warning}`);
