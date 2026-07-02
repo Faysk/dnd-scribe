@@ -9,6 +9,7 @@ tmp/
 dist/
 build/
 public/
+integrations/roll20/chrome-extension.zip
 coverage/
 node_modules/
 .vercel/
