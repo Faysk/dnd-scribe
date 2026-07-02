@@ -59,3 +59,17 @@ Resultado da simulacao:
 - Adicionar estimativa de custo de texto no painel antes do botao `RUN_REVIEW_AI`.
 - Compactar artifact de review caso a lista de resultados cresca demais.
 - Mostrar progresso de classificacao por lote na tela de pipeline.
+
+## Incidente no primeiro run amplo
+
+Um run amplo com `batch_size=100` falhou no primeiro lote antes de escrever no banco:
+
+- workflow: `review-generation-worker`;
+- run: `28560881083`;
+- erro: conexao encerrada pela API antes de resposta (`RemoteDisconnected`);
+- impacto: nenhum lote novo persistido, os `40` segmentos do lote pequeno anterior continuaram intactos.
+
+Mitigacao aplicada:
+
+- o classificador agora trata `RemoteDisconnected`, `HTTPException` e `ConnectionError` como erros transitorios retentaveis;
+- a retomada recomendada passa a usar lotes menores (`60` ou `80`) quando o texto selecionado estiver alto.

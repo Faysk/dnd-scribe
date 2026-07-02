@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import http.client
 import json
 import os
 import socket
@@ -306,7 +307,14 @@ def post_chat_completion_with_retries(api_key: str, payload: dict) -> dict:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError:
             raise
-        except (TimeoutError, socket.timeout, urllib.error.URLError) as exc:
+        except (
+            TimeoutError,
+            socket.timeout,
+            urllib.error.URLError,
+            http.client.RemoteDisconnected,
+            http.client.HTTPException,
+            ConnectionError,
+        ) as exc:
             last_error = exc
             if attempt >= attempts:
                 break
