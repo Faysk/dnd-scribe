@@ -65,6 +65,7 @@ Default limits:
 - `transcriptionLimit=50`
 - `transcriptionApprovalUsd=1`
 - `transcriptionSessionCapUsd=2`
+- `requirePaidApproval=true`
 - `reviewBatchSize=80`
 - `reviewMaxBatches=1`
 - `cleanupLimit=50`
@@ -80,6 +81,8 @@ Useful safety toggles:
 
 ```text
 paidEnabled=false
+requirePaidApproval=false
+approveAutopilotPaid=true
 speechEnabled=false
 reviewEnabled=false
 cleanupEnabled=false
@@ -89,6 +92,7 @@ cleanupEnabled=false
 
 - Dry-run never calls OpenAI, dispatches GitHub Actions or deletes R2.
 - Real transcription dispatch is capped by batch and session cost.
+- Paid workflow dispatch requires upload-level approval unless a privileged cron call explicitly overrides it.
 - Cleanup dispatch only sends `confirm=DELETE_READY_R2` for objects already marked delete-ready.
 - A workflow is not dispatched again if the same workflow for that session is active or was dispatched recently.
 - No archived sessions.

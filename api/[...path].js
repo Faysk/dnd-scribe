@@ -2908,7 +2908,7 @@ async function pipelineControlMetrics(db, campaign, sourceSessionId, limit = DEF
   const result = await db.query(
     `
 with target_session as (
-  select s.id, s.campaign_id, s.source_session_id, s.title, s.status, s.started_at, s.ended_at, c.slug campaign_slug
+  select s.id, s.campaign_id, s.source_session_id, s.title, s.status, s.started_at, s.ended_at, s.metadata, c.slug campaign_slug
   from sessions s
   join campaigns c on c.id = s.campaign_id
   where c.slug = $1
@@ -3676,6 +3676,13 @@ function supervisorConfig(query, dryRun) {
     dryRun,
     enabled: booleanOption(query, ['enabled', 'autopilot'], ['PIPELINE_AUTOPILOT_ENABLED', 'DND_PIPELINE_AUTOPILOT_ENABLED'], true),
     paidEnabled: booleanOption(query, ['paidEnabled', 'paid'], ['PIPELINE_AUTOPILOT_PAID_ENABLED', 'DND_PIPELINE_AUTOPILOT_PAID_ENABLED'], true),
+    requirePaidApproval: booleanOption(
+      query,
+      ['requirePaidApproval'],
+      ['PIPELINE_AUTOPILOT_REQUIRE_PAID_APPROVAL', 'DND_PIPELINE_AUTOPILOT_REQUIRE_PAID_APPROVAL'],
+      true
+    ),
+    paidApprovalOverride: booleanOption(query, ['approveAutopilotPaid', 'approvePaidAutopilot', 'paidApproved'], [], false),
     speechEnabled: booleanOption(query, ['speechEnabled'], ['PIPELINE_AUTOPILOT_SPEECH_ENABLED', 'DND_PIPELINE_AUTOPILOT_SPEECH_ENABLED'], true),
     reviewEnabled: booleanOption(query, ['reviewEnabled'], ['PIPELINE_AUTOPILOT_REVIEW_ENABLED', 'DND_PIPELINE_AUTOPILOT_REVIEW_ENABLED'], true),
     cleanupEnabled: booleanOption(query, ['cleanupEnabled'], ['PIPELINE_AUTOPILOT_CLEANUP_ENABLED', 'DND_PIPELINE_AUTOPILOT_CLEANUP_ENABLED'], true),
@@ -3850,6 +3857,30 @@ function workflowDispatchUnavailableResult(action) {
   };
 }
 
+function metadataFlag(value) {
+  if (value === true) return true;
+  if (typeof value === 'string') return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+  return false;
+}
+
+function supervisorPaidApproval(control, config) {
+  if (!config.requirePaidApproval) return { approved: true, source: 'approval_requirement_disabled' };
+  if (config.paidApprovalOverride) return { approved: true, source: 'request_override' };
+  const metadata = control.metrics?.session?.metadata || {};
+  const lastUpload = metadata.last_craig_upload || {};
+  if (metadataFlag(metadata.pipeline_autopilot_approved)) {
+    return { approved: true, source: 'session_metadata' };
+  }
+  if (metadataFlag(lastUpload.pipelineAutopilotApproved) || metadataFlag(lastUpload.pipeline_autopilot_approved)) {
+    return { approved: true, source: 'last_craig_upload_metadata' };
+  }
+  return {
+    approved: false,
+    source: null,
+    reason: 'Sessao sem aprovacao de autopilot pago registrada no upload; use controle manual ou approveAutopilotPaid=true para uma execucao controlada.'
+  };
+}
+
 async function supervisorDispatchSpeech(db, campaign, sourceSessionId, config) {
   const action = 'dispatch_speech_slices';
   if (!config.speechEnabled) return { ok: true, processed: false, skipped: true, action, reason: 'Speech autopilot desativado.' };
@@ -3875,6 +3906,8 @@ async function supervisorDispatchSpeech(db, campaign, sourceSessionId, config) {
 async function supervisorDispatchTranscription(db, campaign, sourceSessionId, control, config) {
   const action = 'dispatch_transcription';
   if (!config.paidEnabled) return { ok: true, processed: false, skipped: true, action, reason: 'Autopilot pago desativado.' };
+  const paidApproval = supervisorPaidApproval(control, config);
+  if (!paidApproval.approved) return { ok: true, processed: false, skipped: true, action, reason: paidApproval.reason, paidApproval };
   if (!workflowDispatchStatus().configured) return workflowDispatchUnavailableResult(action);
   const active = await activeWorkflowForSession(db, campaign, sourceSessionId, PIPELINE_SUPERVISOR_WORKFLOWS.transcription, config);
   if (active.active) return { ok: true, processed: false, skipped: true, action, reason: 'Transcription worker ja esta ativo ou foi disparado recentemente.', activeWorkflow: active.run };
@@ -3943,9 +3976,11 @@ async function supervisorDispatchTranscription(db, campaign, sourceSessionId, co
   };
 }
 
-async function supervisorDispatchReview(db, campaign, sourceSessionId, config) {
+async function supervisorDispatchReview(db, campaign, sourceSessionId, control, config) {
   const action = 'dispatch_review_generation';
   if (!config.paidEnabled || !config.reviewEnabled) return { ok: true, processed: false, skipped: true, action, reason: 'Review IA autopilot desativado.' };
+  const paidApproval = supervisorPaidApproval(control, config);
+  if (!paidApproval.approved) return { ok: true, processed: false, skipped: true, action, reason: paidApproval.reason, paidApproval };
   if (!workflowDispatchStatus().configured) return workflowDispatchUnavailableResult(action);
   const active = await activeWorkflowForSession(db, campaign, sourceSessionId, PIPELINE_SUPERVISOR_WORKFLOWS.review, config);
   if (active.active) return { ok: true, processed: false, skipped: true, action, reason: 'Review worker ja esta ativo ou foi disparado recentemente.', activeWorkflow: active.run };
@@ -4023,7 +4058,7 @@ async function supervisorAutopilotStage(db, campaign, sourceSessionId, config) {
     return { ...base, ...(await supervisorDispatchTranscription(db, campaign, sourceSessionId, control, config)) };
   }
   if (control.stage === 'review_generation_ready' || control.stage === 'review_publication_ready') {
-    return { ...base, ...(await supervisorDispatchReview(db, campaign, sourceSessionId, config)) };
+    return { ...base, ...(await supervisorDispatchReview(db, campaign, sourceSessionId, control, config)) };
   }
   if (control.stage === 'cleanup_ready') {
     return { ...base, ...(await supervisorDispatchCleanup(db, campaign, sourceSessionId, config)) };
@@ -4113,6 +4148,8 @@ async function runPipelineSupervisor(req, campaign, query) {
     policy: {
       enabled: config.enabled,
       paidEnabled: config.paidEnabled,
+      requirePaidApproval: config.requirePaidApproval,
+      paidApprovalOverride: config.paidApprovalOverride,
       speechEnabled: config.speechEnabled,
       reviewEnabled: config.reviewEnabled,
       cleanupEnabled: config.cleanupEnabled,
@@ -5200,6 +5237,7 @@ from (
     db
   );
   if (!context) throw httpError(404, 'Upload Craig nao encontrado para confirmar.');
+  const confirmedAt = new Date().toISOString();
 
   await db.query(
     `
@@ -5210,9 +5248,11 @@ where id = $1::uuid;`,
       recordingFileId,
       JSON.stringify({
         upload_state: 'uploaded',
-        uploaded_at: new Date().toISOString(),
+        uploaded_at: confirmedAt,
         confirmed_by: 'api/vercel',
-        confirmed_size_bytes: raw.sizeBytes || context.size_bytes || null
+        confirmed_size_bytes: raw.sizeBytes || context.size_bytes || null,
+        pipeline_autopilot_approved: true,
+        pipeline_autopilot_approved_at: confirmedAt
       })
     ]
   );
@@ -5228,7 +5268,8 @@ where id = $1::uuid and session_id = $2::uuid;`,
       context.session_id,
       JSON.stringify({
         uploadStatus: 'uploaded',
-        completedAt: new Date().toISOString(),
+        completedAt: confirmedAt,
+        pipelineAutopilotApproved: true,
         paidAiCostUsd: 0
       })
     ]
@@ -5265,11 +5306,17 @@ where id = $1::uuid;`,
     [
       context.session_id,
       JSON.stringify({
+        pipeline_autopilot_approved: true,
+        pipeline_autopilot_approved_at: confirmedAt,
+        pipeline_autopilot_approval_source: 'craig_upload_confirmation',
+        pipeline_autopilot_approved_paid_stages: ['transcription', 'review_generation'],
         last_craig_upload: {
           recordingFileId,
           storageBucket: context.storage_bucket,
           storagePath: context.storage_path,
-          confirmedAt: new Date().toISOString()
+          confirmedAt,
+          pipelineAutopilotApproved: true,
+          approvedPaidStages: ['transcription', 'review_generation']
         }
       })
     ]

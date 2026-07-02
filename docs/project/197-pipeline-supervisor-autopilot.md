@@ -49,6 +49,7 @@ This keeps production autonomous without stacking multiple expensive or destruct
 - Running jobs stop automation for that session.
 - Speech failed state stops automation instead of retrying forever.
 - A workflow is not dispatched if the same workflow for that session is active or recently dispatched.
+- Paid autopilot requires upload-level approval in `sessions.metadata.pipeline_autopilot_approved`.
 - Transcription uses both a per-batch cap and a per-session cap.
 - Cleanup only dispatches the dedicated cleanup worker with `confirm=DELETE_READY_R2`.
 - Dry-run never mutates state.
@@ -66,6 +67,7 @@ speechMaxTracks=1
 transcriptionLimit=50
 transcriptionApprovalUsd=1
 transcriptionSessionCapUsd=2
+requirePaidApproval=true
 reviewBatchSize=80
 reviewMaxBatches=1
 cleanupLimit=50
@@ -77,6 +79,7 @@ activeWorkflowWindowMinutes=360
 ```text
 PIPELINE_AUTOPILOT_ENABLED
 PIPELINE_AUTOPILOT_PAID_ENABLED
+PIPELINE_AUTOPILOT_REQUIRE_PAID_APPROVAL
 PIPELINE_AUTOPILOT_SPEECH_ENABLED
 PIPELINE_AUTOPILOT_REVIEW_ENABLED
 PIPELINE_AUTOPILOT_CLEANUP_ENABLED
@@ -97,6 +100,22 @@ PIPELINE_AUTOPILOT_ACTIVE_WORKFLOW_WINDOW_MINUTES
 ```
 
 `DND_` aliases are accepted for the paid and stage enablement flags where production naming already uses that convention.
+
+## Upload Approval
+
+`/api/uploads/craig-complete` marks new uploads with:
+
+```text
+pipeline_autopilot_approved=true
+pipeline_autopilot_approval_source=craig_upload_confirmation
+pipeline_autopilot_approved_paid_stages=["transcription","review_generation"]
+```
+
+This means old sessions and manually imported history are visible to the supervisor, but paid AI is not dispatched for them by cron unless an operator explicitly calls the endpoint with:
+
+```text
+approveAutopilotPaid=true
+```
 
 ## Operational Meaning
 
