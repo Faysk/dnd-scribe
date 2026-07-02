@@ -47,3 +47,22 @@ transcript=330 segments 329 non_empty chars=52425 words=10282 tracks=3
 ## Proximo uso operacional
 
 Executar o lote restante somente depois desta correcao estar em `main`, para o worker novo finalizar o job sem repetir o erro.
+
+## Segundo incidente no lote final
+
+Run GitHub Actions: `28559046934`
+
+O lote final avancou e gravou novas transcricoes, mas falhou cedo por limite de conexoes do pool session-mode do Supabase:
+
+```text
+EMAXCONNSESSION max clients reached in session mode
+```
+
+Foi identificado tambem que tracebacks de `subprocess` podem incluir a string de conexao nos argumentos do comando. A partir da correcao seguinte:
+
+- chamadas `psql` passam por `run_psql()`;
+- erros transientes de conexao recebem retry com backoff;
+- mensagens de erro sao sanitizadas antes de subir para traceback/log;
+- `execute()` continua enviando SQL por stdin.
+
+Recomendacao operacional: rotacionar a senha do `DATABASE_URL` porque o artifact do run com falha pode ter registrado o argumento original do comando.

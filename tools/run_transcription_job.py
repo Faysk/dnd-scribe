@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -32,6 +33,15 @@ DEFAULT_PROMPT = (
     "personagens e termos de D&D quando reconheciveis."
 )
 OPENAI_TRANSCRIPTION_URL = "https://api.openai.com/v1/audio/transcriptions"
+PSQL_MAX_ATTEMPTS = 6
+PSQL_TRANSIENT_PATTERNS = (
+    "EMAXCONNSESSION",
+    "max clients reached",
+    "remaining connection slots are reserved",
+    "too many clients already",
+    "connection to server",
+    "could not connect to server",
+)
 
 
 def sql_literal(value: Any) -> str:
@@ -55,22 +65,47 @@ def sql_json(value: Any) -> str:
     return sql_literal(json.dumps(value, ensure_ascii=False, sort_keys=True)) + "::jsonb"
 
 
+def sanitize_error_text(text: str, database_url: str) -> str:
+    cleaned = text.replace(database_url, "<database_url>")
+    cleaned = re.sub(r"postgres(?:ql)?://[^\\s'\\\"]+", "postgresql://<redacted>", cleaned)
+    return cleaned.strip()
+
+
+def is_transient_psql_error(text: str) -> bool:
+    lower = text.lower()
+    return any(pattern.lower() in lower for pattern in PSQL_TRANSIENT_PATTERNS)
+
+
+def run_psql(database_url: str, args: list[str], sql: str | None = None) -> str:
+    last_error = ""
+    for attempt in range(1, PSQL_MAX_ATTEMPTS + 1):
+        completed = subprocess.run(
+            ["psql", database_url, "-v", "ON_ERROR_STOP=1", *args],
+            input=sql,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+        )
+        if completed.returncode == 0:
+            return completed.stdout
+
+        last_error = sanitize_error_text((completed.stderr or completed.stdout or "").strip(), database_url)
+        if attempt < PSQL_MAX_ATTEMPTS and is_transient_psql_error(last_error):
+            time.sleep(min(30, attempt * 2))
+            continue
+        break
+
+    raise RuntimeError(f"psql failed after {attempt} attempt(s): {last_error}")
+
+
 def run_json(database_url: str, sql: str) -> Any:
-    output = subprocess.check_output(
-        ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-tA", "-c", sql],
-        text=True,
-        encoding="utf-8",
-    )
+    output = run_psql(database_url, ["-tA", "-c", sql])
     text = output.strip()
     return json.loads(text) if text else None
 
 
 def run_scalar(database_url: str, sql: str) -> str | None:
-    output = subprocess.check_output(
-        ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-q", "-tA", "-c", sql],
-        text=True,
-        encoding="utf-8",
-    )
+    output = run_psql(database_url, ["-q", "-tA", "-c", sql])
     for line in output.splitlines():
         value = line.strip()
         if value:
@@ -79,13 +114,7 @@ def run_scalar(database_url: str, sql: str) -> str | None:
 
 
 def execute(database_url: str, sql: str) -> None:
-    subprocess.run(
-        ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-q"],
-        input=sql,
-        text=True,
-        encoding="utf-8",
-        check=True,
-    )
+    run_psql(database_url, ["-q"], sql)
 
 
 def unit_cost(policy: dict[str, Any], key: str) -> float | None:
