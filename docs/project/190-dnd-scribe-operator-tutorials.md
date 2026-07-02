@@ -87,53 +87,64 @@ Failure handling:
 
 Use when the GM wants Roll20 chat, dice and commands in the timeline.
 
-The bridge has two parts:
+The bridge has two production parts and one legacy fallback:
 
-1. Roll20 Mod/API script.
-2. Browser extension running in the GM tab.
+1. Browser extension running in the GM tab.
+2. DnD Scribe API receiving authenticated batches.
+3. Roll20 Mod/API script, kept quiet by default for legacy/debug.
 
 Safe order:
 
-1. In Roll20 chat, run `!dndscribe off`.
-2. Install/update the Mod/API script:
+1. Install/update the Mod/API script:
    `integrations/roll20/dnd-scribe-mod.js`
-3. Load the Chrome extension from:
+2. Remove duplicate old DnD Scribe Mod scripts if they exist.
+3. Keep the legacy chat transport quiet:
+
+```text
+!dndscribe transport off
+!dndscribe off
+```
+
+4. Load the Chrome extension from:
    `D:\Projects\dnd\integrations\roll20\chrome-extension`
-4. Open `https://dnd.faysk.dev/roll20-bridge.html`.
-5. Select the target session.
-6. Copy token and `sourceSessionId`.
-7. Open the Roll20 editor tab.
-8. Click `Config` in the DnD Scribe extension panel.
-9. Fill:
+5. Open `https://dnd.faysk.dev/roll20-bridge.html`.
+6. Select the target session.
+7. Copy token and `sourceSessionId`.
+8. Open the Roll20 editor tab.
+9. Click `Config` in the DnD Scribe extension panel.
+10. Fill:
    - API URL: `https://dnd.faysk.dev`
    - campaign slug: `yuhara-main`
    - sourceSessionId: copied from the bridge page
    - token: copied from the bridge page
-10. Run `!dndscribe status`.
-11. Run `!dndscribe on`.
-12. Send a small test command:
+11. Confirm the panel shows `Captura: DOM direto`.
+12. Optionally run `!dndscribe status` only to diagnose the Mod state.
+13. Send a small test command:
     `!dnd acao teste da ponte roll20`
 
 Success signs:
 
 - extension panel is visible in the Roll20 editor;
+- panel shows `Captura: DOM direto`;
 - queue returns to zero after send;
 - panel shows `ok: N novos, M atualizados`;
 - DnD Scribe session receives Roll20 events.
 
 Emergency:
 
-If the GM sees a giant `DND_SCRIBE_EVENT:%7B...` message, the Mod/API is
-working but the extension did not capture/hide the packet.
+If the GM sees a giant `DND_SCRIBE_EVENT:%7B...` message, the legacy chat
+transport is active or an old duplicate Mod script is still running.
 
 Immediate action:
 
 ```text
+!dndscribe transport off
 !dndscribe off
 ```
 
-Then reload the extension, reload Roll20 editor, configure again, and only then
-run `!dndscribe on`.
+Then update the Mod to version `1.1.0` or newer, remove duplicate old scripts,
+reload the extension, reload Roll20 editor, and configure again. Do not use
+`!dndscribe transport on` during a normal session.
 
 ## Tutorial 4 - Upload Craig ZIP
 

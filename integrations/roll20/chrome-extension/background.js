@@ -11,7 +11,7 @@ async function postEvents(config, events) {
       'Authorization': `Bearer ${config.token || ''}`
     },
     body: JSON.stringify({
-      version: 'chrome-extension-1.0.0',
+      version: 'chrome-extension-1.1.0',
       sourceSessionId: config.sourceSessionId || '',
       batchId: `roll20-extension-${Date.now()}`,
       events

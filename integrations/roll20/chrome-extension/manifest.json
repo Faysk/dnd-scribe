@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "DnD Scribe Roll20 Bridge",
-  "version": "1.0.1",
-  "description": "Captura eventos do Roll20 Mod/API e envia para o DnD Scribe.",
+  "version": "1.1.0",
+  "description": "Captura chat e rolagens do Roll20 pelo navegador do GM e envia para o DnD Scribe.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://app.roll20.net/*",

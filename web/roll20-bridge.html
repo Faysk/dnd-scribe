@@ -34,20 +34,20 @@
       <div class="panel-body detail-grid">
         <section class="audio-card">
           <span class="label">Fluxo seguro</span>
-          <strong>Pause primeiro, configure, teste, depois ligue.</strong>
-          <p>A ponte usa um script no Roll20 para gerar pacotes tecnicos e uma extensao do navegador do GM para enviar esses pacotes para o DnD Scribe. Jogadores nao precisam ver nem digitar token.</p>
+          <strong>Deixe o legado quieto, configure a extensao e monitore a fila.</strong>
+          <p>A ponte usa a extensao do navegador do GM como captura principal. O Mod/API fica como apoio legado e deve permanecer com transporte por chat desligado. Jogadores nao precisam ver nem digitar token.</p>
         </section>
 
         <div class="field-grid">
           <div class="audio-card">
             <span class="label">Camada 1</span>
-            <strong>Mod/API Roll20</strong>
-            <p>Roda no Roll20 e transforma chat, rolagens e comandos em pacotes tecnicos.</p>
+            <strong>Extensao do GM</strong>
+            <p>Observa chat, rolagens e comandos no navegador e envia lotes para producao.</p>
           </div>
           <div class="audio-card">
             <span class="label">Camada 2</span>
-            <strong>Extensao do GM</strong>
-            <p>Le os pacotes no navegador, esconde o texto tecnico e envia para producao.</p>
+            <strong>API DnD Scribe</strong>
+            <p>Valida o token dedicado, normaliza eventos e grava em <code>roll20_events</code>.</p>
           </div>
           <div class="audio-card">
             <span class="label">Camada 3</span>
@@ -62,12 +62,12 @@
         </div>
 
         <section class="audio-card">
-          <span class="label">1. Pausar antes de configurar</span>
-          <p>No chat do Roll20, rode este comando antes de mexer na extensao. Isso evita spam tecnico para o GM.</p>
+          <span class="label">1. Deixar legado quieto</span>
+          <p>No chat do Roll20, rode estes comandos para garantir que scripts antigos nao enviem pacotes tecnicos pelo chat.</p>
           <div class="actions">
-            <button onclick="navigator.clipboard.writeText('!dndscribe off')">Copiar pausa</button>
+            <button onclick="navigator.clipboard.writeText('!dndscribe transport off\n!dndscribe off')">Copiar pausa</button>
           </div>
-          <code>!dndscribe off</code>
+          <code>!dndscribe transport off<br />!dndscribe off</code>
         </section>
 
         <section class="audio-card">
@@ -94,21 +94,21 @@
 
         <section class="audio-card">
           <span class="label">5. Configurar no Roll20 editor</span>
-          <p>Abra a mesa em <code>https://app.roll20.net/editor/...</code>. No painel pequeno <strong>DnD Scribe</strong>, clique em Config e cole URL, campaign slug, sourceSessionId e token.</p>
+          <p>Abra a mesa em <code>https://app.roll20.net/editor/...</code>. No painel pequeno <strong>DnD Scribe</strong>, clique em Config e cole URL, campaign slug, sourceSessionId e token. O painel deve mostrar <strong>Captura: DOM direto</strong>.</p>
           <code>URL: https://dnd.faysk.dev<br />Campaign: yuhara-main</code>
         </section>
 
         <section class="audio-card">
-          <span class="label">6. Testar e ligar</span>
-          <p>Depois de configurar, confira status, ligue a ponte e envie uma acao teste.</p>
-          <code>!dndscribe status<br />!dndscribe on<br />!dnd acao teste da ponte roll20</code>
+          <span class="label">6. Testar e monitorar</span>
+          <p>Depois de configurar, envie uma acao teste. Use status apenas para diagnosticar o Mod legado; nao use <code>transport on</code> no fluxo normal.</p>
+          <code>!dndscribe status<br />!dnd acao teste da ponte roll20</code>
         </section>
 
         <section class="audio-card error">
           <span class="label">Emergencia</span>
           <strong>Se aparecer texto gigante <code>DND_SCRIBE_EVENT</code> para o GM</strong>
-          <p>Pause imediatamente, recarregue a extensao e a mesa, confirme que o painel DnD Scribe apareceu e configure novamente antes de religar.</p>
-          <code>!dndscribe off</code>
+          <p>Desligue o transporte legado, remova scripts antigos duplicados, atualize o Mod e recarregue a extensao/mesa. O fluxo normal deve ficar em DOM direto.</p>
+          <code>!dndscribe transport off<br />!dndscribe off</code>
         </section>
       </div>
     </section>

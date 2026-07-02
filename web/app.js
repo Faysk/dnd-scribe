@@ -1249,17 +1249,17 @@ function renderTutorials() {
           label: 'Etapa 3',
           title: 'Ponte Roll20',
           tone: 'violet',
-          body: 'Captura chat, dados e comandos do Roll20 para a timeline. O token e tecnico e fica so com DM/Owner.',
+          body: 'Captura chat, dados e comandos do Roll20 pela extensao do GM. O token e tecnico e fica so com DM/Owner.',
           steps: [
-            'No Roll20, instale ou atualize o Mod/API Script.',
+            'No Roll20, atualize o Mod/API Script e remova duplicatas antigas.',
             'No Chrome, carregue a extensao local em chrome://extensions.',
             'Abra /roll20-bridge.html, escolha a sessao e copie token/sourceSessionId.',
             'No Roll20 editor, clique Config no painel DnD Scribe.',
-            'Rode !dndscribe off antes de configurar e !dndscribe on depois.'
+            'Confirme Captura: DOM direto. Nao use transport on no fluxo normal.'
           ],
           actions: [
             '<a class="button-link primary" href="/roll20-bridge.html">Abrir ponte</a>',
-            "<button onclick=\"copyText('!dndscribe off\\n!dndscribe status\\n!dndscribe on', 'Comandos Roll20 copiados.')\">Copiar comandos</button>"
+            "<button onclick=\"copyText('!dndscribe transport off\\n!dndscribe off\\n!dndscribe status', 'Comandos Roll20 copiados.')\">Copiar comandos</button>"
           ]
         })}
 
@@ -1335,16 +1335,17 @@ function renderTutorials() {
           label: 'Emergencia',
           title: 'Pacote tecnico apareceu no Roll20',
           tone: 'red',
-          body: 'Se o GM ver um texto gigante DND_SCRIBE_EVENT, o Mod/API esta ativo mas a extensao nao capturou.',
+          body: 'Se o GM ver um texto gigante DND_SCRIBE_EVENT, o transporte legado esta ligado ou existe Mod antigo duplicado.',
           steps: [
-            'Rode !dndscribe off imediatamente.',
+            'Rode !dndscribe transport off e !dndscribe off imediatamente.',
+            'Remova scripts antigos duplicados em Mod/API Scripts.',
+            'Atualize o Mod para a versao 1.1.0 ou superior.',
             'Recarregue a extensao no Chrome.',
             'Recarregue a mesa do Roll20 em /editor.',
-            'Confirme o painel DnD Scribe no canto inferior direito.',
-            'Configure token/sourceSessionId e so depois rode !dndscribe on.'
+            'Confirme o painel DnD Scribe e Captura: DOM direto.'
           ],
           actions: [
-            "<button class=\"danger\" onclick=\"copyText('!dndscribe off', 'Comando de pausa copiado.')\">Copiar pausa</button>",
+            "<button class=\"danger\" onclick=\"copyText('!dndscribe transport off\\n!dndscribe off', 'Comandos de pausa copiados.')\">Copiar pausa</button>",
             '<a class="button-link" href="/integrations/roll20/dnd-scribe-mod.js" target="_blank" rel="noreferrer">Script Mod</a>'
           ]
         })}

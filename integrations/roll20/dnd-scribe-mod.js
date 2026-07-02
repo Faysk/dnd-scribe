@@ -1,12 +1,12 @@
 // DnD Scribe Roll20 Mod bridge
 // Install in Roll20: Game page -> Settings -> Mod (API) Scripts -> New Script.
-// It captures Roll20 chat events and whispers compact packets to the GM client.
-// The browser bridge reads those packets and posts them to DnD Scribe.
+// The Chrome extension is the primary silent capture path.
+// This Mod keeps a legacy chat-packet transport for debugging only.
 
 var DndScribeBridge = DndScribeBridge || (function () {
   'use strict';
 
-  var VERSION = '1.0.1';
+  var VERSION = '1.1.0';
   var MARKER = 'DND_SCRIBE_EVENT:';
   var COMMAND = '!dndscribe';
   var MAX_CONTENT = 3500;
@@ -14,11 +14,13 @@ var DndScribeBridge = DndScribeBridge || (function () {
   function ensureState() {
     state.DndScribeBridge = state.DndScribeBridge || {
       enabled: false,
+      chatTransport: false,
       seq: 0,
       startedAt: new Date().toISOString(),
       version: VERSION
     };
     if (typeof state.DndScribeBridge.enabled !== 'boolean') state.DndScribeBridge.enabled = false;
+    if (typeof state.DndScribeBridge.chatTransport !== 'boolean') state.DndScribeBridge.chatTransport = false;
     if (typeof state.DndScribeBridge.seq !== 'number') state.DndScribeBridge.seq = 0;
     state.DndScribeBridge.version = VERSION;
     return state.DndScribeBridge;
@@ -52,6 +54,8 @@ var DndScribeBridge = DndScribeBridge || (function () {
   }
 
   function whisperPacket(packet) {
+    var data = ensureState();
+    if (!data.enabled || !data.chatTransport) return;
     var encoded = encodeURIComponent(JSON.stringify(packet));
     sendChat(
       'DnD Scribe',
@@ -65,9 +69,23 @@ var DndScribeBridge = DndScribeBridge || (function () {
     var data = ensureState();
     sendChat(
       'DnD Scribe',
-      '/w gm Ponte Roll20 ' + (data.enabled ? 'ligada' : 'pausada') + '. Seq=' + data.seq + '. Versao=' + VERSION,
+      '/w gm Ponte Roll20 Mod ' + (data.enabled ? 'ligado' : 'pausado')
+        + '. Transporte legado por chat ' + (data.chatTransport ? 'ligado' : 'desligado')
+        + '. Seq=' + data.seq + '. Versao=' + VERSION
+        + '. Captura principal: extensao Chrome DOM.',
       null,
       { noarchive: true }
+    );
+  }
+
+  function logState(reason) {
+    var data = ensureState();
+    log(
+      'DnD Scribe Roll20 bridge ' + reason
+      + ' | mod=' + (data.enabled ? 'on' : 'off')
+      + ' | legacy_chat_transport=' + (data.chatTransport ? 'on' : 'off')
+      + ' | seq=' + data.seq
+      + ' | v=' + VERSION
     );
   }
 
@@ -80,19 +98,32 @@ var DndScribeBridge = DndScribeBridge || (function () {
     }
     if (content === COMMAND + ' on' || content === COMMAND + ' ligar') {
       data.enabled = true;
-      status();
+      logState('enabled');
       return true;
     }
     if (content === COMMAND + ' off' || content === COMMAND + ' pausar') {
       data.enabled = false;
+      data.chatTransport = false;
+      logState('disabled');
+      return true;
+    }
+    if (content === COMMAND + ' transport on' || content === COMMAND + ' legacy on') {
+      data.enabled = true;
+      data.chatTransport = true;
       status();
+      return true;
+    }
+    if (content === COMMAND + ' transport off' || content === COMMAND + ' legacy off') {
+      data.chatTransport = false;
+      logState('legacy transport disabled');
       return true;
     }
     if (content === COMMAND + ' reset') {
       data.enabled = false;
+      data.chatTransport = false;
       data.seq = 0;
       data.startedAt = new Date().toISOString();
-      status();
+      logState('reset');
       return true;
     }
     return false;
@@ -104,7 +135,7 @@ var DndScribeBridge = DndScribeBridge || (function () {
       handleCommand(msg);
       return;
     }
-    if (!data.enabled) return;
+    if (!data.enabled || !data.chatTransport) return;
     if (msg.who === 'DnD Scribe') return;
     if (String(msg.content || '').indexOf(MARKER) !== -1) return;
 
@@ -120,7 +151,7 @@ var DndScribeBridge = DndScribeBridge || (function () {
 
   on('ready', function () {
     ensureState();
-    log('DnD Scribe Roll20 bridge ready v' + VERSION);
+    logState('ready');
   });
 
   on('chat:message', handleMessage);

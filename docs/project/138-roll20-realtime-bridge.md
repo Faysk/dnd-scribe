@@ -17,16 +17,28 @@ Pontos confirmados:
 - Mensagens `rollresult`/`gmrollresult` carregam informacao de rolagem.
 - `sendChat` suporta `noarchive`, util para saidas tecnicas que nao devem ir para o chat log.
 
-## Decisao
+## Decisao inicial
 
 Nao vamos guardar cookie/senha Roll20 no servidor nem depender de scraping server-side.
 
-O caminho de producao escolhido e uma ponte em duas camadas:
+O caminho inicial escolhido foi uma ponte em duas camadas:
 
 1. Roll20 Mod/API captura `chat:message` e gera pacotes tecnicos.
 2. Browser bridge no tab do GM le esses pacotes e faz `POST /api/roll20-bridge`.
 
 Isso usa a captura mais rica do Roll20 sem colocar credenciais Roll20 em Vercel.
+
+## Revisao de producao
+
+Em teste real, o transporte por chat gerou mensagens visiveis para o DM quando
+o navegador nao escondia os pacotes a tempo. A decisao revisada e:
+
+1. A extensao Chrome faz a captura principal diretamente pelo DOM do chat do
+   Roll20.
+2. O Mod/API continua instalado apenas como fallback/debug.
+3. O transporte legado `DND_SCRIBE_EVENT` fica desligado por padrao e so deve
+   ser ligado com `!dndscribe transport on` quando houver diagnostico
+   controlado.
 
 ## Implementado
 
@@ -34,14 +46,17 @@ Isso usa a captura mais rica do Roll20 sem colocar credenciais Roll20 em Vercel.
   - script para instalar em Roll20 Mod/API;
   - observa `chat:message`;
   - gera `sourceEventId` idempotente por sequencia persistida em `state.DndScribeBridge`;
-  - envia pacote para o GM via whisper tecnico com `noarchive`.
-- `web/roll20-bridge.js`
-  - bookmarklet/userscript para rodar no tab Roll20;
-  - observa o DOM por pacotes `DND_SCRIBE_EVENT`;
+  - mantem o transporte por whisper tecnico desligado por padrao.
+- `integrations/roll20/chrome-extension`
+  - extensao local para rodar no tab Roll20 do GM;
+  - observa novas mensagens do chat/rolagens pelo DOM;
+  - ainda esconde pacotes `DND_SCRIBE_EVENT` legados quando aparecerem;
   - mantem fila local com retry;
   - envia lotes para producao com `Authorization: Bearer <ROLL20_BRIDGE_TOKEN>`.
+- `web/roll20-bridge.js`
+  - bookmarklet/userscript legado para leitura de pacotes `DND_SCRIBE_EVENT`.
 - `web/roll20-bridge.html`
-  - pagina operacional com instalacao do Mod e bookmarklet.
+  - pagina operacional com token, sessao alvo, extensao e procedimento de uso.
 - `POST /api/roll20-bridge`
   - rota CORS restrita ao Roll20/site/localhost;
   - exige `ROLL20_BRIDGE_TOKEN`;
@@ -53,16 +68,16 @@ Isso usa a captura mais rica do Roll20 sem colocar credenciais Roll20 em Vercel.
 No Roll20:
 
 - instalar o Mod script;
-- usar `!dndscribe status` para verificar;
+- usar `!dndscribe transport off` para garantir legado quieto;
 - usar `!dndscribe off` para pausar;
-- usar `!dndscribe on` para religar.
+- usar `!dndscribe status` apenas para verificar estado do Mod.
 
 No navegador do GM:
 
-- abrir a campanha;
-- clicar no bookmarklet `DnD Scribe Roll20`;
+- abrir a campanha no editor;
+- carregar a extensao Chrome local;
 - informar `sourceSessionId` da sessao atual e token;
-- deixar o painel pequeno ligado durante a sessao.
+- deixar o painel pequeno ligado durante a sessao com `Captura: DOM direto`.
 
 ## Seguranca
 
@@ -75,13 +90,14 @@ No navegador do GM:
 
 - A ponte depende do tab Roll20 do GM aberto.
 - Se o navegador fechar antes de enviar a fila, a fila fica no `localStorage` daquele navegador.
-- Se Roll20 mudar radicalmente o DOM do chat, o Mod continua gerando pacotes, mas o bridge pode precisar ajuste de leitura.
+- Se Roll20 mudar radicalmente o DOM do chat, a extensao pode precisar ajuste de leitura.
+- O fallback por `DND_SCRIBE_EVENT` ainda existe, mas deve ser usado apenas em
+  debug porque pode aparecer no chat do GM.
 - O fallback manual `/roll20.html` continua disponivel.
 
 ## Proximas melhorias
 
 1. Criar token por sessao no banco em vez de token unico de ambiente.
-2. Botao no site para gerar/copiar bookmarklet ja com `sourceSessionId` preenchido.
-3. Status da ponte na tela de monitoramento: ultimo pacote, fila, ultima falha.
-4. Conversao direta de evento Roll20 em nota/canon pelo inspector da timeline.
-5. Teste guiado em producao com uma sessao pequena e rollback de eventos se necessario.
+2. Status da ponte na tela de monitoramento: ultimo pacote, fila, ultima falha.
+3. Conversao direta de evento Roll20 em nota/canon pelo inspector da timeline.
+4. Teste guiado em producao com uma sessao pequena e rollback de eventos se necessario.

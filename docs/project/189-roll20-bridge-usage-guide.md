@@ -8,12 +8,15 @@ Para o fluxo completo da mesa, veja tambem
 
 ## Objetivo
 
-A ponte tem duas camadas:
+A ponte tem duas camadas de producao e um fallback legado:
 
-1. Roll20 Mod/API script: roda dentro do Roll20 e transforma mensagens da mesa
-   em pacotes tecnicos.
-2. Extensao Chrome local: le esses pacotes no navegador do GM e envia para
-   `https://dnd.faysk.dev/api/roll20-bridge` com `ROLL20_BRIDGE_TOKEN`.
+1. Extensao Chrome local: observa o chat/rolagens no navegador do GM e envia
+   eventos para `https://dnd.faysk.dev/api/roll20-bridge`.
+2. API DnD Scribe: valida `ROLL20_BRIDGE_TOKEN`, normaliza os eventos e grava
+   em `roll20_events`.
+3. Roll20 Mod/API script: fica instalado como fallback/debug. O transporte
+   antigo por chat fica desligado por padrao para nao sujar a tela do DM com
+   `DND_SCRIBE_EVENT`.
 
 O site normal nao pede esse token para jogadores. O token e somente da ponte.
 
@@ -39,9 +42,16 @@ O site normal nao pede esse token para jogadores. O token e somente da ponte.
 
 O script responde aos comandos:
 
-- `!dndscribe status`: mostra se a ponte esta ligada e o contador de eventos.
-- `!dndscribe on` ou `!dndscribe ligar`: liga a captura.
-- `!dndscribe off` ou `!dndscribe pausar`: pausa a captura.
+- `!dndscribe status`: mostra estado do Mod e do transporte legado.
+- `!dndscribe on` ou `!dndscribe ligar`: liga apenas o Mod legado, sem enviar
+  pacotes pelo chat.
+- `!dndscribe off` ou `!dndscribe pausar`: pausa o Mod e desliga o transporte
+  legado.
+- `!dndscribe transport on` ou `!dndscribe legacy on`: liga o transporte antigo
+  por chat. Use somente para debug, porque ele pode exibir `DND_SCRIBE_EVENT`
+  no chat do GM se a extensao nao esconder a tempo.
+- `!dndscribe transport off` ou `!dndscribe legacy off`: desliga o transporte
+  antigo por chat.
 
 ## Instalar a extensao Chrome
 
@@ -85,45 +95,33 @@ Depois disso a extensao salva a configuracao no storage local do navegador.
 
 ## Uso durante a sessao
 
-1. Antes de configurar a extensao, mantenha a ponte pausada:
-
-```text
-!dndscribe off
-```
-
-2. Depois que a extensao estiver instalada, configurada e com o painel visivel,
-   rode no chat do Roll20:
+1. Depois que a extensao estiver instalada, configurada e com o painel visivel,
+   rode no chat do Roll20 se quiser conferir o Mod:
 
 ```text
 !dndscribe status
 ```
 
-3. Verifique o painel da extensao:
+2. Verifique o painel da extensao:
    - `ligado`: captura ativa;
+   - `Captura`: deve mostrar `DOM direto`;
    - `Sessao`: deve mostrar o `sourceSessionId` correto;
    - `Fila`: deve ficar perto de zero depois dos envios;
    - resultado: deve mostrar algo como `ok: N novos, M atualizados`.
 
-4. Ligue a captura:
-
-```text
-!dndscribe on
-```
-
-5. Durante a sessao, mensagens, rolagens e comandos do Roll20 entram na fila e
+3. Durante a sessao, mensagens, rolagens e comandos do Roll20 entram na fila e
    sao enviados em lotes para producao.
 
-6. Se quiser pausar temporariamente:
+4. Se quiser pausar temporariamente, use o botao `Pausar` no painel da
+   extensao.
+
+5. O comando abaixo tambem deixa o fallback legado quieto:
 
 ```text
 !dndscribe off
 ```
 
-7. Para religar:
-
-```text
-!dndscribe on
-```
+Nao use `!dndscribe transport on` no fluxo normal da mesa.
 
 ## Validacao rapida
 
@@ -181,26 +179,30 @@ Resultado esperado:
 
 ### O GM esta recebendo mensagens enormes `DND_SCRIBE_EVENT`
 
-Isso significa que o Mod/API do Roll20 esta funcionando, mas a extensao do
-navegador nao esta capturando/escondendo os pacotes naquele navegador.
+Isso significa que o transporte legado por chat esta ligado ou existe um script
+antigo do Mod ainda rodando no Roll20.
 
 Acao imediata:
 
 ```text
+!dndscribe transport off
 !dndscribe off
 ```
 
 Depois:
 
+- confira em `Settings -> Mod (API) Scripts` se nao ha scripts antigos
+  duplicados do DnD Scribe;
+- substitua o Mod pelo `dnd-scribe-mod.js` versao `1.1.0` ou superior;
 - confirme que a extensao esta carregada no navegador do GM que abriu a mesa;
 - recarregue a pagina do Roll20;
 - confirme que o painel `DnD Scribe` aparece no canto inferior direito;
 - clique em `Config` e cole `sourceSessionId` e token;
 - use `Enviar` se houver fila;
-- so depois rode `!dndscribe on`.
+- nao religue `transport on` durante a mesa normal.
 
-As mensagens `Ponte Roll20 ligada/pausada. Seq=...` sao normais. O que nao deve
-ficar visivel sao os pacotes longos `DND_SCRIBE_EVENT:%7B...`.
+Mensagens curtas de `!dndscribe status` so devem aparecer quando o GM pedir
+status manualmente. Pacotes longos `DND_SCRIBE_EVENT:%7B...` nao devem aparecer.
 
 ## Seguranca
 
@@ -215,12 +217,12 @@ ficar visivel sao os pacotes longos `DND_SCRIBE_EVENT:%7B...`.
 
 - [ ] Sessao criada no DnD Scribe.
 - [ ] `ROLL20_BRIDGE_TOKEN` ativo em producao.
-- [ ] Mod/API script salvo no Roll20.
+- [ ] Mod/API script salvo no Roll20, sem duplicatas antigas.
 - [ ] Extensao Chrome carregada.
 - [ ] Mesa aberta em `/editor/`.
 - [ ] Painel `DnD Scribe` visivel.
 - [ ] `sourceSessionId` correto configurado.
-- [ ] Ponte pausada antes de configurar: `!dndscribe off`.
-- [ ] `!dndscribe status` respondendo.
-- [ ] Ponte ligada depois de configurar: `!dndscribe on`.
+- [ ] Painel mostrando `Captura: DOM direto`.
+- [ ] Transporte legado desligado: `!dndscribe transport off`.
+- [ ] `!dndscribe status` respondendo somente se precisar diagnosticar.
 - [ ] Evento teste enviado com sucesso.
