@@ -47,6 +47,13 @@ const DEFAULT_TRANSCRIPTION_APPROVAL_USD = 0.08;
 const REVIEW_GENERATION_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4o';
 const DEFAULT_REVIEW_BATCH_SIZE = 80;
 const DEFAULT_REVIEW_MAX_BATCHES = 1;
+const PIPELINE_SUPERVISOR_ACTOR = 'pipeline-supervisor';
+const PIPELINE_SUPERVISOR_WORKFLOWS = {
+  speech: 'speech-slices-worker.yml',
+  transcription: 'transcription-worker.yml',
+  review: 'review-generation-worker.yml',
+  cleanup: 'storage-cleanup-worker.yml'
+};
 
 const SESSION_STATUSES = new Set([
   'planned',
@@ -3631,21 +3638,155 @@ function requireCronAuth(req) {
   if (header !== `Bearer ${secret}`) throw httpError(401, 'Cron nao autorizado.');
 }
 
+function optionValue(query, queryNames = [], envNames = []) {
+  for (const name of queryNames) {
+    const value = query.get(name);
+    if (value !== null && value !== undefined && value !== '') return value;
+  }
+  for (const name of envNames) {
+    const value = process.env[name];
+    if (value !== null && value !== undefined && value !== '') return value;
+  }
+  return null;
+}
+
+function booleanOption(query, queryNames, envNames, fallback) {
+  const raw = optionValue(query, queryNames, envNames);
+  if (raw === null) return fallback;
+  const text = String(raw).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(text)) return true;
+  if (['0', 'false', 'no', 'off'].includes(text)) return false;
+  return fallback;
+}
+
+function numericOption(query, queryNames, envNames, fallback, min, max, integer = true) {
+  const raw = optionValue(query, queryNames, envNames);
+  const number = Number(raw ?? fallback);
+  if (!Number.isFinite(number)) return fallback;
+  const bounded = Math.max(min, Math.min(max, number));
+  return integer ? Math.floor(bounded) : Number(bounded.toFixed(6));
+}
+
+function moneyOption(query, queryNames, envNames, fallback, min = 0, max = 100) {
+  return numericOption(query, queryNames, envNames, fallback, min, max, false);
+}
+
+function supervisorConfig(query, dryRun) {
+  return {
+    dryRun,
+    enabled: booleanOption(query, ['enabled', 'autopilot'], ['PIPELINE_AUTOPILOT_ENABLED', 'DND_PIPELINE_AUTOPILOT_ENABLED'], true),
+    paidEnabled: booleanOption(query, ['paidEnabled', 'paid'], ['PIPELINE_AUTOPILOT_PAID_ENABLED', 'DND_PIPELINE_AUTOPILOT_PAID_ENABLED'], true),
+    speechEnabled: booleanOption(query, ['speechEnabled'], ['PIPELINE_AUTOPILOT_SPEECH_ENABLED', 'DND_PIPELINE_AUTOPILOT_SPEECH_ENABLED'], true),
+    reviewEnabled: booleanOption(query, ['reviewEnabled'], ['PIPELINE_AUTOPILOT_REVIEW_ENABLED', 'DND_PIPELINE_AUTOPILOT_REVIEW_ENABLED'], true),
+    cleanupEnabled: booleanOption(query, ['cleanupEnabled'], ['PIPELINE_AUTOPILOT_CLEANUP_ENABLED', 'DND_PIPELINE_AUTOPILOT_CLEANUP_ENABLED'], true),
+    maxSessions: numericOption(query, ['maxSessions'], ['PIPELINE_AUTOPILOT_MAX_SESSIONS'], 4, 1, 10),
+    maxRunsPerSession: numericOption(query, ['maxRuns'], ['PIPELINE_AUTOPILOT_MAX_ZERO_COST_RUNS'], 2, 1, 6),
+    maxTracks: normalizePipelineMaxTracks(optionValue(query, ['maxTracks'], ['PIPELINE_AUTOPILOT_MAX_TRACKS']) || 1),
+    chunkSeconds: normalizeChunkSeconds(optionValue(query, ['chunkSeconds'], ['PIPELINE_AUTOPILOT_CHUNK_SECONDS']) || DEFAULT_CHUNK_SECONDS),
+    staleMinutes: numericOption(query, ['staleMinutes'], ['PIPELINE_AUTOPILOT_STALE_MINUTES'], 20, 10, 240),
+    speechMaxChunks: numericOption(query, ['speechMaxChunks', 'maxChunks'], ['PIPELINE_AUTOPILOT_SPEECH_MAX_CHUNKS'], 12, 1, 80),
+    speechMaxTracks: normalizePipelineMaxTracks(optionValue(query, ['speechMaxTracks'], ['PIPELINE_AUTOPILOT_SPEECH_MAX_TRACKS']) || 1),
+    transcriptionLimit: numericOption(query, ['transcriptionLimit', 'limit'], ['PIPELINE_AUTOPILOT_TRANSCRIPTION_LIMIT'], DEFAULT_TRANSCRIPTION_LIMIT, 1, 100),
+    transcriptionCostUsdPerMinute: moneyOption(
+      query,
+      ['transcriptionCostUsdPerMinute', 'costPerMinute'],
+      ['DND_COST_TRANSCRIPTION_AUDIO_MINUTE_USD'],
+      DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE,
+      0,
+      1
+    ),
+    transcriptionApprovalUsd: moneyOption(
+      query,
+      ['approveCostUsd', 'maxTranscriptionBatchCostUsd'],
+      ['PIPELINE_AUTOPILOT_TRANSCRIPTION_APPROVAL_USD', 'DND_PIPELINE_AUTOPILOT_TRANSCRIPTION_APPROVAL_USD'],
+      1,
+      0,
+      25
+    ),
+    transcriptionSessionCapUsd: moneyOption(
+      query,
+      ['sessionCostCapUsd', 'maxTranscriptionSessionCostUsd'],
+      ['PIPELINE_AUTOPILOT_TRANSCRIPTION_SESSION_CAP_USD', 'DND_PIPELINE_AUTOPILOT_TRANSCRIPTION_SESSION_CAP_USD'],
+      2,
+      0,
+      100
+    ),
+    reviewBatchSize: numericOption(query, ['reviewBatchSize', 'batchSize'], ['PIPELINE_AUTOPILOT_REVIEW_BATCH_SIZE'], DEFAULT_REVIEW_BATCH_SIZE, 1, 200),
+    reviewMaxBatches: numericOption(query, ['reviewMaxBatches', 'maxBatches'], ['PIPELINE_AUTOPILOT_REVIEW_MAX_BATCHES'], DEFAULT_REVIEW_MAX_BATCHES, 1, 20),
+    cleanupLimit: numericOption(query, ['cleanupLimit'], ['PIPELINE_AUTOPILOT_CLEANUP_LIMIT'], 50, 1, 100),
+    activeWorkflowWindowMinutes: numericOption(
+      query,
+      ['activeWorkflowWindowMinutes'],
+      ['PIPELINE_AUTOPILOT_ACTIVE_WORKFLOW_WINDOW_MINUTES'],
+      360,
+      15,
+      1440
+    )
+  };
+}
+
 async function supervisorSessions(db, campaign, limit = 5) {
   const result = await db.query(
     `
-select s.source_session_id, min(pj.created_at) first_job_at
-from processing_jobs pj
-join sessions s on s.id = pj.session_id
-join campaigns c on c.id = s.campaign_id
-where c.slug = $1
-  and coalesce(s.status, '') <> 'archived'
-  and pj.status in ('queued','retrying','running')
-  and pj.job_type = any($2::text[])
-group by s.source_session_id
-order by min(pj.created_at)
-limit $3::int;`,
-    [campaign, PIPELINE_RUNNABLE_JOB_TYPES, limit]
+with session_candidates as (
+  select
+    s.id session_id,
+    s.source_session_id,
+    s.created_at session_created_at,
+    min(pj.created_at) filter (
+      where pj.status in ('queued','retrying','running')
+        and pj.job_type = any($2::text[])
+    ) first_job_at
+  from sessions s
+  join campaigns c on c.id = s.campaign_id
+  left join processing_jobs pj on pj.session_id = s.id
+  where c.slug = $1
+    and coalesce(s.status, '') <> 'archived'
+    and nullif(s.source_session_id, '') is not null
+  group by s.id, s.source_session_id, s.created_at
+), indicators as (
+  select
+    sc.*,
+    exists (
+      select 1
+      from processing_jobs pj
+      where pj.session_id = sc.session_id
+        and pj.status in ('queued','retrying','running')
+        and pj.job_type = any($2::text[])
+    ) has_job,
+    exists (
+      select 1
+      from audio_transcription_work_units wu
+      where wu.session_id = sc.session_id
+        and nullif(wu.sha256, '') is not null
+        and nullif(wu.storage_path, '') is not null
+        and coalesce(wu.probably_silent, false) is false
+        and coalesce(wu.transcription_status, 'pending') not in ('skipped_silence', 'transcribed', 'cached')
+    ) has_transcription,
+    exists (
+      select 1
+      from transcript_segments ts
+      left join segment_classifications sg
+        on sg.segment_id = ts.id
+       and sg.source_run_id = $3
+      where ts.session_id = sc.session_id
+        and ts.is_empty is false
+        and sg.segment_id is null
+    ) has_review,
+    exists (
+      select 1
+      from audio_storage_cleanup_candidates cc
+      where cc.session_id = sc.session_id
+        and cc.readiness_status = 'delete_ready'
+    ) has_cleanup
+  from session_candidates sc
+)
+select source_session_id, first_job_at, session_created_at
+from indicators
+where has_job or has_transcription or has_review or has_cleanup
+order by coalesce(first_job_at, session_created_at)
+limit $4::int;`,
+    [campaign, PIPELINE_KNOWN_NEXT_JOB_TYPES, DEFAULT_RUN, limit]
   );
   return result.rows.map(row => row.source_session_id).filter(Boolean);
 }
@@ -3667,39 +3808,281 @@ async function executeSupervisorJob(req, campaign, job, options) {
   return { ok: false, skipped: true, reason: `Tipo nao suportado: ${job.type}` };
 }
 
+function workflowRunLooksActive(run, activeWindowMinutes) {
+  const status = String(run.status || '').toLowerCase();
+  const conclusion = String(run.conclusion || '').toLowerCase();
+  const rawDate = run.requestedAt || run.createdAt || run.jobCreatedAt;
+  const timestamp = rawDate ? Date.parse(rawDate) : 0;
+  const withinWindow = Number.isFinite(timestamp)
+    && timestamp > 0
+    && Date.now() - timestamp <= activeWindowMinutes * 60 * 1000;
+  if (status && status !== 'completed') return run.live ? true : withinWindow;
+  if (conclusion) return false;
+  return withinWindow;
+}
+
+async function activeWorkflowForSession(db, campaign, sourceSessionId, workflowFile, config) {
+  const runsPayload = await workflowRunsForSession(db, campaign, sourceSessionId, { workflowRunLimit: 10 });
+  const active = (runsPayload.runs || []).find(run => {
+    const workflow = String(run.workflow || '').toLowerCase();
+    return workflow === String(workflowFile).toLowerCase()
+      && workflowRunLooksActive(run, config.activeWorkflowWindowMinutes);
+  });
+  return {
+    active: Boolean(active),
+    run: active || null,
+    checkedRuns: (runsPayload.runs || []).length,
+    refreshConfigured: runsPayload.configured
+  };
+}
+
+function workflowDispatchUnavailableResult(action) {
+  const status = workflowDispatchStatus();
+  return {
+    ok: true,
+    processed: false,
+    skipped: true,
+    action,
+    reason: status.missingEnv
+      ? `Worker ${action} nao disparado: configure ${status.missingEnv}.`
+      : `Worker ${action} nao disparado: GitHub Actions indisponivel.`,
+    workflowDispatch: status
+  };
+}
+
+async function supervisorDispatchSpeech(db, campaign, sourceSessionId, config) {
+  const action = 'dispatch_speech_slices';
+  if (!config.speechEnabled) return { ok: true, processed: false, skipped: true, action, reason: 'Speech autopilot desativado.' };
+  if (!workflowDispatchStatus().configured) return workflowDispatchUnavailableResult(action);
+  const active = await activeWorkflowForSession(db, campaign, sourceSessionId, PIPELINE_SUPERVISOR_WORKFLOWS.speech, config);
+  if (active.active) return { ok: true, processed: false, skipped: true, action, reason: 'Speech worker ja esta ativo ou foi disparado recentemente.', activeWorkflow: active.run };
+  const inputs = {
+    source_session_id: sourceSessionId,
+    campaign,
+    max_chunks: String(config.speechMaxChunks),
+    max_tracks: String(config.speechMaxTracks),
+    write: 'true',
+    make_compact: 'true',
+    replace: 'false'
+  };
+  if (config.dryRun) return { ok: true, processed: false, dryRun: true, action, plannedInputs: inputs };
+  const dispatch = await dispatchGithubWorkflow(PIPELINE_SUPERVISOR_WORKFLOWS.speech, inputs);
+  await markSpeechWorkflowDispatched(db, campaign, sourceSessionId, dispatch, PIPELINE_SUPERVISOR_ACTOR);
+  await notifyWorkflowDispatch(action, sourceSessionId, dispatch, PIPELINE_SUPERVISOR_ACTOR);
+  return { ok: true, processed: true, dispatched: true, action, sourceSessionId, dispatch };
+}
+
+async function supervisorDispatchTranscription(db, campaign, sourceSessionId, control, config) {
+  const action = 'dispatch_transcription';
+  if (!config.paidEnabled) return { ok: true, processed: false, skipped: true, action, reason: 'Autopilot pago desativado.' };
+  if (!workflowDispatchStatus().configured) return workflowDispatchUnavailableResult(action);
+  const active = await activeWorkflowForSession(db, campaign, sourceSessionId, PIPELINE_SUPERVISOR_WORKFLOWS.transcription, config);
+  if (active.active) return { ok: true, processed: false, skipped: true, action, reason: 'Transcription worker ja esta ativo ou foi disparado recentemente.', activeWorkflow: active.run };
+
+  const minutes = Number(control.metrics?.limitedTranscription?.billable_minutes || 0);
+  const estimatedCostUsd = Number((minutes * config.transcriptionCostUsdPerMinute).toFixed(6));
+  const spentCostUsd = Number(control.metrics?.ledger?.cost || 0);
+  const approvalUsd = Math.max(config.transcriptionApprovalUsd, estimatedCostUsd);
+  if (estimatedCostUsd > config.transcriptionApprovalUsd + 0.000001) {
+    return {
+      ok: true,
+      processed: false,
+      skipped: true,
+      action,
+      reason: `Custo estimado US$ ${estimatedCostUsd.toFixed(6)} acima do teto por lote US$ ${config.transcriptionApprovalUsd.toFixed(6)}.`,
+      estimatedCostUsd,
+      batchCapUsd: config.transcriptionApprovalUsd
+    };
+  }
+  if (spentCostUsd + estimatedCostUsd > config.transcriptionSessionCapUsd + 0.000001) {
+    return {
+      ok: true,
+      processed: false,
+      skipped: true,
+      action,
+      reason: `Custo da sessao ficaria US$ ${(spentCostUsd + estimatedCostUsd).toFixed(6)}, acima do teto US$ ${config.transcriptionSessionCapUsd.toFixed(6)}.`,
+      estimatedCostUsd,
+      spentCostUsd,
+      sessionCapUsd: config.transcriptionSessionCapUsd
+    };
+  }
+  const inputs = {
+    source_session_id: sourceSessionId,
+    campaign,
+    limit: String(config.transcriptionLimit),
+    execute: 'true',
+    transcription_cost_usd_per_minute: String(config.transcriptionCostUsdPerMinute),
+    max_estimated_cost_usd: String(approvalUsd),
+    approve_cost_usd: String(approvalUsd),
+    model: ''
+  };
+  if (config.dryRun) {
+    return {
+      ok: true,
+      processed: false,
+      dryRun: true,
+      action,
+      estimatedCostUsd,
+      billableMinutes: minutes,
+      spentCostUsd,
+      plannedInputs: inputs
+    };
+  }
+  const dispatch = await dispatchGithubWorkflow(PIPELINE_SUPERVISOR_WORKFLOWS.transcription, inputs);
+  await recordWorkflowDispatch(db, campaign, sourceSessionId, 'transcription_workflow_dispatch', inputs, dispatch, PIPELINE_SUPERVISOR_ACTOR);
+  await notifyWorkflowDispatch(action, sourceSessionId, dispatch, PIPELINE_SUPERVISOR_ACTOR, { costUsd: estimatedCostUsd });
+  return {
+    ok: true,
+    processed: true,
+    dispatched: true,
+    action,
+    sourceSessionId,
+    estimatedCostUsd,
+    billableMinutes: minutes,
+    dispatch
+  };
+}
+
+async function supervisorDispatchReview(db, campaign, sourceSessionId, config) {
+  const action = 'dispatch_review_generation';
+  if (!config.paidEnabled || !config.reviewEnabled) return { ok: true, processed: false, skipped: true, action, reason: 'Review IA autopilot desativado.' };
+  if (!workflowDispatchStatus().configured) return workflowDispatchUnavailableResult(action);
+  const active = await activeWorkflowForSession(db, campaign, sourceSessionId, PIPELINE_SUPERVISOR_WORKFLOWS.review, config);
+  if (active.active) return { ok: true, processed: false, skipped: true, action, reason: 'Review worker ja esta ativo ou foi disparado recentemente.', activeWorkflow: active.run };
+  const inputs = {
+    source_session_id: sourceSessionId,
+    campaign,
+    batch_size: String(config.reviewBatchSize),
+    max_batches: String(config.reviewMaxBatches),
+    execute: 'true',
+    model: REVIEW_GENERATION_MODEL,
+    source_run_id: DEFAULT_RUN,
+    skip_publications: 'false'
+  };
+  if (config.dryRun) return { ok: true, processed: false, dryRun: true, action, plannedInputs: inputs };
+  const dispatch = await dispatchGithubWorkflow(PIPELINE_SUPERVISOR_WORKFLOWS.review, inputs);
+  await recordWorkflowDispatch(db, campaign, sourceSessionId, 'review_generation_workflow_dispatch', inputs, dispatch, PIPELINE_SUPERVISOR_ACTOR);
+  await notifyWorkflowDispatch(action, sourceSessionId, dispatch, PIPELINE_SUPERVISOR_ACTOR);
+  return { ok: true, processed: true, dispatched: true, action, sourceSessionId, dispatch };
+}
+
+async function supervisorDispatchCleanup(db, campaign, sourceSessionId, config) {
+  const action = 'dispatch_storage_cleanup';
+  if (!config.cleanupEnabled) return { ok: true, processed: false, skipped: true, action, reason: 'Cleanup autopilot desativado.' };
+  if (!workflowDispatchStatus().configured) return workflowDispatchUnavailableResult(action);
+  const active = await activeWorkflowForSession(db, campaign, sourceSessionId, PIPELINE_SUPERVISOR_WORKFLOWS.cleanup, config);
+  if (active.active) return { ok: true, processed: false, skipped: true, action, reason: 'Cleanup worker ja esta ativo ou foi disparado recentemente.', activeWorkflow: active.run };
+  const inputs = {
+    campaign,
+    source_session_id: sourceSessionId,
+    limit: String(config.cleanupLimit),
+    execute: 'true',
+    confirm: 'DELETE_READY_R2'
+  };
+  if (config.dryRun) return { ok: true, processed: false, dryRun: true, action, plannedInputs: inputs };
+  const dispatch = await dispatchGithubWorkflow(PIPELINE_SUPERVISOR_WORKFLOWS.cleanup, inputs);
+  await recordWorkflowDispatch(db, campaign, sourceSessionId, 'storage_cleanup_workflow_dispatch', inputs, dispatch, PIPELINE_SUPERVISOR_ACTOR);
+  await notifyWorkflowDispatch(action, sourceSessionId, dispatch, PIPELINE_SUPERVISOR_ACTOR);
+  return { ok: true, processed: true, dispatched: true, action, sourceSessionId, dispatch };
+}
+
+async function supervisorAutopilotStage(db, campaign, sourceSessionId, config) {
+  if (!config.enabled) {
+    return { ok: true, processed: false, skipped: true, reason: 'Autopilot desativado por configuracao.' };
+  }
+  let control;
+  try {
+    control = await buildPipelineControlPayload(campaign, sourceSessionId, {
+      limit: config.transcriptionLimit,
+      workflowRunLimit: 10
+    });
+  } catch (error) {
+    return { ok: false, processed: false, skipped: true, reason: error.message || String(error) };
+  }
+
+  const base = {
+    stage: control.stage,
+    title: control.title,
+    detail: control.detail,
+    estimatedBatchCostUsd: control.estimatedBatchCostUsd,
+    pendingTranscription: Number(control.metrics?.workUnits?.total_candidates || 0),
+    pendingReview: Number(control.metrics?.segments?.pending_review || 0),
+    cleanupBytes: Number(control.metrics?.cleanup?.delete_ready_bytes || 0)
+  };
+
+  if (['needs_attention', 'running', 'speech_running', 'speech_failed'].includes(control.stage)) {
+    return { ok: true, processed: false, skipped: true, reason: 'Supervisor aguardando intervencao ou worker ativo.', ...base };
+  }
+  if (control.stage === 'zero_cost_ready') {
+    return { ok: true, processed: false, skipped: true, reason: 'Etapa zero-cost ainda pendente; loop principal cuida desta fase.', ...base };
+  }
+  if (control.stage === 'speech_ready') {
+    return { ...base, ...(await supervisorDispatchSpeech(db, campaign, sourceSessionId, config)) };
+  }
+  if (control.stage === 'transcription_ready') {
+    return { ...base, ...(await supervisorDispatchTranscription(db, campaign, sourceSessionId, control, config)) };
+  }
+  if (control.stage === 'review_generation_ready' || control.stage === 'review_publication_ready') {
+    return { ...base, ...(await supervisorDispatchReview(db, campaign, sourceSessionId, config)) };
+  }
+  if (control.stage === 'cleanup_ready') {
+    return { ...base, ...(await supervisorDispatchCleanup(db, campaign, sourceSessionId, config)) };
+  }
+  return { ok: true, processed: false, skipped: true, reason: 'Nenhuma etapa pendente para autopilot.', ...base };
+}
+
 async function runPipelineSupervisor(req, campaign, query) {
   requireCronAuth(req);
   const db = getPool();
-  const dryRun = ['1', 'true', 'yes'].includes(String(query.get('dryRun') || '').toLowerCase());
+  const dryRun = booleanOption(query, ['dryRun'], [], false);
+  const config = supervisorConfig(query, dryRun);
   const sourceSessionId = cleanText(query.get('sourceSessionId') || '', 180);
-  const maxSessions = normalizeWorkflowLimit(query.get('maxSessions'), 4, 1, 10);
-  const maxRunsPerSession = normalizeWorkflowLimit(query.get('maxRuns'), 2, 1, 6);
-  const maxTracks = normalizePipelineMaxTracks(query.get('maxTracks') || 1);
-  const chunkSeconds = normalizeChunkSeconds(query.get('chunkSeconds') || DEFAULT_CHUNK_SECONDS);
-  const staleMinutes = normalizeWorkflowLimit(query.get('staleMinutes'), 20, 10, 240);
-  const sessions = sourceSessionId ? [sourceSessionId] : await supervisorSessions(db, campaign, maxSessions);
+  const sessions = sourceSessionId ? [sourceSessionId] : await supervisorSessions(db, campaign, config.maxSessions);
   const results = [];
   let processed = 0;
+  let zeroCostProcessed = 0;
+  let workflowsDispatched = 0;
 
   for (const sessionId of sessions) {
-    const item = { sourceSessionId: sessionId, recovery: null, runs: [] };
+    const item = { sourceSessionId: sessionId, recovery: null, runs: [], autopilot: null };
     item.recovery = await recoverStaleJobs(db, campaign, {
       sourceSessionId: sessionId,
       dryRun,
-      staleMinutes,
-      limit: maxRunsPerSession
+      staleMinutes: config.staleMinutes,
+      limit: config.maxRunsPerSession
     });
-    for (let index = 0; index < maxRunsPerSession; index += 1) {
+
+    for (let index = 0; index < config.maxRunsPerSession; index += 1) {
       const nextJob = await selectNextPipelineJob(db, campaign, { sourceSessionId: sessionId, limit: 1 });
       if (!nextJob) break;
       if (dryRun) {
         item.runs.push({ dryRun: true, job: nextJob });
         break;
       }
-      const jobResult = await executeSupervisorJob(req, campaign, nextJob, { maxTracks, chunkSeconds });
-      processed += jobResult?.processed === false ? 0 : 1;
+      const jobResult = await executeSupervisorJob(req, campaign, nextJob, config);
+      const didProcess = jobResult?.processed !== false;
+      if (didProcess) {
+        processed += 1;
+        zeroCostProcessed += 1;
+      }
       item.runs.push({ job: nextJob, result: jobResult });
-      if (!jobResult?.ok) break;
+      if (!jobResult?.ok || didProcess) break;
+    }
+
+    const didZeroCostWork = item.runs.some(run => run.result?.ok && run.result?.processed !== false);
+    if (!didZeroCostWork) {
+      item.autopilot = await supervisorAutopilotStage(db, campaign, sessionId, config);
+      if (item.autopilot?.processed) {
+        processed += 1;
+        if (item.autopilot.dispatched) workflowsDispatched += 1;
+      }
+    } else {
+      item.autopilot = {
+        ok: true,
+        processed: false,
+        skipped: true,
+        reason: 'Supervisor executou etapa zero-cost; proximo ciclo reavalia a etapa seguinte.'
+      };
     }
     results.push(item);
   }
@@ -3708,11 +4091,12 @@ async function runPipelineSupervisor(req, campaign, query) {
     await notifyPipelineOps({
       title: 'Supervisor Craig executado',
       status: 'ok',
-      description: `Supervisor continuou ${processed} etapa(s) zero-cost em ${results.length} sessao(oes).`,
+      description: `Supervisor continuou ${processed} etapa(s) em ${results.length} sessao(oes).`,
       fields: [
         { name: 'campanha', value: campaign, inline: true },
         { name: 'sessoes', value: String(results.length), inline: true },
-        { name: 'etapas', value: String(processed), inline: true }
+        { name: 'zero-cost', value: String(zeroCostProcessed), inline: true },
+        { name: 'workflows', value: String(workflowsDispatched), inline: true }
       ]
     });
   }
@@ -3724,6 +4108,21 @@ async function runPipelineSupervisor(req, campaign, query) {
     campaign,
     checkedAt: new Date().toISOString(),
     processed,
+    zeroCostProcessed,
+    workflowsDispatched,
+    policy: {
+      enabled: config.enabled,
+      paidEnabled: config.paidEnabled,
+      speechEnabled: config.speechEnabled,
+      reviewEnabled: config.reviewEnabled,
+      cleanupEnabled: config.cleanupEnabled,
+      maxSessions: config.maxSessions,
+      maxRunsPerSession: config.maxRunsPerSession,
+      transcriptionLimit: config.transcriptionLimit,
+      transcriptionApprovalUsd: config.transcriptionApprovalUsd,
+      transcriptionSessionCapUsd: config.transcriptionSessionCapUsd,
+      cleanupLimit: config.cleanupLimit
+    },
     sessions: results
   };
 }

@@ -4,9 +4,9 @@ Date: 2026-06-29
 
 ## Goal
 
-Let production make bounded progress on safe Craig ingestion steps without requiring an operator click every time.
+Let production make bounded progress on Craig ingestion, speech slicing, transcription dispatch, review generation and cleanup without requiring an operator click every time.
 
-The supervisor only touches zero-cost pipeline stages and is protected by `CRON_SECRET`.
+The supervisor is protected by `CRON_SECRET` and follows a bounded autopilot policy. Zero-cost stages still run first; paid and destructive stages only run when their configured guardrails allow it.
 
 ## Endpoint
 
@@ -38,15 +38,21 @@ This is intentionally conservative because Vercel Hobby allows at most two cron 
 
 ## What It Does
 
-For non-archived sessions with runnable Craig jobs, the supervisor:
+For non-archived sessions with runnable or pending Craig pipeline work, the supervisor:
 
 1. recovers stale running zero-cost jobs through `recoverStaleJobs`;
 2. selects the next queued/retrying job among:
    - `cloud_ingest_craig`
    - `cloud_extract_craig_tracks`
    - `cloud_plan_audio_chunks`
-3. runs a small bounded number of steps per invocation;
-4. stops before speech slicing, transcription, review generation or cleanup dispatch.
+3. runs a small bounded number of zero-cost steps per invocation;
+4. when no zero-cost step ran in that invocation, inspects the pipeline control state;
+5. dispatches at most one workflow for the next safe stage:
+   - `speech-slices-worker.yml`
+   - `transcription-worker.yml`
+   - `review-generation-worker.yml`
+   - `storage-cleanup-worker.yml`
+6. stops when a stage is running, failed, over budget, missing configuration, or already has an active/recent workflow dispatch.
 
 Default limits:
 
@@ -55,6 +61,14 @@ Default limits:
 - `maxTracks=1` per extraction run
 - `chunkSeconds=600`
 - `staleMinutes=20`
+- `speechMaxChunks=12`
+- `transcriptionLimit=50`
+- `transcriptionApprovalUsd=1`
+- `transcriptionSessionCapUsd=2`
+- `reviewBatchSize=80`
+- `reviewMaxBatches=1`
+- `cleanupLimit=50`
+- `activeWorkflowWindowMinutes=360`
 
 Query overrides are supported for controlled testing:
 
@@ -62,14 +76,24 @@ Query overrides are supported for controlled testing:
 /api/pipeline-supervisor?dryRun=true&sourceSessionId=...&maxRuns=1
 ```
 
+Useful safety toggles:
+
+```text
+paidEnabled=false
+speechEnabled=false
+reviewEnabled=false
+cleanupEnabled=false
+```
+
 ## Safety
 
-- No OpenAI call.
-- No GitHub Actions dispatch.
-- No R2 deletion.
+- Dry-run never calls OpenAI, dispatches GitHub Actions or deletes R2.
+- Real transcription dispatch is capped by batch and session cost.
+- Cleanup dispatch only sends `confirm=DELETE_READY_R2` for objects already marked delete-ready.
+- A workflow is not dispatched again if the same workflow for that session is active or was dispatched recently.
 - No archived sessions.
 - No unauthenticated access.
-- Sends a Discord ops notification only when real zero-cost progress happened.
+- Sends a Discord ops notification when real progress happened.
 
 ## Environment
 
@@ -95,6 +119,6 @@ GET /api/pipeline-supervisor with Bearer CRON_SECRET and dryRun=true -> 200
 
 ## Next steps
 
-1. Add the supervisor state to the monitoring page.
-2. Persist supervisor runs as lightweight audit jobs if daily automation becomes important.
+1. Add a visible autopilot run history card to the upload/pipeline page.
+2. Persist supervisor no-op decisions as lightweight audit jobs if daily automation needs a full paper trail.
 3. Increase schedule only after confirming Vercel plan limits and runtime behavior in production.

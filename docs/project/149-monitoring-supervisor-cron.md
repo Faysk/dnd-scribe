@@ -37,6 +37,7 @@ Deep mode:
 - calls `/api/pipeline-supervisor?dryRun=true&maxSessions=1&maxRuns=1`
 - sends `Authorization: Bearer ${CRON_SECRET}`
 - expects `{ ok: true, mode: "pipeline_supervisor", dryRun: true }`
+- reads the autopilot policy returned by the endpoint
 
 ## Readiness
 
@@ -46,7 +47,7 @@ Readiness now includes:
 Supervisor Craig
 ```
 
-This makes the central admin panel show whether the automatic zero-cost continuation layer is ready.
+This makes the central admin panel show whether the automatic Craig pipeline supervisor is ready.
 
 ## Safety
 
