@@ -2822,6 +2822,7 @@ function renderTimeline() {
 
       ${renderTimelineOverview(data, items)}
       ${renderTimelineQualityPanel(data, items)}
+      ${renderTimelineSourcePanel(data, items)}
       ${renderTimelineAudioDock(selected)}
 
       <section class="timeline-layout">
@@ -3311,6 +3312,96 @@ function renderTimelineQualityPanel(data, items) {
             <span class="label">${escapeHtml(signal.label)}</span>
             <strong>${escapeHtml(signal.value)}</strong>
           </div>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function timelineDateMs(value) {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function timelineSourceSummary(data, items) {
+  const sourceItems = kind => items.filter(item => item.kind === kind);
+  const unsynced = kind => sourceItems(kind).filter(item => item.startMs === null || item.startMs === undefined).length;
+  const latestLabel = kind => {
+    const latest = sourceItems(kind)
+      .map(item => ({
+        item,
+        at: timelineDateMs(item.raw?.createdAtRoll20 || item.raw?.createdAt || item.raw?.metadata?.discord?.createdAt) || Number(item.startMs || 0)
+      }))
+      .filter(entry => Number.isFinite(entry.at) && entry.at > 0)
+      .sort((a, b) => b.at - a.at)[0];
+    if (!latest) return '-';
+    if (latest.item.startMs !== null && latest.item.startMs !== undefined) return fmtDuration(latest.item.startMs);
+    return fmtDateTime(latest.item.raw?.createdAtRoll20 || latest.item.raw?.createdAt || latest.item.raw?.metadata?.discord?.createdAt || '');
+  };
+  const speech = sourceItems('speech');
+  const roll20 = sourceItems('roll20');
+  const discord = sourceItems('discord');
+  const files = data.recordingFiles || [];
+  return [
+    {
+      id: 'audio',
+      label: 'Audio',
+      value: `${speech.length} frases`,
+      detail: files.length ? `${files.length} arquivo(s) rastreados` : 'Sem arquivo de audio rastreado',
+      tone: speech.length ? 'ok' : 'warn',
+      action: 'Ouvir pelo dock quando selecionar uma fala.'
+    },
+    {
+      id: 'roll20',
+      label: 'Roll20',
+      value: `${roll20.length} eventos`,
+      detail: roll20.length ? `Ultimo em ${latestLabel('roll20')}; ${unsynced('roll20')} sem tempo` : 'Aguardando ponte do GM',
+      tone: roll20.length ? 'ok' : 'info',
+      action: 'Use Ponte Roll20 com Captura: DOM direto.'
+    },
+    {
+      id: 'discord',
+      label: 'Discord',
+      value: `${discord.length} mensagens`,
+      detail: discord.length ? `Ultima em ${latestLabel('discord')}; ${unsynced('discord')} sem tempo` : 'Manual ou catch-up diario ainda nao trouxe mensagens',
+      tone: discord.length ? 'ok' : 'warn',
+      action: 'Sincronize manualmente ou aguarde o catch-up diario.'
+    },
+    {
+      id: 'sync',
+      label: 'Sincronia',
+      value: `${items.filter(item => item.startMs !== null && item.startMs !== undefined).length}/${items.length}`,
+      detail: data.session?.startedAt ? `Ancora ${fmtDateTime(data.session.startedAt)}` : 'Defina inicio real da sessao',
+      tone: data.session?.startedAt ? 'ok' : 'warn',
+      action: 'A ancora controla Roll20, Discord e publicacoes.'
+    }
+  ];
+}
+
+function renderTimelineSourcePanel(data, items) {
+  const sources = timelineSourceSummary(data, items);
+  return `
+    <section class="panel timeline-source-panel">
+      <div class="timeline-source-head">
+        <div>
+          <span class="label">Fontes da timeline</span>
+          <h2>Audio, Roll20 e Discord</h2>
+        </div>
+        <div class="actions">
+          <button onclick="state.timeline.filter='all'; render();">Ver tudo</button>
+          <button onclick="state.timeline.filter='discord'; render();">Discord</button>
+          <button onclick="state.timeline.filter='roll20'; render();">Roll20</button>
+        </div>
+      </div>
+      <div class="timeline-source-grid">
+        ${sources.map(source => `
+          <article class="${escapeHtml(source.tone)}">
+            <span class="label">${escapeHtml(source.label)}</span>
+            <strong>${escapeHtml(source.value)}</strong>
+            <small>${escapeHtml(source.detail)}</small>
+            <p>${escapeHtml(source.action)}</p>
+          </article>
         `).join('')}
       </div>
     </section>

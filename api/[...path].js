@@ -2045,6 +2045,193 @@ returning (xmax = 0) inserted;`,
   return result;
 }
 
+async function latestDiscordSyncCursor(db, campaign, sourceSessionId, channelId = '') {
+  return await data(
+    `
+select row_to_json(cursor_row) data
+from (
+  select
+    tn.source_id,
+    coalesce(nullif(tn.metadata #>> '{discord,messageId}', ''), replace(tn.source_id, 'discord-message:', '')) message_id,
+    tn.metadata #>> '{discord,channelId}' channel_id,
+    tn.metadata #>> '{discord,createdAt}' created_at,
+    tn.metadata #>> '{sync,syncedAt}' synced_at
+  from table_notes tn
+  join sessions s on s.id = tn.session_id
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1
+    and s.source_session_id = $2
+    and tn.source_system = 'discord'
+    and tn.source_id like 'discord-message:%'
+    and ($3 = '' or tn.metadata #>> '{discord,channelId}' = $3)
+  order by
+    (tn.metadata #>> '{discord,createdAt}')::timestamptz desc nulls last,
+    replace(tn.source_id, 'discord-message:', '') desc
+  limit 1
+) cursor_row;`,
+    [campaign, sourceSessionId, channelId],
+    db
+  );
+}
+
+async function discordCatchupSessions(db, campaign, options = {}) {
+  const sourceSessionId = cleanText(options.sourceSessionId || '', 180);
+  if (sourceSessionId) return [sourceSessionId];
+  const limit = limitedInteger(options.maxSessions, 3, 1, 8);
+  const lookbackHours = limitedInteger(options.lookbackHours, 48, 1, 24 * 14);
+  const result = await db.query(
+    `
+select s.source_session_id
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1
+  and coalesce(s.status, '') <> 'archived'
+  and nullif(s.source_session_id, '') is not null
+  and s.started_at is not null
+  and (
+    s.ended_at is null
+    or s.ended_at >= now() - ($3::int * interval '1 hour')
+    or s.updated_at >= now() - ($3::int * interval '1 hour')
+  )
+order by coalesce(s.ended_at, s.started_at, s.updated_at) desc
+limit $2::int;`,
+    [campaign, limit, lookbackHours]
+  );
+  return result.rows.map(row => row.source_session_id).filter(Boolean);
+}
+
+function discordCatchupConfig(query, dryRun) {
+  return {
+    dryRun,
+    enabled: booleanOption(query, ['enabled'], ['DND_DISCORD_CATCHUP_ENABLED'], true),
+    channel: cleanText(query.get('channel') || process.env.DND_DISCORD_CATCHUP_CHANNEL || 'dnd', 40) || 'dnd',
+    sourceSessionId: cleanText(query.get('sourceSessionId') || '', 180),
+    limit: numericOption(query, ['limit'], ['DND_DISCORD_CATCHUP_LIMIT'], 50, 1, DISCORD_SYNC_MAX_MESSAGES),
+    maxPages: numericOption(query, ['maxPages'], ['DND_DISCORD_CATCHUP_MAX_PAGES'], 4, 1, DISCORD_SYNC_MAX_PAGES),
+    maxSessions: numericOption(query, ['maxSessions'], ['DND_DISCORD_CATCHUP_MAX_SESSIONS'], 3, 1, 8),
+    lookbackHours: numericOption(query, ['lookbackHours'], ['DND_DISCORD_CATCHUP_LOOKBACK_HOURS'], 48, 1, 24 * 14),
+    forceSessionWindow: booleanOption(query, ['forceSessionWindow', 'fullWindow'], [], false),
+    includeBeforeStart: booleanOption(query, ['includeBeforeStart'], ['DND_DISCORD_CATCHUP_INCLUDE_BEFORE_START'], false),
+    includeAfterEnd: booleanOption(query, ['includeAfterEnd'], ['DND_DISCORD_CATCHUP_INCLUDE_AFTER_END'], false)
+  };
+}
+
+async function runDiscordCatchup(req, campaign, query) {
+  requireCronAuth(req);
+  const db = getPool();
+  const dryRun = booleanOption(query, ['dryRun'], [], false);
+  const config = discordCatchupConfig(query, dryRun);
+  if (!config.enabled) {
+    return {
+      ok: true,
+      mode: 'discord_catchup',
+      dryRun,
+      campaign,
+      processed: 0,
+      skipped: true,
+      reason: 'DND_DISCORD_CATCHUP_ENABLED desativado.'
+    };
+  }
+
+  const channelId = discordChannelIdForTarget(config.channel);
+  const sessions = await discordCatchupSessions(db, campaign, config);
+  const results = [];
+  let persisted = 0;
+  let updated = 0;
+  let fetched = 0;
+  let accepted = 0;
+  let errors = 0;
+
+  for (const sessionId of sessions) {
+    const item = { sourceSessionId: sessionId, cursor: null, result: null, error: null };
+    try {
+      item.cursor = await latestDiscordSyncCursor(db, campaign, sessionId, channelId);
+      const useAfter = !config.forceSessionWindow && item.cursor?.message_id;
+      const body = {
+        sourceSessionId: sessionId,
+        channel: config.channel,
+        channelId,
+        limit: config.limit,
+        maxPages: config.maxPages,
+        syncMode: useAfter ? 'page' : 'session_window',
+        dryRun,
+        visibility: 'dm_review',
+        noteType: 'discord_message',
+        includeBeforeStart: config.includeBeforeStart,
+        includeAfterEnd: config.includeAfterEnd
+      };
+      if (useAfter) body.after = item.cursor.message_id;
+
+      const client = await db.connect();
+      try {
+        await client.query('begin');
+        item.result = await persistDiscordMessages(client, campaign, sessionId, body, {
+          profile: null,
+          campaignRole: 'integration',
+          user: { displayName: 'Discord catch-up' }
+        });
+        await client.query('commit');
+      } catch (error) {
+        await client.query('rollback').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      persisted += Number(item.result?.persisted || 0);
+      updated += Number(item.result?.updated || 0);
+      fetched += Number(item.result?.fetched || 0);
+      accepted += Number(item.result?.accepted || 0);
+    } catch (error) {
+      errors += 1;
+      item.error = error.message || String(error);
+    }
+    results.push(item);
+  }
+
+  if (!dryRun && (persisted > 0 || errors > 0)) {
+    await notifyPipelineOps({
+      title: errors ? 'Discord catch-up com falhas' : 'Discord catch-up sincronizado',
+      status: errors ? 'warning' : 'ok',
+      description: `Discord catch-up processou ${sessions.length} sessao(oes), ${persisted} novas e ${updated} atualizadas.`,
+      fields: [
+        { name: 'campanha', value: campaign, inline: true },
+        { name: 'canal', value: channelId || config.channel, inline: true },
+        { name: 'buscadas', value: String(fetched), inline: true },
+        { name: 'aceitas', value: String(accepted), inline: true },
+        { name: 'erros', value: String(errors), inline: true }
+      ]
+    });
+  }
+
+  return {
+    ok: errors === 0,
+    mode: 'discord_catchup',
+    dryRun,
+    campaign,
+    checkedAt: new Date().toISOString(),
+    channel: config.channel,
+    channelId,
+    sessions: sessions.length,
+    fetched,
+    accepted,
+    persisted,
+    updated,
+    errors,
+    policy: {
+      enabled: config.enabled,
+      limit: config.limit,
+      maxPages: config.maxPages,
+      maxSessions: config.maxSessions,
+      lookbackHours: config.lookbackHours,
+      forceSessionWindow: config.forceSessionWindow,
+      includeBeforeStart: config.includeBeforeStart,
+      includeAfterEnd: config.includeAfterEnd
+    },
+    results
+  };
+}
+
 function httpError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -6844,6 +7031,9 @@ async function handleGet(req, res, path, query) {
   }
   if (path === '/api/pipeline-supervisor' || path === '/api/cron/pipeline-supervisor') {
     return sendJson(res, 200, await runPipelineSupervisor(req, campaign, query));
+  }
+  if (path === '/api/discord/catch-up' || path === '/api/cron/discord-catch-up') {
+    return sendJson(res, 200, await runDiscordCatchup(req, campaign, query));
   }
   if (
     path === '/api/roll20-bridge/config'

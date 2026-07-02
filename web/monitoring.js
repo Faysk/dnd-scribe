@@ -321,11 +321,60 @@
     `;
   }
 
+  function renderStoragePolicyPanel(storageBudget = {}, cleanup = {}) {
+    const policy = storageBudget.policy || {};
+    const cards = [
+      {
+        label: 'Total rastreado',
+        value: bytes(storageBudget.totalBytes || 0),
+        detail: `${num(storageBudget.usagePercent || 0)}% do limite operacional`,
+        tone: storageBudget.status || ''
+      },
+      {
+        label: 'Meta por sessao',
+        value: bytes(policy.sessionRetainedTargetBytes || 0),
+        detail: `media atual ${bytes(storageBudget.averageSessionBytes || 0)}`,
+        tone: Number(storageBudget.averageRetainedTargetPercent || 0) >= 100 ? 'attention' : 'ok'
+      },
+      {
+        label: 'Upload grande',
+        value: bytes(policy.uploadZipWarningBytes || 0),
+        detail: 'aviso antes de aceitar ZIP Craig pesado',
+        tone: 'blue'
+      },
+      {
+        label: 'Limpeza segura',
+        value: bytes(cleanup.deleteReadyBytes || 0),
+        detail: `${num(cleanup.deleteReadyObjects || 0)} objeto(s) delete_ready`,
+        tone: Number(cleanup.deleteReadyObjects || 0) ? 'attention' : 'ok'
+      }
+    ];
+    return `
+      <section class="monitor-storage-policy">
+        <div>
+          <span class="label">Politica de retencao</span>
+          <h2>Guardar o util, remover o bruto</h2>
+          <p>${esc(policy.note || 'ZIP/FLAC/WAV temporario deve sair depois que Opus compacto, manifest, transcript e evidencias estiverem seguros.')}</p>
+        </div>
+        <div class="monitor-storage-policy-grid">
+          ${cards.map(card => `
+            <article class="${tone(card.tone)}">
+              <span class="label">${esc(card.label)}</span>
+              <strong>${esc(card.value)}</strong>
+              <small>${esc(card.detail)}</small>
+            </article>
+          `).join('')}
+        </div>
+      </section>
+    `;
+  }
+
   function renderMonitoringDashboard(data) {
     const sessions = metricById(data, 'sessions');
     const content = metricById(data, 'content');
     const storage = metricById(data, 'storage');
     const roll20Bridge = metricById(data, 'roll20-bridge-events');
+    const discordSync = metricById(data, 'discord-sync');
     const cleanup = metricById(data, 'audio-cleanup');
     const storageBudget = metricById(data, 'storage-budget');
     const audio = metricById(data, 'audio-pipeline');
@@ -358,6 +407,7 @@
           ${summaryMetric(num(content.segments), 'segmentos')}
           ${summaryMetric(num(content.roll20Events), 'eventos Roll20')}
           ${summaryMetric(num(roll20Bridge.total), 'ponte Roll20', Number(roll20Bridge.total || 0) ? 'ok' : 'attention')}
+          ${summaryMetric(num(discordSync.total), 'mensagens Discord', Number(discordSync.total || 0) ? 'ok' : 'attention')}
           ${summaryMetric(bytes(totals.bytes), 'dados em arquivos')}
           ${summaryMetric(storageUsage, 'limite storage', storageBudget.status || '')}
           ${summaryMetric(bytes(storageBudget.averageSessionBytes), 'media/sessao storage', storageBudget.status === 'critical' ? 'critical' : storageAverageTone)}
@@ -369,6 +419,7 @@
         </div>
 
         ${renderReadiness(data.readiness || {})}
+        ${renderStoragePolicyPanel(storageBudget, cleanup)}
 
         <section class="monitor-section">
           <div class="panel-head">

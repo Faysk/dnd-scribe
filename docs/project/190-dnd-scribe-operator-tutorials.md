@@ -186,15 +186,23 @@ explicitly allowed.
 Use for evidence review.
 
 1. Open `Timeline`.
-2. Use filters:
+2. Read `Fontes da timeline` first:
+   - Audio confirms speech/evidence files;
+   - Roll20 confirms table chat, dice and commands;
+   - Discord confirms table chat messages;
+   - Sync confirms how much is anchored to the session clock.
+3. Use filters:
    - all;
    - speech;
    - Roll20;
    - Discord.
-3. Click blocks to inspect the event.
-4. Load audio only when needed.
-5. Copy timeline markers for discussion.
-6. Sync Discord messages when the session window is correct.
+4. Click blocks to inspect the event.
+5. Load audio only when needed.
+6. Copy timeline markers for discussion.
+7. Sync Discord messages when the session window is correct.
+
+Discord can also arrive through the daily production catch-up. Manual sync is
+still useful when the operator wants the messages immediately during review.
 
 Success signs:
 

@@ -167,6 +167,49 @@
   font-size: .86rem;
 }
 
+.monitor-storage-policy {
+  display: grid;
+  grid-template-columns: minmax(220px, .8fr) minmax(0, 1.4fr);
+  gap: 12px;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px;
+}
+
+.monitor-storage-policy p {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.monitor-storage-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.monitor-storage-policy-grid article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0d1219;
+  padding: 10px;
+}
+
+.monitor-storage-policy-grid article.green { border-color: #3f805b; }
+.monitor-storage-policy-grid article.red { border-color: #8f4949; background: #1b1011; }
+.monitor-storage-policy-grid article.orange,
+.monitor-storage-policy-grid article.gold { border-color: #8c713b; background: #1a160d; }
+.monitor-storage-policy-grid article.blue { border-color: #426f97; background: #101822; }
+
+.monitor-storage-policy-grid strong,
+.monitor-storage-policy-grid small {
+  overflow-wrap: anywhere;
+}
+
 .monitor-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, .85fr);
@@ -269,11 +312,16 @@
   .monitor-overview,
   .monitor-triage-grid,
   .monitor-readiness-grid,
+  .monitor-storage-policy-grid,
   .monitor-alert-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .monitor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .monitor-storage-policy {
     grid-template-columns: 1fr;
   }
 }
@@ -291,6 +339,7 @@
   .monitor-overview,
   .monitor-triage-grid,
   .monitor-readiness-grid,
+  .monitor-storage-policy-grid,
   .monitor-alert-grid {
     grid-template-columns: 1fr;
   }

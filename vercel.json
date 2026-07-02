@@ -56,6 +56,10 @@
     {
       "path": "/api/pipeline-supervisor",
       "schedule": "15 4 * * *"
+    },
+    {
+      "path": "/api/cron/discord-catch-up",
+      "schedule": "45 4 * * *"
     }
   ]
 }
