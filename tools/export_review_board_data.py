@@ -409,7 +409,7 @@ def main() -> int:
     parser.add_argument("--env-file", type=Path, default=Path(".env.local"))
     parser.add_argument("--campaign-slug", default="yuhara-main")
     parser.add_argument("--source-session-id", default="craig-AdabEqbzngmT-stage1-full")
-    parser.add_argument("--ai-run-id", default="classify_candidates_v2_gpt-4o")
+    parser.add_argument("--ai-run-id", default="classify_candidates_v2_gpt-5.4-mini")
     parser.add_argument("--out", type=Path, default=Path("data/review_session.generated.js"))
     args = parser.parse_args()
 

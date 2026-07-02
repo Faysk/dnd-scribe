@@ -1,4 +1,4 @@
-const DEFAULT_RUN = 'classify_candidates_v2_gpt-4o';
+const DEFAULT_RUN = 'classify_candidates_v2_gpt-5.4-mini';
 const CRAIG_UPLOAD_POLICY = {
   sessionRetainedTargetBytes: 250 * 1024 * 1024,
   uploadZipWarningBytes: 1200 * 1024 * 1024,

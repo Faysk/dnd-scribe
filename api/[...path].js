@@ -15,7 +15,7 @@ const { recoverStaleJobs } = require('../lib/pipeline-recovery');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
-const DEFAULT_RUN = 'classify_candidates_v2_gpt-4o';
+const DEFAULT_RUN = 'classify_candidates_v2_gpt-5.4-mini';
 const DEFAULT_ACTOR = 'renanyuhara';
 const PROJECT_SCOPE_ID = 'dnd-scribe';
 const CRAIG_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
@@ -44,7 +44,7 @@ const TRANSCRIPTION_PROMPT_VERSION = 'transcribe_v1';
 const DEFAULT_TRANSCRIPTION_LIMIT = 50;
 const DEFAULT_TRANSCRIPTION_COST_USD_PER_MINUTE = Number(process.env.DND_COST_TRANSCRIPTION_AUDIO_MINUTE_USD || 0.003);
 const DEFAULT_TRANSCRIPTION_APPROVAL_USD = 0.08;
-const REVIEW_GENERATION_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4o';
+const REVIEW_GENERATION_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-5.4-mini';
 const DEFAULT_REVIEW_BATCH_SIZE = 80;
 const DEFAULT_REVIEW_MAX_BATCHES = 1;
 const PIPELINE_SUPERVISOR_ACTOR = 'pipeline-supervisor';
