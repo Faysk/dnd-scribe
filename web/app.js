@@ -1351,6 +1351,179 @@ function renderLoreImageCard(image, featured = false) {
   `;
 }
 
+function loreSheetValue(sheet, label) {
+  const target = String(label || '').toLowerCase();
+  return (sheet?.quick || []).find(item => String(item.label || '').toLowerCase() === target)?.value || '';
+}
+
+function loreTableHeaders(rows = [], preferred = []) {
+  const found = new Set();
+  for (const row of rows) {
+    Object.keys(row || {}).forEach(key => found.add(key));
+  }
+  const ordered = preferred.filter(key => found.has(key));
+  return [...ordered, ...[...found].filter(key => !ordered.includes(key))];
+}
+
+function renderLoreDataTable(rows = [], preferredHeaders = []) {
+  if (!rows.length) return '<div class="empty">Sem dados estruturados nesta secao.</div>';
+  const headers = loreTableHeaders(rows, preferredHeaders);
+  return `
+    <div class="lore-data-table-wrap">
+      <table class="lore-data-table">
+        <thead><tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${rows.map(row => `<tr>${headers.map(header => `<td>${escapeHtml(row?.[header] || '')}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderLorePairGrid(items = [], compact = false) {
+  if (!items.length) return '<div class="empty">Sem dados.</div>';
+  return `
+    <div class="lore-pair-grid ${compact ? 'compact' : ''}">
+      ${items.map(item => `
+        <div class="lore-pair">
+          <span>${escapeHtml(item.label || '')}</span>
+          <strong>${escapeHtml(item.value || '')}</strong>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderLoreListGroups(groups = [], limit = 0) {
+  const visible = limit ? groups.slice(0, limit) : groups;
+  if (!visible.length) return '<div class="empty">Sem itens registrados.</div>';
+  return `
+    <div class="lore-list-groups">
+      ${visible.map(group => `
+        <div class="lore-list-group">
+          <h4>${escapeHtml(group.title || 'Grupo')}</h4>
+          <ul>${(group.items || []).map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderDandelionSheet(sheet = {}) {
+  if (!sheet || sheet.missing) {
+    return `
+      <section class="panel lore-section lore-sheet">
+        <div class="panel-head">
+          <h2>Ficha do personagem</h2>
+          ${badge('sem ficha textual', 'red')}
+        </div>
+        <p>A ficha estruturada ainda nao foi encontrada. Os prints podem servir como base para criar ou atualizar o arquivo textual privado.</p>
+      </section>
+    `;
+  }
+  const focusStats = [
+    { label: 'Classe', value: loreSheetValue(sheet, 'Classe') },
+    { label: 'HP', value: loreSheetValue(sheet, 'HP') },
+    { label: 'CA', value: loreSheetValue(sheet, 'CA') },
+    { label: 'Iniciativa', value: loreSheetValue(sheet, 'Iniciativa') },
+    { label: 'Deslocamento', value: loreSheetValue(sheet, 'Deslocamento') },
+    { label: 'Spell DC', value: (sheet.magic?.overview || []).find(item => item.label === 'Spell Save DC')?.value || '' }
+  ].filter(item => item.value);
+  const topSkills = [...(sheet.skills || [])]
+    .sort((a, b) => Number(String(b.Bonus || '').replace(/[^0-9-]/g, '')) - Number(String(a.Bonus || '').replace(/[^0-9-]/g, '')))
+    .slice(0, 6);
+  return `
+    <section class="panel lore-section lore-sheet">
+      <div class="panel-head">
+        <div>
+          <span class="label">ficha viva</span>
+          <h2>Ficha do personagem</h2>
+          <p>Dados organizados a partir da ficha atual. Os prints ficam como fonte de conferencia, mas a consulta principal e esta tela.</p>
+        </div>
+        ${badge(`atualizada ${loreDate(sheet.updatedAt)}`, 'orange')}
+      </div>
+
+      <div class="lore-sheet-summary">
+        <div>
+          <h3>${escapeHtml(loreSheetValue(sheet, 'Personagem') || 'Dandelion')}</h3>
+          <p>${escapeHtml([loreSheetValue(sheet, 'Especie'), loreSheetValue(sheet, 'Background'), loreSheetValue(sheet, 'Tipo de criatura')].filter(Boolean).join(' • '))}</p>
+        </div>
+        ${renderLorePairGrid(focusStats, true)}
+      </div>
+
+      <div class="lore-sheet-layout">
+        <article class="lore-sheet-card wide">
+          <div class="lore-sheet-card-head"><h3>Atributos e saves</h3></div>
+          <div class="lore-ability-grid">
+            ${(sheet.abilities || []).map(row => `
+              <div class="lore-ability">
+                <span>${escapeHtml(row.Atributo || '')}</span>
+                <strong>${escapeHtml(row.Valor || '')}</strong>
+                <small>mod ${escapeHtml(row.Mod || '')} • save ${escapeHtml(row.Save || '')}</small>
+              </div>
+            `).join('')}
+          </div>
+        </article>
+
+        <article class="lore-sheet-card">
+          <div class="lore-sheet-card-head"><h3>Pericias fortes</h3></div>
+          ${renderLoreDataTable(topSkills, ['Pericia', 'Bonus'])}
+        </article>
+
+        <article class="lore-sheet-card">
+          <div class="lore-sheet-card-head"><h3>Passivas e sentidos</h3></div>
+          ${renderLorePairGrid(sheet.senses || [], true)}
+        </article>
+
+        <article class="lore-sheet-card wide">
+          <div class="lore-sheet-card-head"><h3>Magia</h3></div>
+          ${renderLorePairGrid(sheet.magic?.overview || [], true)}
+          ${renderLoreDataTable(sheet.magic?.slots || [], ['Nivel', 'Slots'])}
+          <details>
+            <summary>Ver magias por nivel</summary>
+            ${renderLoreListGroups(sheet.magic?.spells || [])}
+          </details>
+        </article>
+
+        <article class="lore-sheet-card wide">
+          <div class="lore-sheet-card-head"><h3>Acoes e recursos</h3></div>
+          ${renderLoreListGroups(sheet.actions || [])}
+        </article>
+
+        <article class="lore-sheet-card">
+          <div class="lore-sheet-card-head"><h3>Proficiencias</h3></div>
+          ${renderLoreListGroups(sheet.proficiencies || [])}
+        </article>
+
+        <article class="lore-sheet-card">
+          <div class="lore-sheet-card-head"><h3>Features e traits</h3></div>
+          ${renderLoreListGroups(sheet.features || [], 4)}
+        </article>
+
+        <article class="lore-sheet-card wide">
+          <div class="lore-sheet-card-head"><h3>Inventario</h3></div>
+          ${renderLoreDataTable(sheet.inventory?.money || [], ['Moeda', 'Quantidade'])}
+          ${sheet.inventory?.carryNote ? `<p class="lore-sheet-note">${escapeHtml(sheet.inventory.carryNote)}</p>` : ''}
+          <details>
+            <summary>Ver equipamentos e posses</summary>
+            ${renderLoreListGroups(sheet.inventory?.equipment || [])}
+          </details>
+        </article>
+
+        <article class="lore-sheet-card wide">
+          <div class="lore-sheet-card-head"><h3>Leitura de lore</h3></div>
+          <ul class="lore-note-list">${(sheet.loreNotes || []).map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+          <details>
+            <summary>Historico e checklist de atualizacao</summary>
+            ${renderLoreDataTable(sheet.history || [], ['Data', 'Mudanca', 'Fonte'])}
+            <ul class="lore-note-list">${(sheet.checklist || []).map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+          </details>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 function renderDandelionLore() {
   if (!canViewDandelionLore()) return loreGateView();
   if (!state.lore.data && !state.lore.loading && !state.lore.error) {
@@ -1370,7 +1543,7 @@ function renderDandelionLore() {
   window.setTimeout(preloadLoreHero, 0);
   const query = String(state.lore.query || '').trim();
   const group = state.lore.group || 'all';
-  const allDocs = (data.sections || []).flatMap(section => section.docs || []);
+  const allDocs = (data.sections || []).flatMap(section => section.docs || []).filter(doc => doc.id !== 'sheet');
   const filteredDocs = allDocs.filter(doc => (group === 'all' || doc.group === group) && (!query || loreDocMatches(doc, query)));
   const sessions = (data.sessions || []).filter(doc => !query || loreDocMatches(doc, query));
   const heroImage = (data.gallery || []).find(image => image.id === 'dandelion-current') || null;
@@ -1393,7 +1566,7 @@ function renderDandelionLore() {
       <section class="lore-stats">
         ${metric(data.stats?.documents || 0, 'documentos')}
         ${metric(data.stats?.sessions || 0, 'sessoes importadas')}
-        ${metric(data.stats?.images || 0, 'imagens')}
+        ${metric(data.stats?.images || 0, 'referencias visuais')}
         ${metric(data.stats?.words || 0, 'palavras mapeadas')}
       </section>
 
@@ -1412,6 +1585,8 @@ function renderDandelionLore() {
         </div>
       </section>
 
+      ${group === 'all' || group === 'ficha' ? renderDandelionSheet(data.sheet || {}) : ''}
+
       ${group === 'all' || group === 'sessoes' ? `
         <section class="panel lore-section">
           <div class="panel-head">
@@ -1427,8 +1602,8 @@ function renderDandelionLore() {
       ${group === 'all' || group === 'galeria' ? `
         <section class="panel lore-section">
           <div class="panel-head">
-            <h2>Galeria protegida</h2>
-            ${badge(`${data.gallery?.length || 0} imagens`, 'blue')}
+            <h2>Referencias visuais protegidas</h2>
+            ${badge(`${data.gallery?.length || 0} referencias`, 'blue')}
           </div>
           <div class="lore-gallery">
             ${(data.gallery || []).filter(image => image.id !== 'dandelion-current').map(image => renderLoreImageCard(image)).join('')}

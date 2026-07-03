@@ -71,6 +71,7 @@ const DANDELION_LORE_DOCS = [
   { id: 'map', group: 'indice', title: 'Mapa da lore', path: '00_indice/mapa_da_lore.md', tone: 'blue', featured: true },
   { id: 'continuity', group: 'indice', title: 'Canon e continuidade', path: '00_indice/canon_e_continuidade.md', tone: 'gold', featured: false }
 ];
+const DANDELION_SHEET_PATH = '08_fichas/ficha_atual/ficha_atual.md';
 const DANDELION_LORE_IMAGES = [
   { id: 'dandelion-current', title: 'Dandelion atual', path: '06_referencias_visuais/personagens/dandelion_atual.png', group: 'personagem' },
   { id: 'trio-tavern', title: 'Trio na taverna', path: '06_referencias_visuais/cenas/trio_taverna_dandelion_screaky_astel.png', group: 'cena' },
@@ -542,6 +543,148 @@ function loreWordCount(text = '') {
   return String(text).trim().split(/\s+/).filter(Boolean).length;
 }
 
+function markdownCell(value = '') {
+  return cleanText(String(value).replace(/<br\s*\/?>/gi, ' ').replace(/`/g, ''), 500);
+}
+
+function parseMarkdownTableBlock(lines = []) {
+  if (lines.length < 2) return [];
+  const splitRow = line => String(line)
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map(markdownCell);
+  const headers = splitRow(lines[0]).filter(Boolean);
+  if (!headers.length) return [];
+  return lines.slice(2)
+    .filter(line => /^\s*\|/.test(line))
+    .map(line => {
+      const values = splitRow(line);
+      return headers.reduce((row, header, index) => {
+        row[header] = values[index] || '';
+        return row;
+      }, {});
+    })
+    .filter(row => Object.values(row).some(Boolean));
+}
+
+function loreMarkdownTables(text = '') {
+  const tables = [];
+  let block = [];
+  for (const line of String(text).split(/\r?\n/)) {
+    if (/^\s*\|/.test(line)) {
+      block.push(line);
+    } else if (block.length) {
+      const rows = parseMarkdownTableBlock(block);
+      if (rows.length) tables.push(rows);
+      block = [];
+    }
+  }
+  if (block.length) {
+    const rows = parseMarkdownTableBlock(block);
+    if (rows.length) tables.push(rows);
+  }
+  return tables;
+}
+
+function loreMarkdownBullets(text = '') {
+  return String(text)
+    .split(/\r?\n/)
+    .map(line => line.match(/^\s*-\s+(.+)$/)?.[1])
+    .filter(Boolean)
+    .map(item => cleanText(item, 500));
+}
+
+function loreMarkdownSection(text = '', heading = '', level = 2) {
+  const escaped = String(heading).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const hashes = '#'.repeat(level);
+  const match = String(text).match(new RegExp(`^${hashes}\\s+${escaped}\\s*$`, 'im'));
+  if (!match || match.index === undefined) return '';
+  const start = match.index + match[0].length;
+  const next = String(text).slice(start).search(new RegExp(`\\n#{1,${level}}\\s+`, 'm'));
+  return next === -1 ? String(text).slice(start).trim() : String(text).slice(start, start + next).trim();
+}
+
+function loreMarkdownSubsections(text = '') {
+  const source = String(text);
+  const matches = [...source.matchAll(/^###\s+(.+)$/gm)];
+  return matches.map((match, index) => {
+    const start = match.index + match[0].length;
+    const end = matches[index + 1]?.index ?? source.length;
+    return {
+      title: cleanText(match[1], 160),
+      text: source.slice(start, end).trim()
+    };
+  });
+}
+
+function rowsToPairs(rows = [], keyName = 'Campo', valueName = 'Valor') {
+  return rows.map(row => ({
+    label: row[keyName] || Object.values(row)[0] || '',
+    value: row[valueName] || Object.values(row)[1] || ''
+  })).filter(item => item.label || item.value);
+}
+
+function sheetSectionTable(text = '', heading = '', index = 0) {
+  return loreMarkdownTables(loreMarkdownSection(text, heading))[index] || [];
+}
+
+async function dandelionSheetPayload() {
+  const file = await readLoreText(DANDELION_SHEET_PATH);
+  const text = file.text || '';
+  const magicSection = loreMarkdownSection(text, 'Magia');
+  const magicSubsections = loreMarkdownSubsections(magicSection);
+  const actionSection = loreMarkdownSection(text, 'Ataques E Acoes Visiveis');
+  const featureSection = loreMarkdownSection(text, 'Features E Traits');
+  const inventorySection = loreMarkdownSection(text, 'Inventario');
+  const proficiencySection = loreMarkdownSection(text, 'Proficiencias');
+  const buildGroupedLists = sectionText => loreMarkdownSubsections(sectionText).map(section => ({
+    title: section.title,
+    items: loreMarkdownBullets(section.text)
+  })).filter(section => section.items.length);
+  const moneyTables = loreMarkdownTables(inventorySection);
+  const inventorySubsections = loreMarkdownSubsections(inventorySection);
+  const moneyText = inventorySubsections.find(section => section.title.toLowerCase() === 'dinheiro')?.text || '';
+  const carryNote = String(moneyText).split(/\r?\n/).map(line => line.trim()).find(line => /^peso total/i.test(line)) || '';
+  return {
+    title: loreMarkdownTitle(text, 'Ficha atual'),
+    path: DANDELION_SHEET_PATH,
+    source: file.source || null,
+    missing: Boolean(file.missing),
+    updatedAt: file.stat ? file.stat.mtime.toISOString() : (file.updatedAt || null),
+    summary: loreMarkdownSummary(text),
+    words: loreWordCount(text),
+    quick: rowsToPairs(sheetSectionTable(text, 'Resumo Rapido')),
+    abilities: sheetSectionTable(text, 'Atributos'),
+    skills: sheetSectionTable(text, 'Pericias'),
+    senses: rowsToPairs(sheetSectionTable(text, 'Sentidos E Passivas')),
+    defenses: loreMarkdownBullets(loreMarkdownSection(text, 'Defesas')),
+    proficiencies: buildGroupedLists(proficiencySection),
+    magic: {
+      overview: rowsToPairs(loreMarkdownTables(magicSection)[0] || []),
+      slots: (loreMarkdownTables(magicSection)[1] || []).map(row => ({
+        Nivel: row.Nivel || '',
+        Slots: row.Slots || row['Slots no print'] || ''
+      })).filter(row => row.Nivel || row.Slots),
+      spells: magicSubsections
+        .filter(section => !/^slots/i.test(section.title))
+        .map(section => ({ title: section.title, items: loreMarkdownBullets(section.text) }))
+        .filter(section => section.items.length)
+    },
+    actions: buildGroupedLists(actionSection),
+    features: buildGroupedLists(featureSection),
+    inventory: {
+      money: moneyTables[0] || [],
+      carryNote: cleanText(carryNote, 240),
+      equipment: buildGroupedLists(inventorySection).filter(section => !/^dinheiro$/i.test(section.title))
+    },
+    loreNotes: loreMarkdownBullets(loreMarkdownSection(text, 'Relevancia Para Lore')),
+    history: sheetSectionTable(text, 'Historico De Atualizacoes'),
+    checklist: loreMarkdownBullets(loreMarkdownSection(text, 'Checklist Para Atualizar Depois'))
+  };
+}
+
 async function loreDocPayload(definition) {
   const file = await readLoreText(definition.path);
   const text = file.text || '';
@@ -645,14 +788,12 @@ async function listLoreImages(relativeDir, limit = 12) {
 
 async function buildDandelionLorePayload(access) {
   const docs = await Promise.all(DANDELION_LORE_DOCS.map(loreDocPayload));
+  const sheet = await dandelionSheetPayload();
   const sessions = [
     ...(await listLoreMarkdown('03_sessoes/dnd_scribe', 12)),
     ...(await listLoreMarkdown('03_sessoes', 12)).filter(item => !item.path.includes('/dnd_scribe/'))
   ].slice(0, 16);
-  const gallery = [
-    ...DANDELION_LORE_IMAGES,
-    ...(await listLoreImages('08_fichas/ficha_atual/prints', 10))
-  ].map(image => ({
+  const gallery = DANDELION_LORE_IMAGES.map(image => ({
     ...image,
     assetUrl: `/api/lore/asset?file=${encodeURIComponent(image.path)}`
   }));
@@ -700,18 +841,19 @@ async function buildDandelionLorePayload(access) {
       sessions: sessions.length,
       images: gallery.length,
       words: docs.reduce((sum, doc) => sum + Number(doc.words || 0), 0),
-      newestUpdate: newestDoc?.updatedAt || null
+      newestUpdate: newestDoc?.updatedAt || null,
+      sheetUpdated: sheet.updatedAt || null
     },
     highlights: docs.filter(doc => doc.featured && !doc.missing).slice(0, 8),
     sections,
     sessions,
+    sheet,
     gallery
   };
 }
 
 function dandelionAssetAllowed(relativePath) {
-  if (DANDELION_LORE_IMAGES.some(image => image.path === relativePath)) return true;
-  return /^08_fichas\/ficha_atual\/prints\/[^/]+\.(png|jpe?g|webp|gif)$/i.test(relativePath);
+  return DANDELION_LORE_IMAGES.some(image => image.path === relativePath);
 }
 
 function loreAssetContentType(relativePath) {
