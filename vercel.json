@@ -7,6 +7,14 @@
       "destination": "/api/roll20-bridge?roll20BridgeConfig=1"
     },
     {
+      "source": "/api/lore/dandelion",
+      "destination": "/api/lore-dandelion"
+    },
+    {
+      "source": "/api/lore/asset",
+      "destination": "/api/lore-asset"
+    },
+    {
       "source": "/api/roll20/bridge/config",
       "destination": "/api/roll20-bridge?roll20BridgeConfig=1"
     },

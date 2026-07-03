@@ -7413,11 +7413,11 @@ async function handleGet(req, res, path, query) {
   if (path === '/api/auth/me') {
     return sendJson(res, 200, await authMePayload(req, campaign));
   }
-  if (path === '/api/lore/dandelion') {
+  if (path === '/api/lore/dandelion' || path === '/api/lore-dandelion') {
     const access = await requireDandelionLoreAccess(req, campaign);
     return sendJson(res, 200, await buildDandelionLorePayload(access));
   }
-  if (path === '/api/lore/asset') {
+  if (path === '/api/lore/asset' || path === '/api/lore-asset') {
     return await sendDandelionLoreAsset(req, res, campaign, query);
   }
   if (path === '/api/audio-url') {
