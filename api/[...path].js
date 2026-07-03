@@ -54,6 +54,30 @@ const PIPELINE_SUPERVISOR_WORKFLOWS = {
   review: 'review-generation-worker.yml',
   cleanup: 'storage-cleanup-worker.yml'
 };
+const LORE_ROOT = path.join(process.cwd(), 'lore');
+const DANDELION_LORE_OWNER_KEYS = new Set(['dandelion', 'faysk']);
+const DANDELION_LORE_DOCS = [
+  { id: 'bible', group: 'personagem', title: 'Biblia do Dandelion', path: '02_personagens/dandelion/biblia.md', tone: 'gold', featured: true },
+  { id: 'timeline', group: 'campanha', title: 'Timeline principal', path: '01_campanha/timeline.md', tone: 'blue', featured: true },
+  { id: 'euclix-songs', group: 'euclix', title: 'Profecia e cancoes', path: '04_euclix/profecia_e_cancoes_dandelion.md', tone: 'violet', featured: true },
+  { id: 'ivory-plan', group: 'euclix', title: 'Plano contra Ivory', path: '04_euclix/plano_contra_ivory.md', tone: 'red', featured: true },
+  { id: 'song-catalog', group: 'musicas', title: 'Catalogo musical', path: '05_musicas/catalogo_youtube.md', tone: 'green', featured: true },
+  { id: 'song-dialogues', group: 'musicas', title: 'Dialogos para musicas', path: '05_musicas/letras/dialogos_para_musicas_dnd_scribe.md', tone: 'green', featured: false },
+  { id: 'suno-guide', group: 'musicas', title: 'Guia Suno', path: '05_musicas/suno/guia_suno.md', tone: 'green', featured: false },
+  { id: 'sheet', group: 'ficha', title: 'Ficha atual', path: '08_fichas/ficha_atual/ficha_atual.md', tone: 'orange', featured: true },
+  { id: 'canon-review', group: 'revisao', title: 'Revisao de canon', path: '01_campanha/revisao_canon_dnd_scribe.md', tone: 'blue', featured: false },
+  { id: 'signals', group: 'revisao', title: 'Sinais por personagem', path: '02_personagens/sinais_por_personagem_dnd_scribe.md', tone: 'blue', featured: false },
+  { id: 'trio', group: 'relacoes', title: 'Biblia do trio', path: '02_personagens/trio/lore_bible_dandelion_astel_screaky.md', tone: 'violet', featured: true },
+  { id: 'map', group: 'indice', title: 'Mapa da lore', path: '00_indice/mapa_da_lore.md', tone: 'blue', featured: true },
+  { id: 'continuity', group: 'indice', title: 'Canon e continuidade', path: '00_indice/canon_e_continuidade.md', tone: 'gold', featured: false }
+];
+const DANDELION_LORE_IMAGES = [
+  { id: 'dandelion-current', title: 'Dandelion atual', path: '06_referencias_visuais/personagens/dandelion_atual.png', group: 'personagem' },
+  { id: 'trio-tavern', title: 'Trio na taverna', path: '06_referencias_visuais/cenas/trio_taverna_dandelion_screaky_astel.png', group: 'cena' },
+  { id: 'faerun-markers', title: 'Mapa atual com marcadores', path: '06_referencias_visuais/mapas/faerun_mapa_atual_com_marcadores.png', group: 'mapa' },
+  { id: 'refuge-location', title: 'Localizacao atual', path: '06_referencias_visuais/mapas/refugio_localizacao_atual.png', group: 'mapa' },
+  { id: 'suno-workspace', title: 'Workspace Suno', path: '06_referencias_visuais/ferramentas/suno_workspace_baile_dandelion.png', group: 'musica' }
+];
 
 const SESSION_STATUSES = new Set([
   'planned',
@@ -150,6 +174,14 @@ function sendJson(res, status, value) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(value));
+}
+
+function sendBinary(res, status, buffer, contentType, headers = {}) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', contentType || 'application/octet-stream');
+  res.setHeader('Cache-Control', 'private, max-age=120');
+  Object.entries(headers).forEach(([key, value]) => res.setHeader(key, value));
+  res.end(buffer);
 }
 
 function isRoll20BridgePath(pathname) {
@@ -346,6 +378,367 @@ function capabilitiesForRole(role, rbac = null) {
     canManageTechnical: permissions.has('project.rbac.manage'),
     canRunTechnicalJobs: permissions.has('project.jobs.run')
   };
+}
+
+function normalizeIdentityKey(value = '') {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/^@/, '')
+    .replace(/#\d+$/, '')
+    .trim();
+}
+
+function dandelionLoreIdentityKeys(payload = {}) {
+  const profile = payload.profile || {};
+  const user = payload.user || {};
+  const values = [
+    profile.defaultCharacterName,
+    profile.roll20Name,
+    profile.displayName,
+    user.displayName,
+    user.discord?.handle
+  ];
+  return values
+    .flatMap(value => String(value || '').split(/[\s,;/|]+/))
+    .map(normalizeIdentityKey)
+    .filter(Boolean);
+}
+
+function canReadDandelionLorePayload(payload = {}) {
+  if (['owner', 'master'].includes(payload.campaignRole || '')) return true;
+  if (!payload.campaignRole) return false;
+  return dandelionLoreIdentityKeys(payload).some(key => (
+    DANDELION_LORE_OWNER_KEYS.has(key) || key.includes('dandelion')
+  ));
+}
+
+async function requireDandelionLoreAccess(req, campaignSlug) {
+  const payload = await authMePayload(req, campaignSlug);
+  if (!payload.authenticated) throw httpError(401, 'Login Discord ou Google obrigatorio.');
+  if (!canReadDandelionLorePayload(payload)) {
+    throw httpError(403, 'Lore do Dandelion esta restrita ao jogador do personagem e ao DM.');
+  }
+  return payload;
+}
+
+function loreR2Prefix() {
+  const raw = cleanText(process.env.DND_LORE_R2_PREFIX || 'lore/', 500) || 'lore/';
+  return `${raw.replace(/^\/+|\/+$/g, '')}/`;
+}
+
+function loreR2Key(relativePath = '') {
+  return `${loreR2Prefix()}${safeLoreRelativePath(relativePath)}`;
+}
+
+function r2Ready() {
+  const config = r2Config();
+  return Boolean(config.endpoint && config.bucket && config.accessKey && config.secretKey);
+}
+
+function safeLoreRelativePath(relativePath = '') {
+  const clean = String(relativePath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  const normalized = path.normalize(clean).replace(/\\/g, '/');
+  if (!normalized || normalized.startsWith('../') || normalized === '..' || path.isAbsolute(normalized)) {
+    throw httpError(400, 'Caminho de lore invalido.');
+  }
+  return normalized;
+}
+
+function lorePath(relativePath = '') {
+  const clean = safeLoreRelativePath(relativePath);
+  const root = path.resolve(LORE_ROOT);
+  const absolute = path.resolve(root, clean);
+  if (!absolute.startsWith(`${root}${path.sep}`)) throw httpError(400, 'Caminho fora da biblioteca de lore.');
+  return { clean, absolute };
+}
+
+function readLocalLoreText(relativePath) {
+  const target = lorePath(relativePath);
+  if (!fs.existsSync(target.absolute)) return { ...target, missing: true, text: '', stat: null, source: 'local_missing' };
+  const stat = fs.statSync(target.absolute);
+  if (!stat.isFile()) return { ...target, missing: true, text: '', stat: null, source: 'local_missing' };
+  return { ...target, missing: false, text: fs.readFileSync(target.absolute, 'utf8'), stat, source: 'local' };
+}
+
+async function fetchR2ObjectBuffer(relativePath) {
+  if (!r2Ready()) return null;
+  const key = loreR2Key(relativePath);
+  const response = await fetch(createR2SignedUrl(key, 180, r2Config().bucket, 'GET'));
+  if (response.status === 404 || response.status === 403) return null;
+  const body = Buffer.from(await response.arrayBuffer());
+  if (!response.ok) {
+    throw httpError(502, `Falha ao ler lore no R2 (${response.status}) para ${key}: ${body.toString('utf8', 0, 240)}`);
+  }
+  return {
+    key,
+    body,
+    lastModified: response.headers.get('last-modified') || null,
+    contentLength: Number(response.headers.get('content-length') || body.length)
+  };
+}
+
+async function readLoreText(relativePath) {
+  const local = readLocalLoreText(relativePath);
+  if (!local.missing) return local;
+  const remote = await fetchR2ObjectBuffer(relativePath);
+  if (!remote) return local;
+  return {
+    ...local,
+    missing: false,
+    text: remote.body.toString('utf8'),
+    stat: null,
+    source: 'r2',
+    updatedAt: remote.lastModified,
+    sizeBytes: remote.contentLength,
+    r2Key: remote.key
+  };
+}
+
+async function listLoreR2Objects(relativeDir, limit = 40) {
+  if (!r2Ready()) return [];
+  const prefix = loreR2Key(relativeDir || '').replace(/\/?$/, '/');
+  const response = await fetch(createR2SignedUrl('', 120, r2Config().bucket, 'GET', {
+    'list-type': '2',
+    'max-keys': String(Math.max(10, Math.min(1000, limit))),
+    prefix
+  }));
+  const text = await response.text().catch(() => '');
+  if (!response.ok) return [];
+  return parseR2ListObjectsXml(text).contents.map(item => ({
+    ...item,
+    relativePath: item.key.startsWith(loreR2Prefix()) ? item.key.slice(loreR2Prefix().length) : item.key
+  }));
+}
+
+function loreMarkdownTitle(text = '', fallback = '') {
+  const match = String(text).match(/^#\s+(.+)$/m);
+  return cleanText(match?.[1] || fallback, 160);
+}
+
+function loreMarkdownHeadings(text = '') {
+  return String(text)
+    .split(/\r?\n/)
+    .map(line => line.match(/^(#{1,3})\s+(.+)$/))
+    .filter(Boolean)
+    .slice(0, 12)
+    .map(match => ({ level: match[1].length, title: cleanText(match[2], 180) }));
+}
+
+function loreMarkdownSummary(text = '') {
+  const lines = String(text).split(/\r?\n/);
+  let paragraph = '';
+  for (const line of lines) {
+    const clean = line.trim();
+    if (!clean || clean.startsWith('#') || clean.startsWith('- ') || clean.startsWith('>')) continue;
+    paragraph = clean;
+    break;
+  }
+  return cleanText(paragraph || 'Documento de lore sem resumo textual direto.', 420);
+}
+
+function loreWordCount(text = '') {
+  return String(text).trim().split(/\s+/).filter(Boolean).length;
+}
+
+async function loreDocPayload(definition) {
+  const file = await readLoreText(definition.path);
+  const text = file.text || '';
+  return {
+    ...definition,
+    missing: Boolean(file.missing),
+    source: file.source || null,
+    title: loreMarkdownTitle(text, definition.title),
+    summary: loreMarkdownSummary(text),
+    headings: loreMarkdownHeadings(text),
+    words: loreWordCount(text),
+    preview: cleanText(text.replace(/^#\s+.+$/m, '').trim(), 2400),
+    updatedAt: file.stat ? file.stat.mtime.toISOString() : (file.updatedAt || null)
+  };
+}
+
+async function listLoreMarkdown(relativeDir, limit = 40) {
+  const base = lorePath(relativeDir || '.');
+  const rows = [];
+  if (fs.existsSync(base.absolute)) {
+    function walk(dir) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (rows.length >= limit) return;
+        const absolute = path.join(dir, entry.name);
+        const relative = path.relative(LORE_ROOT, absolute).replace(/\\/g, '/');
+        if (entry.isDirectory()) {
+          walk(absolute);
+        } else if (entry.isFile() && /\.md$/i.test(entry.name)) {
+          const text = fs.readFileSync(absolute, 'utf8');
+          const stat = fs.statSync(absolute);
+          rows.push({
+            id: relative.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, ''),
+            path: relative,
+            source: 'local',
+            title: loreMarkdownTitle(text, entry.name.replace(/\.md$/i, '')),
+            summary: loreMarkdownSummary(text),
+            words: loreWordCount(text),
+            updatedAt: stat.mtime.toISOString()
+          });
+        }
+      }
+    }
+    walk(base.absolute);
+  }
+  if (rows.length < limit) {
+    const remote = await listLoreR2Objects(relativeDir, limit);
+    for (const item of remote.filter(row => /\.md$/i.test(row.relativePath))) {
+      if (rows.some(row => row.path === item.relativePath) || rows.length >= limit) continue;
+      const textFile = await readLoreText(item.relativePath);
+      const name = item.relativePath.split('/').pop().replace(/\.md$/i, '');
+      rows.push({
+        id: item.relativePath.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        path: item.relativePath,
+        source: 'r2',
+        title: loreMarkdownTitle(textFile.text, name),
+        summary: loreMarkdownSummary(textFile.text),
+        words: loreWordCount(textFile.text),
+        updatedAt: item.lastModified || textFile.updatedAt || null
+      });
+    }
+  }
+  return rows.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+}
+
+async function listLoreImages(relativeDir, limit = 12) {
+  const base = lorePath(relativeDir || '.');
+  const rows = [];
+  if (fs.existsSync(base.absolute)) {
+    rows.push(...fs.readdirSync(base.absolute, { withFileTypes: true })
+      .filter(entry => entry.isFile() && /\.(png|jpe?g|webp|gif)$/i.test(entry.name))
+      .slice(0, limit)
+      .map(entry => {
+        const relative = path.join(relativeDir, entry.name).replace(/\\/g, '/');
+        const stat = fs.statSync(path.join(base.absolute, entry.name));
+        return {
+          id: relative.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, ''),
+          title: entry.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '),
+          path: relative,
+          group: 'ficha',
+          source: 'local',
+          sizeBytes: stat.size
+        };
+      }));
+  }
+  if (rows.length < limit) {
+    const remote = await listLoreR2Objects(relativeDir, limit);
+    for (const item of remote.filter(row => /\.(png|jpe?g|webp|gif)$/i.test(row.relativePath))) {
+      if (rows.some(row => row.path === item.relativePath) || rows.length >= limit) continue;
+      rows.push({
+        id: item.relativePath.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        title: item.relativePath.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '),
+        path: item.relativePath,
+        group: 'ficha',
+        source: 'r2',
+        sizeBytes: item.sizeBytes || 0
+      });
+    }
+  }
+  return rows;
+}
+
+async function buildDandelionLorePayload(access) {
+  const docs = await Promise.all(DANDELION_LORE_DOCS.map(loreDocPayload));
+  const sessions = [
+    ...(await listLoreMarkdown('03_sessoes/dnd_scribe', 12)),
+    ...(await listLoreMarkdown('03_sessoes', 12)).filter(item => !item.path.includes('/dnd_scribe/'))
+  ].slice(0, 16);
+  const gallery = [
+    ...DANDELION_LORE_IMAGES,
+    ...(await listLoreImages('08_fichas/ficha_atual/prints', 10))
+  ].map(image => ({
+    ...image,
+    assetUrl: `/api/lore/asset?file=${encodeURIComponent(image.path)}`
+  }));
+  const groups = ['indice', 'personagem', 'campanha', 'euclix', 'relacoes', 'musicas', 'ficha', 'revisao'];
+  const sections = groups.map(group => ({
+    id: group,
+    title: {
+      indice: 'Indice e regras',
+      personagem: 'Dandelion',
+      campanha: 'Campanha',
+      euclix: 'Euclix',
+      relacoes: 'Relacoes',
+      musicas: 'Musicas',
+      ficha: 'Ficha',
+      revisao: 'Revisao do banco'
+    }[group] || group,
+    docs: docs.filter(doc => doc.group === group)
+  })).filter(section => section.docs.length);
+  const newestDoc = [...docs, ...sessions]
+    .filter(doc => doc.updatedAt)
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0] || null;
+  return {
+    ok: true,
+    mode: 'dandelion_lore_readonly_v1',
+    scope: 'character:dandelion',
+    storage: {
+      localAvailable: fs.existsSync(LORE_ROOT),
+      r2Ready: r2Ready(),
+      r2Prefix: loreR2Prefix()
+    },
+    access: {
+      campaignRole: access.campaignRole || null,
+      profileId: access.profile?.id || null,
+      viewer: access.profile?.displayName || access.user?.displayName || null
+    },
+    character: {
+      name: 'Dandelion',
+      player: 'faysk',
+      campaign: 'Yuhara',
+      tagline: 'Um bardo que transforma medo de esquecimento em musica, caos e memoria.',
+      privacy: 'Visivel apenas para o jogador do Dandelion e para o DM.'
+    },
+    stats: {
+      documents: docs.filter(doc => !doc.missing).length,
+      sessions: sessions.length,
+      images: gallery.length,
+      words: docs.reduce((sum, doc) => sum + Number(doc.words || 0), 0),
+      newestUpdate: newestDoc?.updatedAt || null
+    },
+    highlights: docs.filter(doc => doc.featured && !doc.missing).slice(0, 8),
+    sections,
+    sessions,
+    gallery
+  };
+}
+
+function dandelionAssetAllowed(relativePath) {
+  if (DANDELION_LORE_IMAGES.some(image => image.path === relativePath)) return true;
+  return /^08_fichas\/ficha_atual\/prints\/[^/]+\.(png|jpe?g|webp|gif)$/i.test(relativePath);
+}
+
+function loreAssetContentType(relativePath) {
+  const ext = path.extname(relativePath).toLowerCase();
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.gif') return 'image/gif';
+  return 'application/octet-stream';
+}
+
+async function sendDandelionLoreAsset(req, res, campaignSlug, query) {
+  await requireDandelionLoreAccess(req, campaignSlug);
+  const relativePath = safeLoreRelativePath(query.get('file') || '');
+  if (!dandelionAssetAllowed(relativePath)) throw httpError(403, 'Asset fora do escopo publico do Dandelion.');
+  const local = readLocalLoreText(relativePath);
+  if (!local.missing) {
+    const stat = fs.statSync(local.absolute);
+    return sendBinary(res, 200, fs.readFileSync(local.absolute), loreAssetContentType(relativePath), {
+      'Content-Length': stat.size
+    });
+  }
+  const remote = await fetchR2ObjectBuffer(relativePath);
+  if (!remote) throw httpError(404, 'Asset de lore nao encontrado.');
+  return sendBinary(res, 200, remote.body, loreAssetContentType(relativePath), {
+    'Content-Length': remote.contentLength
+  });
 }
 
 async function supabaseUserFromRequest(req) {
@@ -7019,6 +7412,13 @@ async function handleGet(req, res, path, query) {
   }
   if (path === '/api/auth/me') {
     return sendJson(res, 200, await authMePayload(req, campaign));
+  }
+  if (path === '/api/lore/dandelion') {
+    const access = await requireDandelionLoreAccess(req, campaign);
+    return sendJson(res, 200, await buildDandelionLorePayload(access));
+  }
+  if (path === '/api/lore/asset') {
+    return await sendDandelionLoreAsset(req, res, campaign, query);
   }
   if (path === '/api/audio-url') {
     await requireCampaignAccess(req, campaign);

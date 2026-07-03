@@ -125,6 +125,15 @@ const state = {
     startSeconds: 0,
     expiresAt: null,
     file: null
+  },
+  lore: {
+    loading: false,
+    error: null,
+    data: null,
+    query: '',
+    group: 'all',
+    assets: {},
+    assetLoading: {}
   }
 };
 
@@ -493,7 +502,9 @@ function syncTabsA11y() {
 
   tabs.forEach(button => {
     const tabName = button.dataset.tab;
-    const selected = tabName === state.tab;
+    const allowed = tabAllowed(tabName);
+    const selected = allowed && tabName === state.tab;
+    button.hidden = !allowed;
     if (!button.id) button.id = `tab-${tabName}`;
     button.type = 'button';
     button.setAttribute('role', 'tab');
@@ -589,6 +600,42 @@ function canSyncDiscordTimeline() {
   return ['owner', 'master', 'reviewer'].includes(state.auth.campaignRole || '');
 }
 
+function normalizeIdentityKey(value = '') {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/^@/, '')
+    .replace(/#\d+$/, '')
+    .trim();
+}
+
+function canViewDandelionLore() {
+  if (['owner', 'master'].includes(state.auth.campaignRole || '')) return true;
+  if (!state.auth.campaignRole) return false;
+  const profile = state.auth.profile || {};
+  const user = state.auth.user || {};
+  const values = [
+    profile.defaultCharacterName,
+    profile.roll20Name,
+    profile.displayName,
+    authDisplayName(user),
+    user.user_metadata?.preferred_username,
+    user.user_metadata?.user_name,
+    user.user_metadata?.username
+  ];
+  const keys = values
+    .flatMap(value => String(value || '').split(/[\s,;/|]+/))
+    .map(normalizeIdentityKey)
+    .filter(Boolean);
+  return keys.some(key => key === 'faysk' || key === 'dandelion' || key.includes('dandelion'));
+}
+
+function tabAllowed(tabName) {
+  if (tabName === 'lore') return canViewDandelionLore();
+  return true;
+}
+
 function resetCampaignData() {
   state.sessions = [];
   state.selectedSourceSessionId = null;
@@ -615,6 +662,15 @@ function resetCampaignData() {
   state.jobs = [];
   state.craigMap = null;
   state.craigMapEditable = false;
+  state.lore = {
+    loading: false,
+    error: null,
+    data: null,
+    query: '',
+    group: 'all',
+    assets: {},
+    assetLoading: {}
+  };
 }
 
 async function loadCampaignData() {
@@ -1147,7 +1203,11 @@ function render() {
     $('#view').innerHTML = authGateView();
     return;
   }
-  if (!state.review && !['sessions', 'upload', 'ops', 'tutorials'].includes(state.tab)) {
+  if (state.tab === 'lore' && !canViewDandelionLore()) {
+    $('#view').innerHTML = loreGateView();
+    return;
+  }
+  if (!state.review && !['sessions', 'upload', 'ops', 'tutorials', 'lore'].includes(state.tab)) {
     $('#view').innerHTML = loadingView();
     return;
   }
@@ -1164,7 +1224,8 @@ function render() {
     roll20: renderRoll20Review,
     publications: renderPublications,
     ops: renderOps,
-    tutorials: renderTutorials
+    tutorials: renderTutorials,
+    lore: renderDandelionLore
   };
   $('#view').innerHTML = (routes[state.tab] || renderReview)();
 }
@@ -1175,6 +1236,215 @@ function loadingView(message = 'Carregando dados reais do Supabase...') {
       <div class="loader-line"></div>
       <h2>${escapeHtml(message)}</h2>
       <p>O backend esta buscando sessao, transcricao, candidatos, publicacoes e resumo operacional.</p>
+    </section>
+  `;
+}
+
+async function loadDandelionLore(force = false) {
+  if (state.lore.loading) return;
+  if (!force && state.lore.data) return;
+  state.lore.loading = true;
+  state.lore.error = null;
+  render();
+  try {
+    const payload = await api('/api/lore/dandelion');
+    state.lore.data = payload;
+    state.lore.error = null;
+  } catch (error) {
+    state.lore.error = error.message;
+  } finally {
+    state.lore.loading = false;
+    render();
+  }
+}
+
+async function loadLoreAsset(filePath) {
+  if (!filePath || state.lore.assets[filePath] || state.lore.assetLoading[filePath]) return;
+  state.lore.assetLoading[filePath] = true;
+  render();
+  try {
+    const response = await fetch(`/api/lore/asset?file=${encodeURIComponent(filePath)}`);
+    if (!response.ok) throw new Error(`Imagem indisponivel (${response.status})`);
+    const blob = await response.blob();
+    state.lore.assets[filePath] = URL.createObjectURL(blob);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    delete state.lore.assetLoading[filePath];
+    render();
+  }
+}
+
+function preloadLoreHero() {
+  const heroPath = state.lore.data?.gallery?.find(item => item.id === 'dandelion-current')?.path;
+  if (heroPath) loadLoreAsset(heroPath);
+}
+
+function loreGateView() {
+  return `
+    <section class="loading-panel auth-gate">
+      <h2>Lore privada do Dandelion</h2>
+      <p>Esta biblioteca e visivel apenas para o jogador do Dandelion e para o DM da campanha.</p>
+      <div class="auth-actions">
+        <button class="primary" onclick="state.tab='sessions'; render();">Voltar</button>
+      </div>
+    </section>
+  `;
+}
+
+function loreDate(value) {
+  if (!value) return 'sem data';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'data invalida';
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function loreGroups(data) {
+  const groups = (data.sections || []).map(section => ({ id: section.id, title: section.title }));
+  return [{ id: 'all', title: 'Tudo' }, ...groups, { id: 'sessoes', title: 'Sessoes' }, { id: 'galeria', title: 'Galeria' }];
+}
+
+function loreDocMatches(doc, query) {
+  const haystack = [doc.title, doc.summary, doc.path, ...(doc.headings || []).map(item => item.title)].join(' ').toLowerCase();
+  return haystack.includes(query.toLowerCase());
+}
+
+function renderLoreDocCard(doc, compact = false) {
+  return `
+    <article class="lore-doc-card ${escapeHtml(doc.tone || '')}">
+      <div class="lore-doc-head">
+        <div>
+          <span class="label">${escapeHtml(doc.group || 'lore')}</span>
+          <h3>${escapeHtml(doc.title || doc.path)}</h3>
+        </div>
+        ${badge(doc.missing ? 'faltando' : `${doc.words || 0} palavras`, doc.missing ? 'red' : (doc.tone || 'blue'))}
+      </div>
+      <p>${escapeHtml(doc.summary || '')}</p>
+      <small>${escapeHtml(doc.path || '')} • atualizado ${escapeHtml(loreDate(doc.updatedAt))}</small>
+      ${compact ? '' : `
+        <details>
+          <summary>Ver estrutura e trecho</summary>
+          ${(doc.headings || []).length ? `<div class="lore-heading-list">${doc.headings.map(item => `<span>${escapeHtml('#'.repeat(item.level))} ${escapeHtml(item.title)}</span>`).join('')}</div>` : ''}
+          <pre>${escapeHtml(doc.preview || '')}</pre>
+        </details>
+      `}
+    </article>
+  `;
+}
+
+function renderLoreImageCard(image, featured = false) {
+  const url = state.lore.assets[image.path];
+  const loading = state.lore.assetLoading[image.path];
+  return `
+    <article class="lore-image-card ${featured ? 'featured' : ''}">
+      <div class="lore-image-frame">
+        ${url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(image.title)}" loading="lazy" />` : `
+          <button class="lore-image-load" onclick="loadLoreAsset('${escapeHtml(image.path)}')">${loading ? 'Carregando...' : 'Carregar imagem'}</button>
+        `}
+      </div>
+      <div>
+        <span class="label">${escapeHtml(image.group || 'imagem')}</span>
+        <strong>${escapeHtml(image.title)}</strong>
+        <small>${escapeHtml(image.path)}</small>
+      </div>
+    </article>
+  `;
+}
+
+function renderDandelionLore() {
+  if (!canViewDandelionLore()) return loreGateView();
+  if (!state.lore.data && !state.lore.loading && !state.lore.error) {
+    window.setTimeout(() => loadDandelionLore(), 0);
+  }
+  if (state.lore.loading && !state.lore.data) return loadingView('Carregando biblioteca de lore do Dandelion...');
+  if (state.lore.error) {
+    return `
+      <section class="loading-panel">
+        <h2>Lore indisponivel</h2>
+        <p>${escapeHtml(state.lore.error)}</p>
+        <div class="actions"><button class="primary" onclick="loadDandelionLore(true)">Tentar novamente</button></div>
+      </section>
+    `;
+  }
+  const data = state.lore.data || {};
+  window.setTimeout(preloadLoreHero, 0);
+  const query = String(state.lore.query || '').trim();
+  const group = state.lore.group || 'all';
+  const allDocs = (data.sections || []).flatMap(section => section.docs || []);
+  const filteredDocs = allDocs.filter(doc => (group === 'all' || doc.group === group) && (!query || loreDocMatches(doc, query)));
+  const sessions = (data.sessions || []).filter(doc => !query || loreDocMatches(doc, query));
+  const heroImage = (data.gallery || []).find(image => image.id === 'dandelion-current') || null;
+  return `
+    <section class="lore-page">
+      <div class="lore-hero panel">
+        <div class="lore-hero-copy">
+          <span class="label">Lore privada</span>
+          <h2>${escapeHtml(data.character?.name || 'Dandelion')}</h2>
+          <p>${escapeHtml(data.character?.tagline || '')}</p>
+          <div class="badges">
+            ${badge('Dandelion + DM', 'gold')}
+            ${badge('somente leitura', 'blue')}
+            ${badge('prod protegido', 'green')}
+          </div>
+        </div>
+        ${heroImage ? renderLoreImageCard(heroImage, true) : ''}
+      </div>
+
+      <section class="lore-stats">
+        ${metric(data.stats?.documents || 0, 'documentos')}
+        ${metric(data.stats?.sessions || 0, 'sessoes importadas')}
+        ${metric(data.stats?.images || 0, 'imagens')}
+        ${metric(data.stats?.words || 0, 'palavras mapeadas')}
+      </section>
+
+      <section class="panel lore-controls">
+        <div>
+          <span class="label">Organizacao</span>
+          <h2>Biblioteca visual do personagem</h2>
+          <p>${escapeHtml(data.character?.privacy || '')}</p>
+        </div>
+        <div class="lore-control-grid">
+          <input value="${escapeHtml(state.lore.query || '')}" placeholder="Buscar lore, sessao, musica, ficha..." oninput="state.lore.query=this.value; render();" />
+          <button onclick="loadDandelionLore(true)">Atualizar</button>
+        </div>
+        <div class="lore-filter-row">
+          ${loreGroups(data).map(item => `<button class="${group === item.id ? 'active' : ''}" onclick="state.lore.group='${escapeHtml(item.id)}'; render();">${escapeHtml(item.title)}</button>`).join('')}
+        </div>
+      </section>
+
+      ${group === 'all' || group === 'sessoes' ? `
+        <section class="panel lore-section">
+          <div class="panel-head">
+            <h2>Sessoes e revisoes recentes</h2>
+            ${badge(`${sessions.length} docs`, 'green')}
+          </div>
+          <div class="lore-doc-grid compact">
+            ${sessions.map(doc => renderLoreDocCard({ ...doc, group: 'sessao', tone: 'green' }, true)).join('') || '<div class="empty">Nenhuma sessao encontrada pelo filtro.</div>'}
+          </div>
+        </section>
+      ` : ''}
+
+      ${group === 'all' || group === 'galeria' ? `
+        <section class="panel lore-section">
+          <div class="panel-head">
+            <h2>Galeria protegida</h2>
+            ${badge(`${data.gallery?.length || 0} imagens`, 'blue')}
+          </div>
+          <div class="lore-gallery">
+            ${(data.gallery || []).filter(image => image.id !== 'dandelion-current').map(image => renderLoreImageCard(image)).join('')}
+          </div>
+        </section>
+      ` : ''}
+
+      <section class="panel lore-section">
+        <div class="panel-head">
+          <h2>Documentos de lore</h2>
+          ${badge(`${filteredDocs.length} visiveis`, 'gold')}
+        </div>
+        <div class="lore-doc-grid">
+          ${filteredDocs.map(doc => renderLoreDocCard(doc)).join('') || '<div class="empty">Nada encontrado nesse filtro.</div>'}
+        </div>
+      </section>
     </section>
   `;
 }
