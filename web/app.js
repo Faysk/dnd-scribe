@@ -19,22 +19,572 @@ const SESSION_STATUSES = [
 
 const DandelionPlaylist = {
   id: 'PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q',
-  firstVideoId: 'lMxL4lXlf7E',
+  firstVideoId: 'V-CjihbMV38',
   title: 'Cancoes do Dandelion',
   owner: 'Dandelion',
-  youtubeUrl: 'https://www.youtube.com/watch?v=lMxL4lXlf7E&list=PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q',
-  embedUrl: 'https://www.youtube.com/embed/videoseries?enablejsapi=1&list=PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q',
-  thumbnailUrl: 'https://i.ytimg.com/vi/lMxL4lXlf7E/hqdefault.jpg',
-  usage: [
-    { label: 'Antes da sessao', detail: 'Ambientar mesa, lembrar tom emocional e aquecer o grupo.' },
-    { label: 'Durante cena', detail: 'Usar quando Dandelion performar, discursar ou puxar clima de revolucao.' },
-    { label: 'Depois da sessao', detail: 'Registrar quais musicas viraram momento canon ou bastidor.' }
+  youtubeUrl: 'https://www.youtube.com/watch?v=V-CjihbMV38&list=PLu1TRjIhrP64RDxyOvUf1OoCtz2mir86q',
+  embedBaseUrl: 'https://www.youtube.com/embed',
+  groups: [
+    { id: 'all', title: 'Todas', detail: '46 faixas', tone: 'blue' },
+    { id: 'tavern', title: 'Taverna e caos', detail: 'bar, palco e festa', tone: 'party' },
+    { id: 'identity', title: 'Dandelionverso', detail: 'retorno e ego heroico', tone: 'hero' },
+    { id: 'astel', title: 'Astel e corvos', detail: 'sombra e juramento', tone: 'dark' },
+    { id: 'euclix', title: 'Euclix e fenix', detail: 'revolucao e profecia', tone: 'epic' }
   ],
-  notes: [
-    'Player usa embed oficial do YouTube em modo discreto para a mesa local.',
-    'Se houver arquivos originais autorizados, o app pode ganhar player de audio nativo depois.',
-    'Letras completas devem continuar no YouTube ou em arquivo autorizado, nao copiadas para o app.'
-  ]
+  tracks: [
+    {
+        "order": 1,
+        "title": "Baile do Dandelion",
+        "duration": "4:53",
+        "videoId": "V-CjihbMV38",
+        "url": "https://www.youtube.com/watch?v=V-CjihbMV38",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "Baile do Dandelion",
+        "version": "base"
+    },
+    {
+        "order": 2,
+        "title": "Eu Voltei",
+        "duration": "6:14",
+        "videoId": "MHU3OajS_Go",
+        "url": "https://www.youtube.com/watch?v=MHU3OajS_Go",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Eu Voltei",
+        "version": "base"
+    },
+    {
+        "order": 3,
+        "title": "Quack Bar",
+        "duration": "6:33",
+        "videoId": "vanF291g3z4",
+        "url": "https://www.youtube.com/watch?v=vanF291g3z4",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "Quack Bar",
+        "version": "base"
+    },
+    {
+        "order": 4,
+        "title": "O Pato Ta no Baile",
+        "duration": "6:02",
+        "videoId": "lMxL4lXlf7E",
+        "url": "https://www.youtube.com/watch?v=lMxL4lXlf7E",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "O Pato Ta no Baile",
+        "version": "base"
+    },
+    {
+        "order": 5,
+        "title": "Quando o Pato Da o Drop",
+        "duration": "5:27",
+        "videoId": "lZwy5YjvogA",
+        "url": "https://www.youtube.com/watch?v=lZwy5YjvogA",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "Quando o Pato Da o Drop",
+        "version": "base"
+    },
+    {
+        "order": 6,
+        "title": "Formas de Dar Ruim",
+        "duration": "5:13",
+        "videoId": "Nz3z4P6AfsE",
+        "url": "https://www.youtube.com/watch?v=Nz3z4P6AfsE",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "Formas de Dar Ruim",
+        "version": "base"
+    },
+    {
+        "order": 7,
+        "title": "Vinho Calado v2",
+        "duration": "5:13",
+        "videoId": "zJW_CCIGZJE",
+        "url": "https://www.youtube.com/watch?v=zJW_CCIGZJE",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "Vinho Calado",
+        "version": "v2"
+    },
+    {
+        "order": 8,
+        "title": "Vinho Calado",
+        "duration": "5:18",
+        "videoId": "J9jSWV35w9s",
+        "url": "https://www.youtube.com/watch?v=J9jSWV35w9s",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "Vinho Calado",
+        "version": "base"
+    },
+    {
+        "order": 9,
+        "title": "O Pato Subiu na Mesa v2",
+        "duration": "4:03",
+        "videoId": "ALnWQdCdHE8",
+        "url": "https://www.youtube.com/watch?v=ALnWQdCdHE8",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "O Pato Subiu na Mesa",
+        "version": "v2"
+    },
+    {
+        "order": 10,
+        "title": "O Pato Subiu na Mesa",
+        "duration": "4:03",
+        "videoId": "6Axe3enM8J0",
+        "url": "https://www.youtube.com/watch?v=6Axe3enM8J0",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "O Pato Subiu na Mesa",
+        "version": "base"
+    },
+    {
+        "order": 11,
+        "title": "Dandelion Multiverso v4",
+        "duration": "2:12",
+        "videoId": "w1NnMnndXi4",
+        "url": "https://www.youtube.com/watch?v=w1NnMnndXi4",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Dandelion Multiverso",
+        "version": "v4"
+    },
+    {
+        "order": 12,
+        "title": "Dandelion Multiverso v3",
+        "duration": "2:41",
+        "videoId": "A0xVRA9AauA",
+        "url": "https://www.youtube.com/watch?v=A0xVRA9AauA",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Dandelion Multiverso",
+        "version": "v3"
+    },
+    {
+        "order": 13,
+        "title": "Dandelion Multiverso v2",
+        "duration": "2:34",
+        "videoId": "ZUmj3kVGhTQ",
+        "url": "https://www.youtube.com/watch?v=ZUmj3kVGhTQ",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Dandelion Multiverso",
+        "version": "v2"
+    },
+    {
+        "order": 14,
+        "title": "Dandelion Impera v2",
+        "duration": "2:44",
+        "videoId": "MvehybT3krI",
+        "url": "https://www.youtube.com/watch?v=MvehybT3krI",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Dandelion Impera",
+        "version": "v2"
+    },
+    {
+        "order": 15,
+        "title": "Dandelion Impera",
+        "duration": "2:49",
+        "videoId": "UbEY_gDgv7Y",
+        "url": "https://www.youtube.com/watch?v=UbEY_gDgv7Y",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Dandelion Impera",
+        "version": "base"
+    },
+    {
+        "order": 16,
+        "title": "Dandelion v2",
+        "duration": "2:17",
+        "videoId": "7_x38rUfwCo",
+        "url": "https://www.youtube.com/watch?v=7_x38rUfwCo",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Dandelion",
+        "version": "v2"
+    },
+    {
+        "order": 17,
+        "title": "Dandelion",
+        "duration": "2:29",
+        "videoId": "pF2T0sNKivc",
+        "url": "https://www.youtube.com/watch?v=pF2T0sNKivc",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Dandelion",
+        "version": "base"
+    },
+    {
+        "order": 18,
+        "title": "Dandelion no Palco v2",
+        "duration": "4:04",
+        "videoId": "r1XBZTRn3HE",
+        "url": "https://www.youtube.com/watch?v=r1XBZTRn3HE",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "Dandelion no Palco",
+        "version": "v2"
+    },
+    {
+        "order": 19,
+        "title": "Dandelion no Palco",
+        "duration": "3:33",
+        "videoId": "C2h8i9CvTTE",
+        "url": "https://www.youtube.com/watch?v=C2h8i9CvTTE",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "Dandelion no Palco",
+        "version": "base"
+    },
+    {
+        "order": 20,
+        "title": "Trofeu Dandelion v2",
+        "duration": "3:17",
+        "videoId": "Rvr5xomXtLA",
+        "url": "https://www.youtube.com/watch?v=Rvr5xomXtLA",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Trofeu Dandelion",
+        "version": "v2"
+    },
+    {
+        "order": 21,
+        "title": "Trofeu Dandelion",
+        "duration": "3:48",
+        "videoId": "nMBMkexy1Mc",
+        "url": "https://www.youtube.com/watch?v=nMBMkexy1Mc",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Trofeu Dandelion",
+        "version": "base"
+    },
+    {
+        "order": 22,
+        "title": "DANDELION DE VERDADE PISEIRO DO MULTIVERSO v4",
+        "duration": "3:05",
+        "videoId": "8LqLjz30Ydk",
+        "url": "https://www.youtube.com/watch?v=8LqLjz30Ydk",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "DANDELION DE VERDADE PISEIRO DO MULTIVERSO",
+        "version": "v4"
+    },
+    {
+        "order": 23,
+        "title": "DANDELION DE VERDADE PISEIRO DO MULTIVERSO v3",
+        "duration": "3:33",
+        "videoId": "cvAlfP3UirE",
+        "url": "https://www.youtube.com/watch?v=cvAlfP3UirE",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "DANDELION DE VERDADE PISEIRO DO MULTIVERSO",
+        "version": "v3"
+    },
+    {
+        "order": 24,
+        "title": "DANDELION DE VERDADE PISEIRO DO MULTIVERSO v2",
+        "duration": "3:25",
+        "videoId": "OK-A5DMnewA",
+        "url": "https://www.youtube.com/watch?v=OK-A5DMnewA",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "DANDELION DE VERDADE PISEIRO DO MULTIVERSO",
+        "version": "v2"
+    },
+    {
+        "order": 25,
+        "title": "DANDELION DE VERDADE PISEIRO DO MULTIVERSO",
+        "duration": "2:54",
+        "videoId": "KsQR4nZXmDo",
+        "url": "https://www.youtube.com/watch?v=KsQR4nZXmDo",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "DANDELION DE VERDADE PISEIRO DO MULTIVERSO",
+        "version": "base"
+    },
+    {
+        "order": 26,
+        "title": "Fogo no Copo v2",
+        "duration": "3:21",
+        "videoId": "Rnyu35qLPnY",
+        "url": "https://www.youtube.com/watch?v=Rnyu35qLPnY",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "Fogo no Copo",
+        "version": "v2"
+    },
+    {
+        "order": 27,
+        "title": "Fogo no Copo",
+        "duration": "2:59",
+        "videoId": "wSF-caI2m-Q",
+        "url": "https://www.youtube.com/watch?v=wSF-caI2m-Q",
+        "category": "tavern",
+        "scene": "taverna, palco e caos",
+        "tone": "party",
+        "family": "Fogo no Copo",
+        "version": "base"
+    },
+    {
+        "order": 28,
+        "title": "Dandelion Multiverso",
+        "duration": "2:53",
+        "videoId": "XmOz-YfQ52E",
+        "url": "https://www.youtube.com/watch?v=XmOz-YfQ52E",
+        "category": "identity",
+        "scene": "identidade, retorno e multiverso",
+        "tone": "hero",
+        "family": "Dandelion Multiverso",
+        "version": "base"
+    },
+    {
+        "order": 29,
+        "title": "O Corvo Que Anda Comigo v4",
+        "duration": "4:49",
+        "videoId": "Sjb9_kToXdY",
+        "url": "https://www.youtube.com/watch?v=Sjb9_kToXdY",
+        "category": "astel",
+        "scene": "sombra, luto e juramento",
+        "tone": "dark",
+        "family": "O Corvo Que Anda Comigo",
+        "version": "v4"
+    },
+    {
+        "order": 30,
+        "title": "Euclix Pena Vermelha",
+        "duration": "5:59",
+        "videoId": "7K0TCKMGoL4",
+        "url": "https://www.youtube.com/watch?v=7K0TCKMGoL4",
+        "category": "euclix",
+        "scene": "revolucao, profecia e climax",
+        "tone": "epic",
+        "family": "Euclix Pena Vermelha",
+        "version": "base"
+    },
+    {
+        "order": 31,
+        "title": "Euclix Pena Vermelha v2",
+        "duration": "5:04",
+        "videoId": "LCP9Cq6rvJg",
+        "url": "https://www.youtube.com/watch?v=LCP9Cq6rvJg",
+        "category": "euclix",
+        "scene": "revolucao, profecia e climax",
+        "tone": "epic",
+        "family": "Euclix Pena Vermelha",
+        "version": "v2"
+    },
+    {
+        "order": 32,
+        "title": "O Corvo Que Anda Comigo",
+        "duration": "4:45",
+        "videoId": "I9z-eiI6ToI",
+        "url": "https://www.youtube.com/watch?v=I9z-eiI6ToI",
+        "category": "astel",
+        "scene": "sombra, luto e juramento",
+        "tone": "dark",
+        "family": "O Corvo Que Anda Comigo",
+        "version": "base"
+    },
+    {
+        "order": 33,
+        "title": "O Corvo Que Anda Comigo v2",
+        "duration": "4:41",
+        "videoId": "3FaN920-1sQ",
+        "url": "https://www.youtube.com/watch?v=3FaN920-1sQ",
+        "category": "astel",
+        "scene": "sombra, luto e juramento",
+        "tone": "dark",
+        "family": "O Corvo Que Anda Comigo",
+        "version": "v2"
+    },
+    {
+        "order": 34,
+        "title": "Quando os Corvos Chamam Meu Nome",
+        "duration": "5:58",
+        "videoId": "-uhQ69VrNXQ",
+        "url": "https://www.youtube.com/watch?v=-uhQ69VrNXQ",
+        "category": "astel",
+        "scene": "sombra, luto e juramento",
+        "tone": "dark",
+        "family": "Quando os Corvos Chamam Meu Nome",
+        "version": "base"
+    },
+    {
+        "order": 35,
+        "title": "Quando os Corvos Chamam Meu Nome v2",
+        "duration": "6:25",
+        "videoId": "dzld3a5niOs",
+        "url": "https://www.youtube.com/watch?v=dzld3a5niOs",
+        "category": "astel",
+        "scene": "sombra, luto e juramento",
+        "tone": "dark",
+        "family": "Quando os Corvos Chamam Meu Nome",
+        "version": "v2"
+    },
+    {
+        "order": 36,
+        "title": "O Corvo Que Anda Comigo v3",
+        "duration": "4:38",
+        "videoId": "K3mEtiCxnyc",
+        "url": "https://www.youtube.com/watch?v=K3mEtiCxnyc",
+        "category": "astel",
+        "scene": "sombra, luto e juramento",
+        "tone": "dark",
+        "family": "O Corvo Que Anda Comigo",
+        "version": "v3"
+    },
+    {
+        "order": 37,
+        "title": "Quando os Corvos Chamam v2",
+        "duration": "4:23",
+        "videoId": "2-jtlB7CWrk",
+        "url": "https://www.youtube.com/watch?v=2-jtlB7CWrk",
+        "category": "astel",
+        "scene": "sombra, luto e juramento",
+        "tone": "dark",
+        "family": "Quando os Corvos Chamam",
+        "version": "v2"
+    },
+    {
+        "order": 38,
+        "title": "Quando os Corvos Chamam",
+        "duration": "4:35",
+        "videoId": "KROxfsCnBlU",
+        "url": "https://www.youtube.com/watch?v=KROxfsCnBlU",
+        "category": "astel",
+        "scene": "sombra, luto e juramento",
+        "tone": "dark",
+        "family": "Quando os Corvos Chamam",
+        "version": "base"
+    },
+    {
+        "order": 39,
+        "title": "A Profecia da Fenix",
+        "duration": "6:07",
+        "videoId": "0OtsI2cNDok",
+        "url": "https://www.youtube.com/watch?v=0OtsI2cNDok",
+        "category": "euclix",
+        "scene": "revolucao, profecia e climax",
+        "tone": "epic",
+        "family": "A Profecia da Fenix",
+        "version": "base"
+    },
+    {
+        "order": 40,
+        "title": "A Rainha de Penas Vermelhas v4",
+        "duration": "6:00",
+        "videoId": "E6Y1318EK1Y",
+        "url": "https://www.youtube.com/watch?v=E6Y1318EK1Y",
+        "category": "euclix",
+        "scene": "revolucao, profecia e climax",
+        "tone": "epic",
+        "family": "A Rainha de Penas Vermelhas",
+        "version": "v4"
+    },
+    {
+        "order": 41,
+        "title": "A Rainha de Penas Vermelhas v3",
+        "duration": "6:23",
+        "videoId": "3LQgvcv1lSI",
+        "url": "https://www.youtube.com/watch?v=3LQgvcv1lSI",
+        "category": "euclix",
+        "scene": "revolucao, profecia e climax",
+        "tone": "epic",
+        "family": "A Rainha de Penas Vermelhas",
+        "version": "v3"
+    },
+    {
+        "order": 42,
+        "title": "A Profecia da Fenix v2",
+        "duration": "5:41",
+        "videoId": "WMGvPQZy0sQ",
+        "url": "https://www.youtube.com/watch?v=WMGvPQZy0sQ",
+        "category": "euclix",
+        "scene": "revolucao, profecia e climax",
+        "tone": "epic",
+        "family": "A Profecia da Fenix",
+        "version": "v2"
+    },
+    {
+        "order": 43,
+        "title": "O Reino Vai Cantar v2",
+        "duration": "5:05",
+        "videoId": "kbSy-sEWFKw",
+        "url": "https://www.youtube.com/watch?v=kbSy-sEWFKw",
+        "category": "euclix",
+        "scene": "revolucao, profecia e climax",
+        "tone": "epic",
+        "family": "O Reino Vai Cantar",
+        "version": "v2"
+    },
+    {
+        "order": 44,
+        "title": "O Reino Vai Cantar",
+        "duration": "5:40",
+        "videoId": "JQ0RmfwcnTM",
+        "url": "https://www.youtube.com/watch?v=JQ0RmfwcnTM",
+        "category": "euclix",
+        "scene": "revolucao, profecia e climax",
+        "tone": "epic",
+        "family": "O Reino Vai Cantar",
+        "version": "base"
+    },
+    {
+        "order": 45,
+        "title": "A Rainha de Penas Vermelhas v2",
+        "duration": "4:42",
+        "videoId": "lCNP97sWebE",
+        "url": "https://www.youtube.com/watch?v=lCNP97sWebE",
+        "category": "euclix",
+        "scene": "revolucao, profecia e climax",
+        "tone": "epic",
+        "family": "A Rainha de Penas Vermelhas",
+        "version": "v2"
+    },
+    {
+        "order": 46,
+        "title": "A Rainha de Penas Vermelhas",
+        "duration": "5:05",
+        "videoId": "2alewb9Yu-g",
+        "url": "https://www.youtube.com/watch?v=2alewb9Yu-g",
+        "category": "euclix",
+        "scene": "revolucao, profecia e climax",
+        "tone": "epic",
+        "family": "A Rainha de Penas Vermelhas",
+        "version": "base"
+    }
+]
 };
 
 const state = {
@@ -114,7 +664,10 @@ const state = {
     expanded: false,
     ready: false,
     playing: false,
-    volume: 70
+    volume: 70,
+    activeIndex: 0,
+    filter: 'all',
+    query: ''
   },
   audio: {
     segmentId: null,
@@ -898,21 +1451,48 @@ async function signOutAuth() {
 }
 
 function initMusicDock() {
+  const preferred = DandelionPlaylist.tracks.findIndex(track => track.videoId === DandelionPlaylist.firstVideoId);
+  state.music.activeIndex = preferred >= 0 ? preferred : 0;
   renderMusicDock();
   state.music.ready = true;
+}
+
+function musicActiveTrack() {
+  return DandelionPlaylist.tracks[state.music.activeIndex] || DandelionPlaylist.tracks[0];
+}
+
+function musicGroupMeta(id) {
+  return DandelionPlaylist.groups.find(group => group.id === id) || DandelionPlaylist.groups[0];
+}
+
+function musicTrackMatches(track, query) {
+  if (!query) return true;
+  const haystack = [track.title, track.family, track.scene, track.category, track.version].join(' ').toLowerCase();
+  return haystack.includes(query.toLowerCase());
+}
+
+function musicVisibleTracks() {
+  const filter = state.music.filter || 'all';
+  const query = String(state.music.query || '').trim();
+  return DandelionPlaylist.tracks.filter(track => (filter === 'all' || track.category === filter) && musicTrackMatches(track, query));
 }
 
 function renderMusicDock() {
   const dock = $('#musicDock');
   if (!dock) return;
+  const active = musicActiveTrack();
   dock.className = `music-dock ${state.music.expanded ? 'expanded' : 'collapsed'}`;
   if (dock.dataset.rendered === 'true') {
     const play = document.getElementById('musicPlayBtn');
     const volume = document.getElementById('musicVolumeLabel');
     const expand = document.getElementById('musicExpandBtn');
-    if (play) play.textContent = state.music.playing ? '⏸' : '▶';
+    const title = document.getElementById('musicDockActiveTitle');
+    const meta = document.getElementById('musicDockActiveMeta');
+    if (play) play.textContent = state.music.playing ? 'Pause' : 'Play';
     if (volume) volume.textContent = `${state.music.volume}%`;
     if (expand) expand.textContent = state.music.expanded ? 'Ocultar' : 'Playlist';
+    if (title) title.textContent = active?.title || DandelionPlaylist.owner;
+    if (meta) meta.textContent = active ? `#${active.order} - ${active.duration}` : DandelionPlaylist.title;
     updateMusicPanel();
     return;
   }
@@ -920,13 +1500,14 @@ function renderMusicDock() {
     <div class="music-dock-main">
       <div class="music-dock-title">
         <span class="label">Palco</span>
-        <strong>${escapeHtml(DandelionPlaylist.owner)}</strong>
+        <strong id="musicDockActiveTitle">${escapeHtml(active?.title || DandelionPlaylist.owner)}</strong>
+        <small id="musicDockActiveMeta">${active ? `#${active.order} - ${active.duration}` : escapeHtml(DandelionPlaylist.title)}</small>
       </div>
       <div class="music-dock-controls">
-        <button title="Voltar" onclick="musicPrevious()">⏮</button>
-        <button id="musicPlayBtn" class="primary" title="Play/Pause" onclick="musicToggle()">${state.music.playing ? '⏸' : '▶'}</button>
-        <button title="Proxima" onclick="musicNext()">⏭</button>
-        <button title="Baixar volume" onclick="musicVolume(-10)">−</button>
+        <button title="Voltar" onclick="musicPrevious()">Prev</button>
+        <button id="musicPlayBtn" class="primary" title="Play/Pause" onclick="musicToggle()">${state.music.playing ? 'Pause' : 'Play'}</button>
+        <button title="Proxima" onclick="musicNext()">Next</button>
+        <button title="Baixar volume" onclick="musicVolume(-10)">-</button>
         <span id="musicVolumeLabel">${state.music.volume}%</span>
         <button title="Subir volume" onclick="musicVolume(10)">+</button>
         <button id="musicExpandBtn" title="Exibir playlist" onclick="musicToggleExpanded()">${state.music.expanded ? 'Ocultar' : 'Playlist'}</button>
@@ -939,6 +1520,40 @@ function renderMusicDock() {
   updateMusicPanel();
 }
 
+function renderMusicFilterButton(group) {
+  const count = group.id === 'all'
+    ? DandelionPlaylist.tracks.length
+    : DandelionPlaylist.tracks.filter(track => track.category === group.id).length;
+  return `
+    <button class="music-filter ${state.music.filter === group.id ? 'active' : ''} ${escapeHtml(group.tone || '')}" onclick="musicSetFilter('${escapeHtml(group.id)}')">
+      <strong>${escapeHtml(group.title)}</strong>
+      <small>${count} faixas</small>
+    </button>
+  `;
+}
+
+function renderMusicTrackCard(track) {
+  const index = DandelionPlaylist.tracks.indexOf(track);
+  const active = index === state.music.activeIndex;
+  const group = musicGroupMeta(track.category);
+  return `
+    <article class="music-track-card ${active ? 'active' : ''} ${escapeHtml(track.tone || '')}">
+      <button class="music-track-main" onclick="musicPlayTrack(${index})">
+        <span class="music-track-number">${String(track.order).padStart(2, '0')}</span>
+        <span class="music-track-copy">
+          <strong>${escapeHtml(track.title)}</strong>
+          <small>${escapeHtml(group.title)} - ${escapeHtml(track.scene)}</small>
+        </span>
+        <span class="music-track-duration">${escapeHtml(track.duration)}</span>
+      </button>
+      <div class="music-track-actions">
+        ${badge(track.version === 'base' ? 'base' : track.version, track.version === 'base' ? 'blue' : 'gold')}
+        <a href="${escapeHtml(track.url)}" target="_blank" rel="noreferrer">YouTube</a>
+      </div>
+    </article>
+  `;
+}
+
 function updateMusicPanel() {
   const panel = document.getElementById('musicDockPanel');
   if (!panel) return;
@@ -946,26 +1561,63 @@ function updateMusicPanel() {
     panel.innerHTML = '';
     return;
   }
+  const active = musicActiveTrack();
+  const visible = musicVisibleTracks();
+  const grouped = DandelionPlaylist.groups
+    .filter(group => group.id !== 'all')
+    .map(group => ({ ...group, tracks: visible.filter(track => track.category === group.id) }))
+    .filter(group => group.tracks.length);
   panel.innerHTML = `
     <div class="music-dock-playlist">
-      <strong>${escapeHtml(DandelionPlaylist.title)}</strong>
-      <p>Playlist publica criada pelo Dandelion para usar como clima de mesa. O player fica pequeno; a tela do video nao ocupa o app.</p>
-      <div class="music-dock-links">
-        <a class="button-link" href="${escapeHtml(DandelionPlaylist.youtubeUrl)}" target="_blank" rel="noreferrer">Abrir playlist</a>
-        <button onclick="copyText('${escapeHtml(DandelionPlaylist.youtubeUrl)}', 'Link da playlist copiado.')">Copiar link</button>
+      <div class="music-panel-head">
+        <div>
+          <span class="label">${escapeHtml(DandelionPlaylist.title)}</span>
+          <h2>${escapeHtml(active?.title || DandelionPlaylist.owner)}</h2>
+          <p>${escapeHtml(active ? musicGroupMeta(active.category).detail : 'biblioteca de mesa')}</p>
+        </div>
+        <div class="music-panel-actions">
+          <a class="button-link" href="${escapeHtml(DandelionPlaylist.youtubeUrl)}" target="_blank" rel="noreferrer">Abrir playlist</a>
+          <button onclick="copyText('${escapeHtml(DandelionPlaylist.youtubeUrl)}', 'Link da playlist copiado.')">Copiar link</button>
+        </div>
+      </div>
+      <div class="music-filter-grid">
+        ${DandelionPlaylist.groups.map(renderMusicFilterButton).join('')}
+      </div>
+      <div class="music-search-row">
+        <input value="${escapeHtml(state.music.query || '')}" placeholder="Buscar faixa, arco ou clima..." oninput="musicSetQuery(this.value)" />
+        <span>${visible.length}/${DandelionPlaylist.tracks.length}</span>
+      </div>
+      <div class="music-track-sections">
+        ${grouped.map(group => `
+          <section class="music-track-section ${escapeHtml(group.tone || '')}">
+            <div class="music-section-title">
+              <strong>${escapeHtml(group.title)}</strong>
+              <small>${escapeHtml(group.detail)}</small>
+            </div>
+            <div class="music-track-list">
+              ${group.tracks.map(renderMusicTrackCard).join('')}
+            </div>
+          </section>
+        `).join('') || '<div class="empty">Nenhuma faixa encontrada.</div>'}
       </div>
     </div>
   `;
+}
+
+function musicEmbedUrl(track = musicActiveTrack()) {
+  const videoId = encodeURIComponent(track?.videoId || DandelionPlaylist.firstVideoId);
+  return `${DandelionPlaylist.embedBaseUrl}/${videoId}?enablejsapi=1&autoplay=1&list=${encodeURIComponent(DandelionPlaylist.id)}&origin=${encodeURIComponent(location.origin)}`;
 }
 
 function ensureMusicFrame() {
   const frame = document.getElementById('musicPlayerFrame');
   if (!frame) return false;
   if (frame.querySelector('iframe')) return true;
+  const active = musicActiveTrack();
   frame.innerHTML = `
     <iframe
-      src="${escapeHtml(DandelionPlaylist.embedUrl)}&autoplay=1&origin=${encodeURIComponent(location.origin)}"
-      title="${escapeHtml(DandelionPlaylist.title)}"
+      src="${escapeHtml(musicEmbedUrl(active))}"
+      title="${escapeHtml(active?.title || DandelionPlaylist.title)}"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
       referrerpolicy="strict-origin-when-cross-origin"
       allowfullscreen></iframe>
@@ -989,16 +1641,31 @@ function musicToggle() {
   renderMusicDock();
 }
 
-function musicNext() {
+function musicPlayTrack(index) {
+  if (!DandelionPlaylist.tracks[index]) return;
+  state.music.activeIndex = index;
   const frameExisted = ensureMusicFrame();
-  if (frameExisted) musicCommand('nextVideo');
-  else window.setTimeout(() => musicCommand('nextVideo'), 900);
+  state.music.playing = true;
+  if (frameExisted) {
+    musicCommand('loadVideoById', [DandelionPlaylist.tracks[index].videoId]);
+    window.setTimeout(() => musicCommand('setVolume', [state.music.volume]), 300);
+  } else {
+    window.setTimeout(() => {
+      musicCommand('setVolume', [state.music.volume]);
+      musicCommand('playVideo');
+    }, 900);
+  }
+  renderMusicDock();
+}
+
+function musicNext() {
+  const next = (state.music.activeIndex + 1) % DandelionPlaylist.tracks.length;
+  musicPlayTrack(next);
 }
 
 function musicPrevious() {
-  const frameExisted = ensureMusicFrame();
-  if (frameExisted) musicCommand('previousVideo');
-  else window.setTimeout(() => musicCommand('previousVideo'), 900);
+  const previous = (state.music.activeIndex - 1 + DandelionPlaylist.tracks.length) % DandelionPlaylist.tracks.length;
+  musicPlayTrack(previous);
 }
 
 function musicVolume(delta) {
@@ -1010,6 +1677,16 @@ function musicVolume(delta) {
 function musicToggleExpanded() {
   state.music.expanded = !state.music.expanded;
   renderMusicDock();
+}
+
+function musicSetFilter(filter) {
+  state.music.filter = filter || 'all';
+  updateMusicPanel();
+}
+
+function musicSetQuery(query) {
+  state.music.query = query || '';
+  updateMusicPanel();
 }
 
 function musicCommand(func, args = []) {
