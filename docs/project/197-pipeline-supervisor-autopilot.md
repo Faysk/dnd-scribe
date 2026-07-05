@@ -70,7 +70,7 @@ transcriptionSessionCapUsd=2
 requirePaidApproval=true
 reviewBatchSize=80
 reviewMaxBatches=1
-cleanupLimit=50
+cleanupLimit=100
 activeWorkflowWindowMinutes=360
 ```
 

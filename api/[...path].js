@@ -4447,7 +4447,7 @@ function supervisorConfig(query, dryRun) {
     ),
     reviewBatchSize: numericOption(query, ['reviewBatchSize', 'batchSize'], ['PIPELINE_AUTOPILOT_REVIEW_BATCH_SIZE'], DEFAULT_REVIEW_BATCH_SIZE, 1, 200),
     reviewMaxBatches: numericOption(query, ['reviewMaxBatches', 'maxBatches'], ['PIPELINE_AUTOPILOT_REVIEW_MAX_BATCHES'], DEFAULT_REVIEW_MAX_BATCHES, 1, 20),
-    cleanupLimit: numericOption(query, ['cleanupLimit'], ['PIPELINE_AUTOPILOT_CLEANUP_LIMIT'], 50, 1, 100),
+    cleanupLimit: numericOption(query, ['cleanupLimit'], ['PIPELINE_AUTOPILOT_CLEANUP_LIMIT'], 100, 1, 100),
     activeWorkflowWindowMinutes: numericOption(
       query,
       ['activeWorkflowWindowMinutes'],
