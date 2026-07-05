@@ -4393,6 +4393,11 @@ function moneyOption(query, queryNames, envNames, fallback, min = 0, max = 100) 
   return numericOption(query, queryNames, envNames, fallback, min, max, false);
 }
 
+function normalizeWorkflowRunId(value) {
+  const clean = cleanText(value || '', 80).replace(/[^\d]/g, '');
+  return clean || '';
+}
+
 function supervisorConfig(query, dryRun) {
   return {
     dryRun,
@@ -4450,7 +4455,9 @@ function supervisorConfig(query, dryRun) {
       360,
       15,
       1440
-    )
+    ),
+    callbackWorkflow: cleanText(optionValue(query, ['callbackWorkflow'], []) || '', 160),
+    callbackRunId: normalizeWorkflowRunId(optionValue(query, ['callbackRunId', 'callbackRunID'], []) || '')
   };
 }
 
@@ -4550,9 +4557,30 @@ function workflowRunLooksActive(run, activeWindowMinutes) {
   return withinWindow;
 }
 
+function workflowRunMatchesSupervisorCallback(run, config) {
+  const callbackRunId = normalizeWorkflowRunId(config.callbackRunId || '');
+  if (!callbackRunId) return false;
+  const runId = normalizeWorkflowRunId(run.runId || run.id || '');
+  if (!runId || runId !== callbackRunId) return false;
+
+  const callbackWorkflow = String(config.callbackWorkflow || '').trim().toLowerCase();
+  if (!callbackWorkflow) return true;
+  const workflowNames = [
+    run.workflow,
+    run.name,
+    run.jobType
+  ].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
+  return workflowNames.includes(callbackWorkflow);
+}
+
 async function activeWorkflowForSession(db, campaign, sourceSessionId, workflowFile, config) {
   const runsPayload = await workflowRunsForSession(db, campaign, sourceSessionId, { workflowRunLimit: 10 });
+  let ignoredCallbackRun = null;
   const active = (runsPayload.runs || []).find(run => {
+    if (workflowRunMatchesSupervisorCallback(run, config)) {
+      ignoredCallbackRun = run;
+      return false;
+    }
     const workflow = String(run.workflow || '').toLowerCase();
     return workflow === String(workflowFile).toLowerCase()
       && workflowRunLooksActive(run, config.activeWorkflowWindowMinutes);
@@ -4560,6 +4588,7 @@ async function activeWorkflowForSession(db, campaign, sourceSessionId, workflowF
   return {
     active: Boolean(active),
     run: active || null,
+    ignoredCallbackRun,
     checkedRuns: (runsPayload.runs || []).length,
     refreshConfigured: runsPayload.configured
   };

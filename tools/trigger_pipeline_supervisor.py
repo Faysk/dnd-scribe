@@ -68,6 +68,10 @@ def request_supervisor(args: argparse.Namespace) -> dict:
         query["paidEnabled"] = "true" if args.paid_enabled else "false"
     if args.cleanup_enabled is not None:
         query["cleanupEnabled"] = "true" if args.cleanup_enabled else "false"
+    if args.callback_workflow:
+        query["callbackWorkflow"] = args.callback_workflow
+    if args.callback_run_id:
+        query["callbackRunId"] = args.callback_run_id
 
     url = f"{base_url}/api/pipeline-supervisor?{urllib.parse.urlencode(query)}"
     request = urllib.request.Request(url, headers={"Authorization": f"Bearer {secret}"})
@@ -90,6 +94,8 @@ def main() -> int:
     parser.add_argument("--approve-autopilot-paid", action="store_true")
     parser.add_argument("--paid-enabled", type=parse_bool, default=None)
     parser.add_argument("--cleanup-enabled", type=parse_bool, default=None)
+    parser.add_argument("--callback-workflow", default="")
+    parser.add_argument("--callback-run-id", default="")
     args = parser.parse_args()
 
     last_error = None

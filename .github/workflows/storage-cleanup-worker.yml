@@ -107,7 +107,9 @@ jobs:
             --source-session-id "${{ github.event.inputs.source_session_id }}" \
             --campaign "${{ github.event.inputs.campaign }}" \
             --site-url "https://dnd.faysk.dev" \
-            --max-runs 1
+            --max-runs 1 \
+            --callback-workflow "${{ github.workflow }}" \
+            --callback-run-id "${{ github.run_id }}"
 
       - name: Upload worker log
         if: always()
