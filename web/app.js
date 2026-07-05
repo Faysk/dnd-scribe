@@ -2705,6 +2705,7 @@ function renderUploadJobsCard() {
   const sourceSessionId = ingestSourceSessionId();
   const runnable = jobs.find(job => ['cloud_ingest_craig', 'cloud_extract_craig_tracks', 'cloud_plan_audio_chunks'].includes(job.type) && ['queued', 'retrying'].includes(job.status));
   const blocked = jobs.find(job => job.type === 'cloud_detect_speech_slices' && ['queued', 'retrying', 'running', 'failed'].includes(job.status));
+  const running = jobs.find(job => job.status === 'running');
   return `
     <section class="panel">
       <div class="panel-head">
@@ -2715,14 +2716,13 @@ function renderUploadJobsCard() {
         ${window.renderPipelineControl ? window.renderPipelineControl('upload') : ''}
         <div class="pipeline-control upload-pipeline-control">
           <div>
-            <span class="label">Continuacao zero-cost</span>
-            <strong>${escapeHtml(runnable ? `Proxima: ${runnable.type}` : blocked ? 'Aguardando worker de fala' : 'Sem etapa pendente')}</strong>
-            <small>${escapeHtml(sourceSessionId || 'Selecione ou envie um ZIP Craig para acompanhar a esteira.')}</small>
+            <span class="label">Autopilot</span>
+            <strong>${escapeHtml(running ? `Rodando: ${running.type}` : runnable ? `Na fila: ${runnable.type}` : blocked ? 'Worker de fala/transcricao ativo' : 'Sem etapa pendente')}</strong>
+            <small>${escapeHtml(sourceSessionId ? 'A esteira continua por supervisor e GitHub Actions; esta tela apenas acompanha.' : 'Selecione ou envie um ZIP Craig para acompanhar a esteira.')}</small>
           </div>
           <div class="job-actions">
-            <label class="inline-job-limit"><span class="label">Faixas/vez</span><input id="pipelineMaxTracks" type="number" min="1" max="3" value="1" /></label>
-            <button onclick="continueUploadPipeline(true)" ${sourceSessionId ? '' : 'disabled'}>Simular</button>
-            <button class="primary" onclick="continueUploadPipeline(false)" ${runnable ? '' : 'disabled'}>Continuar</button>
+            <button onclick="loadJobs(true)">Atualizar</button>
+            <button onclick="openOperations()" ${sourceSessionId ? '' : 'disabled'}>Operacao</button>
           </div>
         </div>
         ${jobs.length ? `<div class="job-list">${jobs.map(renderUploadJobRow).join('')}</div>` : `<div class="empty">Sem jobs para esta sessao ainda.</div>`}
@@ -3032,9 +3032,9 @@ function renderUploadNextActionPanel(upload, fileName, recordingId) {
     action = 'Tentar novamente no job falho ou descartar apenas se for um upload incorreto.';
   } else if (runnable) {
     tone = 'blue';
-    title = `Proxima etapa: ${runnable.type}`;
-    detail = 'Esta etapa ainda e zero-cost e pode ser simulada antes de executar.';
-    action = 'Simular ou continuar pipeline; acompanhe o resultado na lista de jobs.';
+    title = `Autopilot em fila: ${runnable.type}`;
+    detail = 'O supervisor de producao deve executar esta etapa sem acao manual.';
+    action = 'Acompanhar jobs; se ficar parado alem do tempo esperado, use Operacao para recuperar.';
   } else if (running) {
     tone = 'orange';
     title = `Rodando: ${running.type}`;
@@ -3061,13 +3061,10 @@ function renderUploadNextActionPanel(upload, fileName, recordingId) {
   if (fileName && !state.ingest.busy && !state.ingest.result && sizeAssessment?.level !== 'critical') {
     buttons.push('<button class="primary" onclick="uploadCraigFromForm()">Enviar ZIP</button>');
   }
-  if (runnable && !state.ingest.busy) {
-    buttons.push('<button onclick="continueUploadPipeline(true)">Simular</button>');
-    buttons.push('<button class="primary" onclick="continueUploadPipeline(false)">Continuar</button>');
-  }
   if (failedJob && typeof window.retryCloudJob === 'function') {
     buttons.push(`<button class="primary" onclick="retryCloudJob('${escapeHtml(failedJob.id)}')">Tentar novamente</button>`);
   }
+  if (sourceSessionId) buttons.push('<button onclick="openOperations()">Operacao</button>');
   buttons.push('<button onclick="loadJobs(true)">Atualizar jobs</button>');
 
   return `
@@ -3601,17 +3598,10 @@ async function uploadCraigFromForm() {
     if (payload.job) {
       state.jobs = [payload.job, ...state.jobs.filter(job => job.id !== payload.job.id)];
       remember(`Upload Craig confirmado: ${payload.upload?.storagePath || file.name}`);
-      toast('ZIP salvo no R2. Job de ingestao cloud criado.');
+      toast(payload.supervisorDispatch?.dispatched
+        ? 'ZIP salvo no R2. Autopilot de producao iniciado.'
+        : 'ZIP salvo no R2. Supervisor sera recuperado pelo cron se necessario.');
       await loadJobs(true);
-      if (typeof window.continuePipeline === 'function') {
-        const chunkSeconds = Number($('#ingestChunkSeconds')?.value || 600);
-        await window.continuePipeline(planned.session.sourceSessionId, {
-          auto: true,
-          maxRuns: 12,
-          maxTracks: 1,
-          chunkSeconds
-        });
-      }
     } else {
       remember(`Upload Craig: ${file.name}`);
       toast('ZIP Craig enviado.');

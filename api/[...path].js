@@ -7927,7 +7927,8 @@ async function handlePost(req, res, path) {
       supervisorDispatch = await dispatchPipelineSupervisorWorkflow(getPool(), campaign, payload.session.sourceSessionId, {
         actorId: 'upload-confirmation',
         maxIterations: payload.supervisorDispatchRequest?.maxIterations || 12,
-        maxRunsPerCall: payload.supervisorDispatchRequest?.maxRunsPerCall || 1
+        maxRunsPerCall: payload.supervisorDispatchRequest?.maxRunsPerCall || 1,
+        approveAutopilotPaid: true
       });
     } catch (error) {
       supervisorDispatch = {

@@ -311,6 +311,81 @@ where id = {sql_literal(job_id)}::uuid;
     )
 
 
+def update_session_transcription_state(
+    database_url: str,
+    session: dict[str, Any],
+    job_id: str,
+    batch_output: dict[str, Any],
+    failed: bool,
+) -> None:
+    stats = run_json(
+        database_url,
+        f"""
+with units as (
+  select
+    count(*) filter (
+      where coalesce(transcription_status, 'pending') not in ('skipped_silence', 'transcribed', 'cached')
+    )::int pending_units,
+    coalesce(round((
+      sum(duration_ms) filter (
+        where coalesce(transcription_status, 'pending') not in ('skipped_silence', 'transcribed', 'cached')
+      )
+    )::numeric / 60000, 3), 0)::text pending_minutes,
+    count(*) filter (where coalesce(transcription_status, 'pending') in ('transcribed', 'cached'))::int completed_units,
+    coalesce(round((
+      sum(duration_ms) filter (where coalesce(transcription_status, 'pending') in ('transcribed', 'cached'))
+    )::numeric / 60000, 3), 0)::text completed_minutes,
+    count(*)::int total_units,
+    coalesce(round(sum(duration_ms)::numeric / 60000, 3), 0)::text total_minutes
+  from audio_transcription_work_units
+  where session_id = {sql_literal(session['id'])}::uuid
+), segments as (
+  select
+    count(*)::int segments,
+    count(*) filter (where coalesce(is_empty, false) is false)::int non_empty_segments,
+    count(*) filter (where coalesce(review_status, 'pending') = 'pending')::int pending_review
+  from transcript_segments
+  where session_id = {sql_literal(session['id'])}::uuid
+)
+select json_build_object(
+  'units', (select row_to_json(units) from units),
+  'segments', (select row_to_json(segments) from segments)
+);
+""",
+    ) or {}
+    units = stats.get("units") or {}
+    pending_units = int(units.get("pending_units") or 0)
+    complete = pending_units == 0 and int(units.get("total_units") or 0) > 0
+    payload = {
+        "transcription": {
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "complete": complete,
+            "failed": failed,
+            "last_job_id": job_id,
+            "last_batch_processed": batch_output.get("processed"),
+            "planned_audio_minutes": batch_output.get("plannedAudioMinutes"),
+            "planned_estimated_cost_usd": batch_output.get("plannedEstimatedCostUsd"),
+            "units": units,
+            "segments": stats.get("segments") or {},
+        }
+    }
+    execute(
+        database_url,
+        f"""
+update sessions
+set status = case
+      when status in ('approved','published','archived') then status
+      when {sql_literal(complete)}::boolean and status = 'uploaded' then 'processing'
+      when status in ('uploaded','processing') then 'processing'
+      else status
+    end,
+    metadata = coalesce(metadata, '{{}}'::jsonb) || {sql_json(payload)},
+    updated_at = now()
+where id = {sql_literal(session['id'])}::uuid;
+""",
+    )
+
+
 def estimate_cost(unit: dict[str, Any], policy: dict[str, Any]) -> float | None:
     per_minute = unit_cost(policy, "transcriptionAudioMinute")
     if per_minute is None:
@@ -896,6 +971,7 @@ def main() -> int:
             compact_job_output(output),
             "one_or_more_units_failed" if failed else None,
         )
+        update_session_transcription_state(database_url, session, job_id, output, failed)
 
     if args.json:
         print(json.dumps(output, ensure_ascii=False, indent=2))
