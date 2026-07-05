@@ -348,8 +348,8 @@ with units as (
   where session_id = {sql_literal(session['id'])}::uuid
 )
 select json_build_object(
-  'units', (select row_to_json(units) from units),
-  'segments', (select row_to_json(segments) from segments)
+  'units', (select row_to_json(unit_stats) from units unit_stats),
+  'segments', (select row_to_json(segment_stats) from segments segment_stats)
 );
 """,
     ) or {}
