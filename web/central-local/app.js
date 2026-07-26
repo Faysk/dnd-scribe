@@ -6,6 +6,12 @@ const state = {
   health: null,
   jobs: [],
   reviewSegment: null,
+  cloud: {
+    client: null,
+    user: null,
+    role: null,
+    ready: false,
+  },
 };
 
 const hostedMode = !["127.0.0.1", "localhost"].includes(window.location.hostname);
@@ -45,6 +51,46 @@ async function api(path, options) {
     : "LOCAL · SEUS ÁUDIOS NÃO SAEM DO PC";
   $("#bridgeBadge").classList.add("connected");
   return response.json();
+}
+
+async function cloudApi(path, options = {}) {
+  const { data, error } = await state.cloud.client.auth.getSession();
+  if (error) throw error;
+  const token = data?.session?.access_token;
+  if (!token) throw new Error("Entre no Arquivo Yuhara antes de publicar.");
+  const headers = new Headers(options.headers || {});
+  headers.set("Authorization", `Bearer ${token}`);
+  headers.set("Content-Type", "application/json");
+  const response = await fetch(path, { ...options, headers });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Erro HTTP ${response.status}`);
+  return payload;
+}
+
+async function initCloudAuth() {
+  if (!hostedMode || !window.supabase) {
+    state.cloud.ready = true;
+    return;
+  }
+  try {
+    const configResponse = await fetch("/api/auth-config");
+    const config = await configResponse.json();
+    if (!configResponse.ok || !config.supabaseUrl || !config.publishableKey) return;
+    state.cloud.client = window.supabase.createClient(config.supabaseUrl, config.publishableKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    });
+    const { data } = await state.cloud.client.auth.getSession();
+    state.cloud.user = data?.session?.user || null;
+    if (state.cloud.user) {
+      const profile = await cloudApi("/api/auth/me?campaignSlug=yuhara-main");
+      state.cloud.role = profile.campaignRole || null;
+    }
+  } catch (error) {
+    console.warn("Arquivo remoto indisponível:", error.message);
+  } finally {
+    state.cloud.ready = true;
+    if (state.session) renderSession();
+  }
 }
 
 async function loadLibrary() {
@@ -209,6 +255,11 @@ function renderSession() {
   $("#exportButton").href = apiUrl(`/api/sessions/${session.recording_id}/export.md`);
   $("#publicationButton").href =
     apiUrl(`/api/sessions/${session.recording_id}/publication-bundle.json`);
+  const canPublish = hostedMode
+    && session.status === "complete"
+    && session.mode === "full"
+    && ["owner", "master"].includes(state.cloud.role || "");
+  $("#publishButton").classList.toggle("hidden", !canPublish);
   $("#metadataTitle").value = session.title || "";
   $("#metadataDate").value = session.played_at || (session.start_time || "").slice(0, 10);
   $("#metadataArc").value = session.arc || "";
@@ -399,6 +450,53 @@ async function saveMetadata() {
   }
 }
 
+async function publishSession() {
+  const button = $("#publishButton");
+  const session = state.session;
+  if (!session?.transcript?.length) return;
+  button.disabled = true;
+  button.textContent = "Publicando somente o texto…";
+  try {
+    const bundle = await api(
+      `/api/sessions/${session.recording_id}/publication-bundle.json`,
+    );
+    const payload = {
+      campaignSlug: "yuhara-main",
+      sourceId: session.recording_id,
+      title: session.title || "",
+      playedAt: session.played_at || (session.start_time || "").slice(0, 10),
+      startTime: session.start_time || null,
+      arc: session.arc || "",
+      summary: session.recap?.short || "",
+      publicationId: bundle.publication_id || null,
+      transcriptSha256: bundle.source_manifest?.transcript_sha256 || null,
+      segments: session.transcript.map((segment, index) => ({
+        id: segment.id ?? index,
+        start: segment.start,
+        end: segment.end,
+        speaker: segment.speaker,
+        track: segment.track,
+        text: segment.text,
+        reviewStatus: segment.review_status || "unreviewed",
+      })),
+    };
+    const result = await cloudApi("/api/library/import-local", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    button.textContent = `Publicado · ${result.segments} falas`;
+    button.dataset.published = "true";
+    window.setTimeout(() => {
+      button.textContent = "Abrir no arquivo →";
+      button.disabled = false;
+    }, 1400);
+  } catch (error) {
+    button.textContent = "Tentar publicar novamente";
+    button.disabled = false;
+    alert(`A publicação não enviou áudio nem alterou seus arquivos locais.\n\n${error.message}`);
+  }
+}
+
 function playAt(button) {
   const player = $("#audioPlayer");
   const url = apiUrl(
@@ -425,6 +523,13 @@ $("#sampleButton").addEventListener("click", () => startTranscription(5));
 $("#fullButton").addEventListener("click", () => startTranscription(null));
 $("#saveMetadataButton").addEventListener("click", saveMetadata);
 $("#saveReviewButton").addEventListener("click", saveReview);
+$("#publishButton").addEventListener("click", () => {
+  if ($("#publishButton").dataset.published === "true") {
+    window.location.href = `/#/sessao/${encodeURIComponent(state.session.recording_id)}`;
+    return;
+  }
+  publishSession();
+});
 $("#searchInput").addEventListener("input", (event) => {
   state.query = event.target.value;
   renderTranscript();
@@ -444,3 +549,4 @@ loadLibrary().catch((error) => {
     <small>${escapeHtml(error.message)}</small>
   </div>`;
 });
+initCloudAuth();

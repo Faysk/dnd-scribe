@@ -3,102 +3,44 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DnD Scribe — Prod Operator</title>
+  <meta name="theme-color" content="#0a0c0f" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="O arquivo de sessões da campanha Yuhara." />
+  <title>Arquivo Yuhara</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="/styles.css" />
-  <link rel="stylesheet" href="/costs.css" />
-  <link rel="stylesheet" href="/jobs.css" />
-  <link rel="stylesheet" href="/monitoring.css" />
-  <link rel="stylesheet" href="/access.css" />
-  <link rel="stylesheet" href="/notes.css" />
+  <link rel="stylesheet" href="/library.css" />
 </head>
-<body class="auth-locked">
-  <section id="siteGate" class="site-gate" aria-live="polite">
-    <div class="site-gate-card">
-      <div class="site-gate-brand">
-        <div class="brand-mark">d20</div>
-        <div>
-          <span class="label">DnD Scribe</span>
-          <h1>Entrada da mesa</h1>
-        </div>
-      </div>
-      <p>Conectando login seguro da campanha.</p>
-      <div class="loader-line"></div>
+<body>
+  <a class="skip-link" href="#content">Pular para o conteúdo</a>
+
+  <header class="site-header">
+    <a class="brand" href="#/" aria-label="Arquivo Yuhara — início">
+      <span class="brand-sigil" aria-hidden="true">Y</span>
+      <span>
+        <strong>Arquivo Yuhara</strong>
+        <small>Memórias da campanha</small>
+      </span>
+    </a>
+
+    <div class="header-actions">
+      <span id="sessionIdentity" class="session-identity" hidden></span>
+      <button id="signOutButton" class="text-button" type="button" hidden>Sair</button>
     </div>
-  </section>
+  </header>
 
-  <div class="app" id="appShell" aria-hidden="true">
-    <aside class="rail">
-      <div class="brand">
-        <div class="brand-mark">d20</div>
-        <div>
-          <strong>DnD Scribe</strong>
-          <span>Prod operator</span>
-        </div>
+  <main id="content" tabindex="-1">
+    <section id="app" class="app-view" aria-live="polite">
+      <div class="loading-state">
+        <span class="eyebrow">Arquivo da campanha</span>
+        <h1>Abrindo as memórias…</h1>
+        <div class="loading-line" aria-hidden="true"></div>
       </div>
+    </section>
+  </main>
 
-      <section class="operator">
-        <div id="authPanel">
-          <span class="label">Acesso</span>
-          <strong>Acesso fechado</strong>
-          <small>Login da mesa carregando.</small>
-        </div>
-      </section>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-      <div class="rail-title">
-        <span>Sessoes</span>
-        <button id="refreshSessionsBtn" title="Recarregar sessoes">↻</button>
-      </div>
-      <div id="sessionList" class="session-list"></div>
-    </aside>
-
-    <main class="workspace">
-      <header class="topbar">
-        <div>
-          <span id="eyebrow" class="label">Conectando</span>
-          <h1 id="title">DnD Scribe</h1>
-        </div>
-        <div class="top-actions">
-          <a class="button-link" href="/central-local/">Central Local</a>
-          <button onclick="state.tab='tutorials'; render();">Tutoriais</button>
-          <a class="button-link" href="/roll20.html">Roll20</a>
-          <a class="button-link" href="/roll20-bridge.html">Ponte Roll20</a>
-          <button id="downloadTemplateBtn">Template DM</button>
-          <button id="downloadDecisionsBtn">Baixar decisoes</button>
-          <button id="applyDecisionsBtn" class="primary">Aplicar decisoes</button>
-        </div>
-      </header>
-
-      <section id="statusStrip" class="status-strip"></section>
-
-      <nav class="tabs" id="tabs" role="tablist" aria-label="Areas do projeto">
-        <button id="tab-sessions" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="sessions">Sessoes</button>
-        <button id="tab-upload" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="upload">Upload</button>
-        <button id="tab-review" role="tab" aria-controls="view" aria-selected="true" tabindex="0" data-tab="review" class="active">Review</button>
-        <button id="tab-timeline" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="timeline">Timeline</button>
-        <button id="tab-lore" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="lore">Lore</button>
-        <button id="tab-candidates" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="candidates">Candidatos</button>
-        <button id="tab-roll20" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="roll20">Roll20</button>
-        <button id="tab-publications" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="publications">Publicacoes</button>
-        <button id="tab-ops" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="ops">Operacao</button>
-        <button id="tab-tutorials" role="tab" aria-controls="view" aria-selected="false" tabindex="-1" data-tab="tutorials">Tutoriais</button>
-      </nav>
-
-      <section id="view" class="view" role="tabpanel" tabindex="0" aria-labelledby="tab-review"></section>
-    </main>
-  </div>
-
-  <div id="toast" class="toast hidden"></div>
-  <section id="musicDock" class="music-dock collapsed"></section>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/auth-fetch.js"></script>
-  <script src="/app.js"></script>
-  <script src="/jobs.js"></script>
-  <script src="/storage-inventory.js"></script>
-  <script src="/costs.js"></script>
-  <script src="/monitoring.js"></script>
-  <script src="/ui-bridge.js"></script>
-  <script src="/access.js"></script>
-  <script src="/notes.js"></script>
+  <script src="/library.js"></script>
 </body>
 </html>
