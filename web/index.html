@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0a0c0f" />
   <meta name="color-scheme" content="dark" />
-  <meta name="description" content="O arquivo de sessões da campanha Yuhara." />
-  <title>Arquivo Yuhara</title>
+  <meta name="description" content="DnD Scribe — sessões, transcrições e resumos da campanha." />
+  <title>DnD Scribe</title>
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="/library.css" />
 </head>
@@ -14,17 +14,24 @@
   <a class="skip-link" href="#content">Pular para o conteúdo</a>
 
   <header class="site-header">
-    <a class="brand" href="#/" aria-label="Arquivo Yuhara — início">
-      <span class="brand-sigil" aria-hidden="true">Y</span>
+    <a class="brand" href="#/" aria-label="DnD Scribe — início">
+      <span class="brand-sigil" aria-hidden="true">20</span>
       <span>
-        <strong>Arquivo Yuhara</strong>
-        <small>Memórias da campanha</small>
+        <strong>DnD Scribe</strong>
+        <small>Arquivo da campanha</small>
       </span>
     </a>
 
     <div class="header-actions">
-      <span id="sessionIdentity" class="session-identity" hidden></span>
-      <button id="signOutButton" class="text-button" type="button" hidden>Sair</button>
+      <button id="userMenuButton" class="user-menu-button" type="button" hidden aria-expanded="false">
+        <span id="sessionIdentity" class="session-identity"></span>
+        <span aria-hidden="true">⌄</span>
+      </button>
+      <div id="userMenu" class="user-menu" hidden>
+        <a href="#/">Sessões</a>
+        <a id="editMenuLink" href="/edit/" hidden>Edit</a>
+        <button id="signOutButton" type="button">Sair</button>
+      </div>
     </div>
   </header>
 

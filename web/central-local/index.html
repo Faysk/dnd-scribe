@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Central Local — DnD Scribe</title>
+    <title>Edit — DnD Scribe</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header class="topbar">
       <a class="brand" href="/">
-        <span class="brand-mark">C</span>
-        <span>DnD <i>Scribe</i> Local</span>
+        <span class="brand-mark">20</span>
+        <span>DnD <i>Scribe</i> · Edit</span>
       </a>
       <span class="local-badge" id="bridgeBadge">CONECTANDO AO SEU PC…</span>
     </header>
@@ -19,18 +19,29 @@
     <main>
       <section id="libraryView">
         <div class="hero">
-          <p class="eyebrow">ARQUIVO DA CAMPANHA</p>
-          <h1>Seis horas de caos.<br /><em>Uma história legível.</em></h1>
+          <p class="eyebrow">EDIÇÃO DA CAMPANHA</p>
+          <h1>Publique primeiro.<br /><em>Refine quando quiser.</em></h1>
           <p class="lede">
-            Importe as faixas separadas do Craig, transcreva na sua GPU e encontre
-            qualquer fala da sessão em segundos.
+            Todas as transcrições completas entram no arquivo. Aqui você ajusta
+            título, capa, descrição, resumo e revisa cada fala posteriormente.
           </p>
         </div>
+
+        <section id="cloudLibraryPanel" class="system-panel">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">BANCO DE DADOS</p>
+              <h2>Sessões publicadas</h2>
+            </div>
+            <span id="cloudStatus" class="health-pill">Autenticando…</span>
+          </div>
+          <div id="cloudSessionList" class="card-grid"></div>
+        </section>
 
         <section class="system-panel">
           <div class="section-heading compact-heading">
             <div>
-              <p class="eyebrow">CENTRAL LOCAL</p>
+              <p class="eyebrow">PROCESSAMENTO LOCAL</p>
               <h2>Estado da máquina</h2>
             </div>
             <span id="healthStatus" class="health-pill">Verificando…</span>
@@ -151,6 +162,77 @@
         </div>
       </section>
     </main>
+
+    <dialog id="cloudEditorDialog" class="review-dialog cloud-editor-dialog">
+      <form method="dialog" id="cloudEditorForm">
+        <p class="eyebrow">SESSÃO PUBLICADA</p>
+        <h2 id="cloudEditorTitle">Editar sessão</h2>
+        <div class="cloud-editor-grid">
+          <label>
+            Título
+            <input id="cloudTitle" maxlength="160" />
+          </label>
+          <label>
+            Data
+            <input id="cloudDate" type="date" />
+          </label>
+          <label>
+            Arco
+            <input id="cloudArc" maxlength="160" />
+          </label>
+          <label class="wide-field">
+            URL HTTPS da capa (opcional)
+            <input id="cloudCover" maxlength="2000" placeholder="https://…" />
+          </label>
+          <label class="wide-field">
+            Descrição curta do card
+            <textarea id="cloudSummary" maxlength="2000"></textarea>
+          </label>
+          <label class="wide-field">
+            Resumo em Markdown (opcional)
+            <textarea id="cloudSummaryFull" maxlength="120000"></textarea>
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Cancelar</button>
+          <button type="button" id="saveCloudSessionButton" class="primary">Salvar e publicar</button>
+          <button type="button" id="reviewCloudTranscriptButton" class="secondary">Revisar transcrição</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="cloudTranscriptDialog" class="review-dialog cloud-transcript-dialog">
+      <form method="dialog">
+        <p class="eyebrow">REVISÃO POSTERIOR</p>
+        <h2 id="cloudTranscriptTitle">Transcrição</h2>
+        <div id="cloudTranscriptList" class="cloud-transcript-list"></div>
+        <button type="button" id="loadMoreCloudSegments" class="ghost hidden">Carregar mais</button>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Fechar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="cloudSegmentDialog" class="review-dialog">
+      <form method="dialog">
+        <p class="eyebrow">REVISAR FALA PUBLICADA</p>
+        <h2 id="cloudSegmentTitle">Fala</h2>
+        <label>Speaker<input id="cloudSegmentSpeaker" maxlength="160" /></label>
+        <label>Texto corrigido<textarea id="cloudSegmentText" maxlength="10000"></textarea></label>
+        <label>Estado
+          <select id="cloudSegmentStatus">
+            <option value="unreviewed">Não revisado</option>
+            <option value="approved">Aprovado</option>
+            <option value="needs_review">Rever depois</option>
+            <option value="discarded">Descartado</option>
+          </select>
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Cancelar</button>
+          <button type="button" id="saveCloudSegmentButton" class="primary">Salvar revisão</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="reviewDialog" class="review-dialog">
       <form method="dialog" id="reviewForm">

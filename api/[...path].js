@@ -6353,6 +6353,8 @@ session_rows as (
     s.status,
     s.duration_ms,
     s.summary_short,
+    s.summary_full,
+    s.metadata,
     s.created_at,
     s.updated_at,
     coalesce(ss.segment_count, 0) as segment_count,
@@ -6374,6 +6376,8 @@ select coalesce(json_agg(json_build_object(
   'status', status,
   'durationMs', duration_ms,
   'summary', summary_short,
+  'hasSummary', coalesce(nullif(trim(summary_full), ''), '') <> '',
+  'coverImageUrl', coalesce(metadata->>'coverImageUrl', ''),
   'segments', segment_count,
   'participants', participant_count,
   'createdAt', created_at,
@@ -6404,7 +6408,7 @@ async function libraryTranscriptPage(campaign, sourceSessionId, options = {}) {
 with target as (
   select s.id, s.title, s.source_session_id, s.source_system, s.session_date,
          s.started_at, s.ended_at, s.arc, s.status, s.duration_ms,
-         s.summary_short, s.created_at, s.updated_at
+         s.summary_short, s.summary_full, s.metadata, s.created_at, s.updated_at
   from sessions s
   join campaigns c on c.id = s.campaign_id
   where c.slug = $1 and s.source_session_id = $2
@@ -6419,7 +6423,9 @@ filtered as (
     ts.speaker_name,
     ts.character_name,
     ts.track_key,
-    ts.text
+    ts.text,
+    ts.review_status,
+    ts.needs_review
   from transcript_segments ts
   join target t on t.id = ts.session_id
   where coalesce(ts.is_empty, false) is false
@@ -6476,6 +6482,8 @@ select
       status: payload.session.status,
       durationMs: payload.session.duration_ms,
       summary: payload.session.summary_short,
+      hasSummary: Boolean(String(payload.session.summary_full || '').trim()),
+      coverImageUrl: payload.session.metadata?.coverImageUrl || '',
       updatedAt: payload.session.updated_at
     },
     segments: visibleRows.map(row => ({
@@ -6483,12 +6491,185 @@ select
       startMs: row.start_ms,
       endMs: row.end_ms,
       speaker: row.character_name || row.speaker_name || row.track_key || 'Mesa',
-      text: row.text
+      text: row.text,
+      reviewStatus: row.review_status,
+      needsReview: row.needs_review
     })),
     speakers: payload.speakers || [],
     total: Number(payload.total || 0),
     nextCursor: hasMore ? encodeLibraryCursor(visibleRows.at(-1)) : null
   };
+}
+
+async function librarySessionSummary(campaign, sourceSessionId) {
+  const result = await getPool().query(
+    `
+select s.id, s.title, s.source_session_id, s.session_date, s.arc,
+       s.summary_short, s.summary_full, s.updated_at
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1 and s.source_session_id = $2;`,
+    [campaign, sourceSessionId]
+  );
+  const row = result.rows[0];
+  if (!row) throw httpError(404, 'Sessao nao encontrada.');
+  if (!String(row.summary_full || '').trim()) throw httpError(404, 'Esta sessao ainda nao possui resumo.');
+  return {
+    id: row.id,
+    title: row.title,
+    sourceSessionId: row.source_session_id,
+    sessionDate: dateOnly(row.session_date),
+    arc: row.arc,
+    summary: row.summary_short,
+    summaryFull: row.summary_full,
+    hasSummary: true,
+    updatedAt: row.updated_at
+  };
+}
+
+async function editorSessions(campaign) {
+  return await data(
+    `
+select coalesce(json_agg(json_build_object(
+  'id', s.id,
+  'sourceSessionId', s.source_session_id,
+  'title', s.title,
+  'sessionDate', to_char(s.session_date, 'YYYY-MM-DD'),
+  'arc', s.arc,
+  'status', s.status,
+  'summary', s.summary_short,
+  'summaryFull', s.summary_full,
+  'coverImageUrl', coalesce(s.metadata->>'coverImageUrl', ''),
+  'segments', (select count(*) from transcript_segments ts where ts.session_id = s.id and coalesce(ts.is_empty, false) is false),
+  'needsReview', (select count(*) from transcript_segments ts where ts.session_id = s.id and coalesce(ts.is_empty, false) is false and (ts.needs_review or ts.review_status in ('pending', 'unreviewed', 'needs_review'))),
+  'updatedAt', s.updated_at
+) order by coalesce(s.session_date, s.created_at::date) desc, s.created_at desc), '[]'::json) data
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1;`,
+    [campaign]
+  ) || [];
+}
+
+async function updateEditorSession(campaign, sourceSessionId, body = {}) {
+  const title = cleanText(body.title, 160);
+  if (!title) throw httpError(400, 'O titulo da sessao e obrigatorio.');
+  const summary = String(body.summary || '').trim().slice(0, 2000) || null;
+  const summaryFull = String(body.summaryFull || '').trim().slice(0, 120000) || null;
+  const arc = cleanText(body.arc, 160) || null;
+  const coverImageUrl = String(body.coverImageUrl || '').trim().slice(0, 2000);
+  if (coverImageUrl && !/^https:\/\/[^\s]+$/i.test(coverImageUrl)) {
+    throw httpError(400, 'A capa precisa usar uma URL HTTPS.');
+  }
+  const sessionDate = String(body.sessionDate || '').trim();
+  if (sessionDate && !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    throw httpError(400, 'Data da sessao invalida.');
+  }
+  const result = await getPool().query(
+    `
+update sessions s
+set title = $3,
+    session_date = coalesce($4::date, s.session_date),
+    arc = $5,
+    status = 'published',
+    summary_short = $6,
+    summary_full = $7,
+    metadata = jsonb_set(coalesce(s.metadata, '{}'::jsonb), '{coverImageUrl}', to_jsonb($8::text), true),
+    updated_at = now()
+from campaigns c
+where c.id = s.campaign_id and c.slug = $1 and s.source_session_id = $2
+returning s.id, s.source_session_id, s.title, to_char(s.session_date, 'YYYY-MM-DD') session_date,
+          s.arc, s.status, s.summary_short, s.summary_full,
+          coalesce(s.metadata->>'coverImageUrl', '') cover_image_url, s.updated_at;`,
+    [campaign, sourceSessionId, title, sessionDate || null, arc, summary, summaryFull, coverImageUrl]
+  );
+  if (!result.rows[0]) throw httpError(404, 'Sessao nao encontrada.');
+  return result.rows[0];
+}
+
+async function updateEditorSegment(campaign, sourceSessionId, body = {}) {
+  const segmentId = String(body.segmentId || '').trim();
+  const text = String(body.text || '').trim().slice(0, 10000);
+  const speaker = cleanText(body.speaker, 160);
+  const requestedReviewStatus = String(body.reviewStatus || 'approved').trim();
+  const reviewStatus = requestedReviewStatus === 'unreviewed' ? 'pending' : requestedReviewStatus;
+  if (!segmentId || !text || !speaker) throw httpError(400, 'Fala, speaker e texto sao obrigatorios.');
+  if (!['pending', 'approved', 'needs_review', 'discarded'].includes(reviewStatus)) {
+    throw httpError(400, 'Estado de revisao invalido.');
+  }
+  const result = await getPool().query(
+    `
+update transcript_segments ts
+set text = $4,
+    text_chars = char_length($4),
+    text_words = array_length(regexp_split_to_array(trim($4), '\\s+'), 1),
+    speaker_name = $5,
+    character_name = null,
+    review_status = $6,
+    needs_review = $6 in ('pending', 'needs_review')
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where ts.session_id = s.id
+  and c.slug = $1
+  and s.source_session_id = $2
+  and (ts.source_segment_id = $3 or ts.id::text = $3)
+returning ts.source_segment_id, ts.id, ts.start_ms, ts.end_ms, ts.speaker_name,
+          ts.character_name, ts.track_key, ts.text, ts.review_status, ts.needs_review;`,
+    [campaign, sourceSessionId, segmentId, text, speaker, reviewStatus]
+  );
+  if (!result.rows[0]) throw httpError(404, 'Fala nao encontrada.');
+  const row = result.rows[0];
+  return {
+    id: row.source_segment_id || row.id,
+    startMs: row.start_ms,
+    endMs: row.end_ms,
+    speaker: row.character_name || row.speaker_name || row.track_key || 'Mesa',
+    text: row.text,
+    reviewStatus: row.review_status,
+    needsReview: row.needs_review
+  };
+}
+
+async function sessionMarkdown(campaign, sourceSessionId) {
+  const result = await getPool().query(
+    `
+select s.title, s.session_date, s.arc, s.summary_short,
+       coalesce(json_agg(json_build_object(
+         'startMs', ts.start_ms,
+         'speaker', coalesce(nullif(ts.character_name, ''), nullif(ts.speaker_name, ''), ts.track_key, 'Mesa'),
+         'text', ts.text
+       ) order by coalesce(ts.start_ms, 2147483647), coalesce(ts.source_sequence, 2147483647), ts.id)
+       filter (where ts.id is not null and coalesce(ts.is_empty, false) is false), '[]'::json) segments
+from sessions s
+join campaigns c on c.id = s.campaign_id
+left join transcript_segments ts on ts.session_id = s.id
+where c.slug = $1 and s.source_session_id = $2
+group by s.id;`,
+    [campaign, sourceSessionId]
+  );
+  const session = result.rows[0];
+  if (!session) throw httpError(404, 'Sessao nao encontrada.');
+  const clock = milliseconds => {
+    const seconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainder = seconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+  };
+  const lines = [
+    `# ${session.title}`,
+    '',
+    session.session_date ? `**Data:** ${dateOnly(session.session_date)}` : '',
+    session.arc ? `**Arco:** ${session.arc}` : '',
+    session.summary_short ? `\n${session.summary_short}` : '',
+    '',
+    '## Transcrição completa',
+    ''
+  ].filter((line, index, values) => line || values[index - 1] !== '');
+  for (const segment of session.segments || []) {
+    lines.push(`**[${clock(segment.startMs)}] ${segment.speaker}**`, '', segment.text, '');
+  }
+  return `${lines.join('\n').trim()}\n`;
 }
 
 function cleanLocalPublication(body = {}) {
@@ -8154,6 +8335,29 @@ async function handleGet(req, res, path, query) {
       }))
     });
   }
+  if (path === '/api/session-download') {
+    await requireCampaignAccess(req, campaign);
+    const markdown = await sessionMarkdown(campaign, sourceSessionId);
+    const filename = `transcricao-${String(sourceSessionId || 'sessao').replace(/[^a-z0-9_-]+/gi, '-')}.md`;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.end(markdown);
+  }
+  if (path === '/api/library-summary') {
+    await requireCampaignAccess(req, campaign);
+    res.setHeader('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
+    return sendJson(res, 200, {
+      ok: true,
+      session: await librarySessionSummary(campaign, sourceSessionId)
+    });
+  }
+  if (path === '/api/editor-sessions') {
+    await requireCampaignAccess(req, campaign, ['owner', 'master']);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return sendJson(res, 200, { ok: true, sessions: await editorSessions(campaign) });
+  }
   if (path === '/api/sessions') {
     await requireCampaignAccess(req, campaign);
     return sendJson(res, 200, { ok: true, sessions: await listSessions(campaign, runId) });
@@ -8196,6 +8400,20 @@ async function handlePost(req, res, path) {
   if (path === '/api/library-import-local') {
     await requireCampaignAccess(req, campaign, ['owner', 'master']);
     return sendJson(res, 200, await importLocalPublication(campaign, body));
+  }
+  if (path === '/api/editor-session') {
+    await requireCampaignAccess(req, campaign, ['owner', 'master']);
+    return sendJson(res, 200, {
+      ok: true,
+      session: await updateEditorSession(campaign, sourceSessionId, body)
+    });
+  }
+  if (path === '/api/editor-segment') {
+    await requireCampaignAccess(req, campaign, ['owner', 'master']);
+    return sendJson(res, 200, {
+      ok: true,
+      segment: await updateEditorSegment(campaign, sourceSessionId, body)
+    });
   }
   if (path === '/api/rbac/assign') {
     const client = await getPool().connect();

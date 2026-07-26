@@ -143,9 +143,55 @@ select:focus-visible {
 }
 
 .header-actions {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.user-menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  color: var(--paper-soft);
+  background: var(--ink-soft);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.user-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  min-width: 190px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  background: #11151a;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.user-menu a,
+.user-menu button {
+  padding: 11px 12px;
+  border: 0;
+  color: var(--paper-soft);
+  background: transparent;
+  border-radius: 8px;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.user-menu a:hover,
+.user-menu button:hover {
+  color: var(--paper);
+  background: var(--panel);
 }
 
 .session-identity {
@@ -346,10 +392,10 @@ main {
 .session-card {
   position: relative;
   display: flex;
-  min-height: 250px;
-  flex-direction: column;
+  min-height: 280px;
+  flex-direction: row;
   justify-content: space-between;
-  padding: clamp(24px, 4vw, 34px);
+  padding: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   color: inherit;
@@ -359,6 +405,56 @@ main {
   border-radius: var(--radius);
   text-decoration: none;
   transition: 180ms ease;
+}
+
+.session-card-art {
+  position: relative;
+  display: grid;
+  width: 35%;
+  min-width: 138px;
+  place-items: center;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 70% 20%, rgba(215, 170, 97, 0.25), transparent 38%),
+    linear-gradient(145deg, #242b33, #101419);
+}
+
+.session-card-art::before {
+  position: absolute;
+  width: 130px;
+  height: 130px;
+  border: 1px solid rgba(215, 170, 97, 0.25);
+  border-radius: 38% 62% 48% 52%;
+  content: "";
+  transform: rotate(22deg);
+}
+
+.session-card-art span {
+  color: var(--gold-bright);
+  font: 400 36px/1 var(--serif);
+}
+
+.session-card.has-cover .session-card-art {
+  background-image:
+    linear-gradient(rgba(9, 11, 14, 0.12), rgba(9, 11, 14, 0.48)),
+    var(--session-cover);
+  background-position: center;
+  background-size: cover;
+}
+
+.session-card.has-cover .session-card-art::before,
+.session-card.has-cover .session-card-art span {
+  display: none;
+}
+
+.session-card-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(24px, 3vw, 34px);
 }
 
 .session-card::after {
@@ -396,23 +492,39 @@ main {
   text-transform: uppercase;
 }
 
-.status-pill {
-  padding: 5px 8px;
-  color: var(--success);
-  background: rgba(143, 196, 155, 0.08);
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .session-card h2 {
   max-width: 520px;
   margin: 24px 0 14px;
   font: 400 clamp(26px, 4vw, 38px)/1.08 var(--serif);
   letter-spacing: -0.025em;
 }
+
+.reader-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.summary-markdown {
+  padding: 44px 0 80px;
+  color: var(--paper-soft);
+  font: 400 17px/1.78 var(--serif);
+}
+
+.summary-markdown h1,
+.summary-markdown h2,
+.summary-markdown h3 {
+  color: var(--paper);
+  line-height: 1.15;
+}
+
+.summary-markdown h1 { margin: 48px 0 24px; font-size: 40px; }
+.summary-markdown h2 { margin: 46px 0 18px; font-size: 30px; }
+.summary-markdown h3 { margin: 34px 0 14px; font-size: 22px; }
+.summary-markdown p { margin: 0 0 14px; }
+.summary-markdown .summary-list-item { padding-left: 18px; }
+.summary-space { height: 10px; }
 
 .session-summary {
   display: -webkit-box;

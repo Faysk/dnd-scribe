@@ -3,6 +3,7 @@ const state = {
   query: "",
   speakers: new Set(),
   poller: null,
+  autoPublishing: false,
   health: null,
   jobs: [],
   reviewSegment: null,
@@ -11,6 +12,11 @@ const state = {
     user: null,
     role: null,
     ready: false,
+    sessions: [],
+    editing: null,
+    transcript: [],
+    cursor: null,
+    segment: null,
   },
 };
 
@@ -54,10 +60,11 @@ async function api(path, options) {
 }
 
 async function cloudApi(path, options = {}) {
+  if (!state.cloud.client) throw new Error("Faça login no DnD Scribe para editar.");
   const { data, error } = await state.cloud.client.auth.getSession();
   if (error) throw error;
   const token = data?.session?.access_token;
-  if (!token) throw new Error("Entre no Arquivo Yuhara antes de publicar.");
+  if (!token) throw new Error("Entre no DnD Scribe antes de editar.");
   const headers = new Headers(options.headers || {});
   headers.set("Authorization", `Bearer ${token}`);
   headers.set("Content-Type", "application/json");
@@ -70,6 +77,11 @@ async function cloudApi(path, options = {}) {
 async function initCloudAuth() {
   if (!hostedMode || !window.supabase) {
     state.cloud.ready = true;
+    $("#cloudStatus").textContent = hostedMode ? "LOGIN INDISPONÍVEL" : "USE EM PRODUÇÃO";
+    $("#cloudStatus").className = "health-pill degraded";
+    $("#cloudSessionList").innerHTML = hostedMode
+      ? '<p class="empty">Não foi possível carregar o login do DnD Scribe.</p>'
+      : '<p class="empty">A edição do banco fica disponível em dnd.faysk.dev/edit.</p>';
     return;
   }
   try {
@@ -84,12 +96,169 @@ async function initCloudAuth() {
     if (state.cloud.user) {
       const profile = await cloudApi("/api/auth/me?campaignSlug=yuhara-main");
       state.cloud.role = profile.campaignRole || null;
+      if (["owner", "master"].includes(state.cloud.role || "")) await loadCloudSessions();
     }
   } catch (error) {
     console.warn("Arquivo remoto indisponível:", error.message);
   } finally {
     state.cloud.ready = true;
+    renderCloudAccess();
     if (state.session) renderSession();
+  }
+}
+
+function renderCloudAccess() {
+  const status = $("#cloudStatus");
+  const list = $("#cloudSessionList");
+  if (!state.cloud.user) {
+    status.textContent = "LOGIN NECESSÁRIO";
+    status.className = "health-pill degraded";
+    list.innerHTML = '<p class="empty">Entre no DnD Scribe pela página inicial e volte ao Edit.</p>';
+    return;
+  }
+  if (!["owner", "master"].includes(state.cloud.role || "")) {
+    status.textContent = "SEM PERMISSÃO";
+    status.className = "health-pill degraded";
+    list.innerHTML = '<p class="empty">Esta área é exclusiva para dono e mestre da campanha.</p>';
+    return;
+  }
+  status.textContent = `${state.cloud.sessions.length} PUBLICADAS`;
+  status.className = "health-pill ok";
+  list.innerHTML = state.cloud.sessions.map((session) => `<article class="card">
+    <div>
+      <p class="eyebrow">${escapeHtml(session.sessionDate || "DATA NÃO DEFINIDA")}</p>
+      <h3>${escapeHtml(session.title)}</h3>
+      <p class="card-meta">${Number(session.segments || 0).toLocaleString("pt-BR")} falas · ${Number(session.needsReview || 0).toLocaleString("pt-BR")} aguardando revisão</p>
+      ${session.summary ? `<p class="muted">${escapeHtml(session.summary)}</p>` : ""}
+    </div>
+    <button class="ghost cloud-edit-button" data-source-id="${escapeHtml(session.sourceSessionId)}">Editar sessão →</button>
+  </article>`).join("") || '<p class="empty">Nenhuma sessão publicada.</p>';
+  document.querySelectorAll(".cloud-edit-button").forEach((button) => {
+    button.addEventListener("click", () => openCloudEditor(button.dataset.sourceId));
+  });
+}
+
+async function loadCloudSessions() {
+  const payload = await cloudApi("/api/editor-sessions?campaignSlug=yuhara-main");
+  state.cloud.sessions = payload.sessions || [];
+}
+
+function openCloudEditor(sourceSessionId) {
+  const session = state.cloud.sessions.find((item) => item.sourceSessionId === sourceSessionId);
+  if (!session) return;
+  state.cloud.editing = session;
+  $("#cloudEditorTitle").textContent = session.title;
+  $("#cloudTitle").value = session.title || "";
+  $("#cloudDate").value = session.sessionDate || "";
+  $("#cloudArc").value = session.arc || "";
+  $("#cloudCover").value = session.coverImageUrl || "";
+  $("#cloudSummary").value = session.summary || "";
+  $("#cloudSummaryFull").value = session.summaryFull || "";
+  $("#cloudEditorDialog").showModal();
+}
+
+async function saveCloudSession() {
+  const session = state.cloud.editing;
+  if (!session) return;
+  const button = $("#saveCloudSessionButton");
+  button.disabled = true;
+  try {
+    await cloudApi("/api/editor-session", {
+      method: "POST",
+      body: JSON.stringify({
+        campaignSlug: "yuhara-main",
+        sourceSessionId: session.sourceSessionId,
+        title: $("#cloudTitle").value,
+        sessionDate: $("#cloudDate").value,
+        arc: $("#cloudArc").value,
+        coverImageUrl: $("#cloudCover").value,
+        summary: $("#cloudSummary").value,
+        summaryFull: $("#cloudSummaryFull").value,
+      }),
+    });
+    await loadCloudSessions();
+    renderCloudAccess();
+    $("#cloudEditorDialog").close();
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function loadCloudTranscript({ append = false } = {}) {
+  const session = state.cloud.editing;
+  if (!session) return;
+  const params = new URLSearchParams({
+    campaignSlug: "yuhara-main",
+    sourceSessionId: session.sourceSessionId,
+    limit: "120",
+  });
+  if (append && state.cloud.cursor) params.set("cursor", state.cloud.cursor);
+  const payload = await cloudApi(`/api/library-transcript?${params}`);
+  state.cloud.transcript = append
+    ? [...state.cloud.transcript, ...(payload.segments || [])]
+    : (payload.segments || []);
+  state.cloud.cursor = payload.nextCursor || null;
+  $("#cloudTranscriptTitle").textContent = session.title;
+  $("#cloudTranscriptList").innerHTML = state.cloud.transcript.map((segment) => `<article class="cloud-segment">
+    <time>${formatTime(Number(segment.startMs || 0) / 1000)}</time>
+    <strong>${escapeHtml(segment.speaker)}</strong>
+    <p>${escapeHtml(segment.text)}</p>
+    <button type="button" class="ghost cloud-segment-button" data-segment-id="${escapeHtml(segment.id)}">${reviewLabel(segment.reviewStatus)}</button>
+  </article>`).join("");
+  $("#loadMoreCloudSegments").classList.toggle("hidden", !state.cloud.cursor);
+  document.querySelectorAll(".cloud-segment-button").forEach((button) => {
+    button.addEventListener("click", () => openCloudSegment(button.dataset.segmentId));
+  });
+}
+
+async function openCloudTranscript() {
+  $("#cloudEditorDialog").close();
+  state.cloud.transcript = [];
+  state.cloud.cursor = null;
+  await loadCloudTranscript();
+  $("#cloudTranscriptDialog").showModal();
+}
+
+function openCloudSegment(segmentId) {
+  const segment = state.cloud.transcript.find((item) => String(item.id) === String(segmentId));
+  if (!segment) return;
+  state.cloud.segment = segment;
+  $("#cloudSegmentTitle").textContent = `${formatTime(Number(segment.startMs || 0) / 1000)} · ${segment.speaker}`;
+  $("#cloudSegmentSpeaker").value = segment.speaker;
+  $("#cloudSegmentText").value = segment.text;
+  $("#cloudSegmentStatus").value = ["approved", "needs_review", "discarded"].includes(segment.reviewStatus)
+    ? segment.reviewStatus : "unreviewed";
+  $("#cloudSegmentDialog").showModal();
+}
+
+async function saveCloudSegment() {
+  const segment = state.cloud.segment;
+  const session = state.cloud.editing;
+  if (!segment || !session) return;
+  const button = $("#saveCloudSegmentButton");
+  button.disabled = true;
+  try {
+    const payload = await cloudApi("/api/editor-segment", {
+      method: "POST",
+      body: JSON.stringify({
+        campaignSlug: "yuhara-main",
+        sourceSessionId: session.sourceSessionId,
+        segmentId: segment.id,
+        speaker: $("#cloudSegmentSpeaker").value,
+        text: $("#cloudSegmentText").value,
+        reviewStatus: $("#cloudSegmentStatus").value,
+      }),
+    });
+    const index = state.cloud.transcript.findIndex((item) => String(item.id) === String(segment.id));
+    state.cloud.transcript[index] = payload.segment;
+    $("#cloudSegmentDialog").close();
+    await loadCloudTranscript();
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -299,6 +468,12 @@ function renderSession() {
     renderReviewSummary();
     renderTranscript();
   }
+  if (fullComplete && canPublish && !state.autoPublishing && $("#publishButton").dataset.published !== "true") {
+    state.autoPublishing = true;
+    window.setTimeout(() => publishSession().finally(() => {
+      state.autoPublishing = false;
+    }), 0);
+  }
 }
 
 function renderReviewSummary() {
@@ -378,12 +553,13 @@ function renderTranscript() {
 }
 
 function reviewLabel(status) {
-  return {
+  return ({
     approved: "Aprovado",
     needs_review: "Rever",
     discarded: "Descartado",
     unreviewed: "Revisar",
-  }[status || "unreviewed"];
+    pending: "Revisar",
+  }[status || "unreviewed"] || "Revisar");
 }
 
 function openReview(segmentId) {
@@ -529,6 +705,14 @@ $("#publishButton").addEventListener("click", () => {
     return;
   }
   publishSession();
+});
+$("#saveCloudSessionButton").addEventListener("click", saveCloudSession);
+$("#reviewCloudTranscriptButton").addEventListener("click", () => {
+  openCloudTranscript().catch((error) => alert(error.message));
+});
+$("#saveCloudSegmentButton").addEventListener("click", saveCloudSegment);
+$("#loadMoreCloudSegments").addEventListener("click", () => {
+  loadCloudTranscript({ append: true }).catch((error) => alert(error.message));
 });
 $("#searchInput").addEventListener("input", (event) => {
   state.query = event.target.value;

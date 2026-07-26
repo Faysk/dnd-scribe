@@ -7,6 +7,18 @@
       "destination": "/central-local/index.html"
     },
     {
+      "source": "/edit",
+      "destination": "/central-local/index.html"
+    },
+    {
+      "source": "/edit/",
+      "destination": "/central-local/index.html"
+    },
+    {
+      "source": "/edit/:path*",
+      "destination": "/central-local/:path*"
+    },
+    {
       "source": "/api/roll20-bridge/config",
       "destination": "/api/roll20-bridge?roll20BridgeConfig=1"
     },
@@ -80,6 +92,33 @@
     },
     {
       "source": "/central-local/:path*",
+      "headers": [
+        {
+          "key": "Permissions-Policy",
+          "value": "local-network=(self), loopback-network=(self)"
+        }
+      ]
+    },
+    {
+      "source": "/edit",
+      "headers": [
+        {
+          "key": "Permissions-Policy",
+          "value": "local-network=(self), loopback-network=(self)"
+        }
+      ]
+    },
+    {
+      "source": "/edit/",
+      "headers": [
+        {
+          "key": "Permissions-Policy",
+          "value": "local-network=(self), loopback-network=(self)"
+        }
+      ]
+    },
+    {
+      "source": "/edit/:path*",
       "headers": [
         {
           "key": "Permissions-Policy",

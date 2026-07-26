@@ -26,19 +26,20 @@ function parseArgs(argv) {
     if (value === '--env-file') args.envFile = argv[++index];
     else if (value === '--campaign-slug') args.campaignSlug = argv[++index];
     else if (value === '--title') args.title = argv[++index];
+    else if (value === '--summary-file') args.summaryFile = argv[++index];
     else if (value === '--dry-run') args.dryRun = true;
     else if (!args.sessionJson) args.sessionJson = value;
     else throw new Error(`Argumento desconhecido: ${value}`);
   }
   if (!args.sessionJson) {
     throw new Error(
-      'Uso: node tools/publish_local_text.js <session.json> [--title "..."] [--dry-run]'
+      'Uso: node tools/publish_local_text.js <session.json> [--title "..."] [--summary-file resumo.md] [--dry-run]'
     );
   }
   return args;
 }
 
-function publicationFromFile(filePath, title) {
+function publicationFromFile(filePath, title, summaryFile) {
   const value = JSON.parse(fs.readFileSync(filePath, 'utf8'));
   const sourceId = String(value.recording_id || '').trim();
   if (!sourceId) throw new Error('session.json sem recording_id');
@@ -89,6 +90,7 @@ function publicationFromFile(filePath, title) {
     durationMs,
     arc: value.arc || null,
     summary: value.recap?.short || null,
+    summaryFull: summaryFile ? fs.readFileSync(summaryFile, 'utf8').trim() : null,
     model: value.model || null,
     segments
   };
@@ -100,10 +102,10 @@ async function publish(client, campaignSlug, publication) {
     const sessionResult = await client.query(
       `
 insert into sessions (
-  campaign_id, title, slug, session_date, arc, status, summary_short,
+  campaign_id, title, slug, session_date, arc, status, summary_short, summary_full,
   source_system, source_session_id, started_at, ended_at, duration_ms, metadata
 )
-select c.id, $2, $3, $4::date, $5, 'published', $6,
+select c.id, $2, $3, $4::date, $5, 'published', $6, $12,
        'local_companion', $7, $8::timestamptz, $9::timestamptz, $10,
        jsonb_build_object('localPublication', jsonb_build_object(
          'publishedAt', now(),
@@ -121,6 +123,7 @@ do update set
   arc = excluded.arc,
   status = excluded.status,
   summary_short = excluded.summary_short,
+  summary_full = coalesce(excluded.summary_full, sessions.summary_full),
   started_at = excluded.started_at,
   ended_at = excluded.ended_at,
   duration_ms = excluded.duration_ms,
@@ -138,7 +141,8 @@ returning id;`,
         publication.startTime,
         publication.endedAt,
         publication.durationMs,
-        publication.model
+        publication.model,
+        publication.summaryFull
       ]
     );
     if (!sessionResult.rows.length) throw new Error(`Campanha nao encontrada: ${campaignSlug}`);
@@ -209,7 +213,11 @@ where ts.session_id = $1::uuid
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const publication = publicationFromFile(path.resolve(args.sessionJson), args.title);
+  const publication = publicationFromFile(
+    path.resolve(args.sessionJson),
+    args.title,
+    args.summaryFile ? path.resolve(args.summaryFile) : null
+  );
   const textBytes = Buffer.byteLength(JSON.stringify(publication.segments));
   const summary = {
     sourceSessionId: publication.sourceId,

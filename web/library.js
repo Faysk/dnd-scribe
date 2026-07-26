@@ -27,6 +27,9 @@ const state = {
 
 const app = document.querySelector('#app');
 const identity = document.querySelector('#sessionIdentity');
+const userMenuButton = document.querySelector('#userMenuButton');
+const userMenu = document.querySelector('#userMenu');
+const editMenuLink = document.querySelector('#editMenuLink');
 const signOutButton = document.querySelector('#signOutButton');
 const toast = document.querySelector('#toast');
 
@@ -44,10 +47,12 @@ function sourceRoute(sourceSessionId) {
 }
 
 function currentRoute() {
-  const match = window.location.hash.match(/^#\/sessao\/(.+)$/);
-  return match
-    ? { name: 'reader', sourceSessionId: decodeURIComponent(match[1]) }
-    : { name: 'home' };
+  const match = window.location.hash.match(/^#\/sessao\/([^/]+)(\/resumo)?$/);
+  if (!match) return { name: 'home' };
+  return {
+    name: match[2] ? 'summary' : 'reader',
+    sourceSessionId: decodeURIComponent(match[1])
+  };
 }
 
 function authDisplayName(user = state.auth.user) {
@@ -59,16 +64,10 @@ function authDisplayName(user = state.auth.user) {
     || 'Membro da mesa';
 }
 
-function statusLabel(status) {
-  return {
-    published: 'Publicada',
-    approved: 'Aprovada',
-    ready_for_review: 'Transcrição disponível',
-    reviewing: 'Em revisão',
-    processing: 'Processando',
-    uploaded: 'Importada',
-    archived: 'Arquivada'
-  }[status] || 'No arquivo';
+function showAuthenticatedHeader() {
+  identity.textContent = authDisplayName();
+  userMenuButton.hidden = false;
+  editMenuLink.hidden = !['owner', 'master'].includes(state.auth.campaignRole || '');
 }
 
 function formatSessionTitle(session = {}) {
@@ -142,6 +141,27 @@ async function api(path, options = {}) {
   return payload;
 }
 
+async function downloadTranscript(sourceSessionId, title = 'sessao') {
+  const token = await accessToken();
+  const response = await fetch(
+    `/api/session-download?campaignSlug=${encodeURIComponent(CAMPAIGN_SLUG)}&sourceSessionId=${encodeURIComponent(sourceSessionId)}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+  );
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || `Erro HTTP ${response.status}`);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${String(title).replace(/[^a-z0-9áàâãéêíóôõúç_-]+/gi, '-').replace(/^-|-$/g, '') || 'sessao'}.md`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function renderLoading(title = 'Abrindo as memórias…') {
   app.innerHTML = `
     <div class="loading-state">
@@ -153,8 +173,8 @@ function renderLoading(title = 'Abrindo as memórias…') {
 }
 
 function renderLogin(error = '') {
-  identity.hidden = true;
-  signOutButton.hidden = true;
+  userMenuButton.hidden = true;
+  userMenu.hidden = true;
   app.innerHTML = `
     <section class="auth-card">
       <span class="eyebrow">Arquivo reservado</span>
@@ -170,9 +190,7 @@ function renderLogin(error = '') {
 }
 
 function renderPendingAccess() {
-  identity.textContent = authDisplayName();
-  identity.hidden = false;
-  signOutButton.hidden = false;
+  showAuthenticatedHeader();
   app.innerHTML = `
     <section class="auth-card">
       <span class="eyebrow">Acesso pendente</span>
@@ -191,32 +209,34 @@ function sessionCard(session) {
     Number(session.participants || 0) ? `${session.participants} participantes` : '',
     formatDuration(session.durationMs)
   ].filter(Boolean);
+  const safeCover = String(session.coverImageUrl || '').replaceAll("'", '%27').replaceAll(')', '%29');
+  const cover = /^https:\/\//i.test(safeCover)
+    ? ` style="--session-cover: url('${escapeHtml(safeCover)}')"`
+    : '';
   return `
-    <a class="session-card" href="${sourceRoute(session.sourceSessionId)}">
-      <div>
+    <a class="session-card ${session.coverImageUrl ? 'has-cover' : ''}" href="${sourceRoute(session.sourceSessionId)}"${cover}>
+      <div class="session-card-art" aria-hidden="true"><span>20</span></div>
+      <div class="session-card-content">
         <div class="session-card-top">
           <span class="session-date">${escapeHtml(formatDate(session.sessionDate))}</span>
-          <span class="status-pill">${escapeHtml(statusLabel(session.status))}</span>
         </div>
         <h2>${escapeHtml(formatSessionTitle(session))}</h2>
         ${session.summary ? `<p class="session-summary">${escapeHtml(session.summary)}</p>` : ''}
-      </div>
-      <div class="session-meta">
-        ${metadata.map(item => `<span>${escapeHtml(item)}</span>`).join('')}
+        <div class="session-meta">
+          ${metadata.map(item => `<span>${escapeHtml(item)}</span>`).join('')}
+        </div>
       </div>
     </a>
   `;
 }
 
 function renderHome() {
-  identity.textContent = authDisplayName();
-  identity.hidden = false;
-  signOutButton.hidden = false;
+  showAuthenticatedHeader();
   const segmentTotal = state.sessions.reduce((total, session) => total + Number(session.segments || 0), 0);
   app.innerHTML = `
     <section class="library-hero">
       <div>
-        <span class="eyebrow">Campanha Yuhara</span>
+        <span class="eyebrow">DnD Scribe</span>
         <h1>Nossas sessões</h1>
         <p class="lede">Um registro cronológico das escolhas, encontros e histórias construídas pela mesa.</p>
       </div>
@@ -244,6 +264,10 @@ function readerHeader(session) {
       <h1>${escapeHtml(formatSessionTitle(session))}</h1>
       <div class="reader-meta">${metadata.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
       ${session.summary ? `<p class="reader-summary">${escapeHtml(session.summary)}</p>` : ''}
+      <div class="reader-actions">
+        ${session.hasSummary ? `<a class="primary-button" href="${sourceRoute(session.sourceSessionId)}/resumo">Ler resumo</a>` : ''}
+        <button class="secondary-button" type="button" data-download-transcript>Baixar transcrição .md</button>
+      </div>
     </header>
   `;
 }
@@ -256,6 +280,36 @@ function transcriptRow(segment) {
       <p class="transcript-text">${escapeHtml(segment.text)}</p>
     </li>
   `;
+}
+
+function renderSummary() {
+  const session = state.reader.session;
+  if (!session) return renderLoading('Abrindo o resumo…');
+  app.innerHTML = `
+    <article class="reader summary-reader">
+      <a class="reader-back" href="${sourceRoute(session.sourceSessionId)}">← Voltar à transcrição</a>
+      <header class="reader-title">
+        <span class="eyebrow">Resumo da sessão</span>
+        <h1>${escapeHtml(formatSessionTitle(session))}</h1>
+        <div class="reader-actions">
+          <button class="secondary-button" type="button" data-download-transcript>Baixar transcrição .md</button>
+        </div>
+      </header>
+      <div class="summary-markdown">${renderMarkdown(session.summaryFull || '')}</div>
+    </article>
+  `;
+}
+
+function renderMarkdown(markdown) {
+  const escaped = escapeHtml(markdown);
+  return escaped.split(/\r?\n/).map(line => {
+    if (/^### /.test(line)) return `<h3>${line.slice(4)}</h3>`;
+    if (/^## /.test(line)) return `<h2>${line.slice(3)}</h2>`;
+    if (/^# /.test(line)) return `<h1>${line.slice(2)}</h1>`;
+    if (/^[*-] /.test(line)) return `<p class="summary-list-item">• ${line.slice(2)}</p>`;
+    if (!line.trim()) return '<div class="summary-space"></div>';
+    return `<p>${line}</p>`;
+  }).join('');
 }
 
 function renderReader() {
@@ -363,6 +417,15 @@ async function loadTranscript({ append = false } = {}) {
   renderReader();
 }
 
+async function loadSummary() {
+  renderLoading('Abrindo o resumo…');
+  const payload = await api(
+    `/api/library-summary?campaignSlug=${encodeURIComponent(CAMPAIGN_SLUG)}&sourceSessionId=${encodeURIComponent(state.reader.sourceSessionId)}`
+  );
+  state.reader.session = payload.session;
+  renderSummary();
+}
+
 async function route() {
   if (!state.auth.ready) return;
   if (!state.auth.user) {
@@ -375,7 +438,7 @@ async function route() {
   }
   const target = currentRoute();
   try {
-    if (target.name === 'reader') {
+    if (target.name === 'reader' || target.name === 'summary') {
       const changed = state.reader.sourceSessionId !== target.sourceSessionId;
       if (changed) {
         state.reader = {
@@ -390,7 +453,12 @@ async function route() {
           loading: false
         };
       }
-      if (!state.reader.session) await loadTranscript();
+      if (target.name === 'summary') {
+        if (!state.reader.session?.summaryFull) await loadSummary();
+        else renderSummary();
+        return;
+      }
+      if (!state.reader.session || state.reader.session.summaryFull) await loadTranscript();
       else renderReader();
       return;
     }
@@ -468,7 +536,22 @@ async function initAuth() {
 document.addEventListener('click', async event => {
   const loginButton = event.target.closest('[data-login]');
   if (loginButton) return signIn(loginButton.dataset.login);
+  if (event.target.closest('#userMenuButton')) {
+    const opening = userMenu.hidden;
+    userMenu.hidden = !opening;
+    userMenuButton.setAttribute('aria-expanded', String(opening));
+    return;
+  }
   if (event.target.closest('#signOutButton')) return signOut();
+  if (event.target.closest('[data-download-transcript]')) {
+    try {
+      await downloadTranscript(state.reader.sourceSessionId, formatSessionTitle(state.reader.session));
+      showToast('Download da transcrição iniciado.');
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
+  }
   if (event.target.closest('[data-refresh-access]')) {
     renderLoading('Verificando seu acesso…');
     try {
