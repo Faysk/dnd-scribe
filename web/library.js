@@ -326,7 +326,7 @@ async function loadProfile() {
 
 async function loadSessions(force = false) {
   if (state.sessionsLoaded && !force) return;
-  const payload = await api(`/api/library/sessions?campaignSlug=${encodeURIComponent(CAMPAIGN_SLUG)}`);
+  const payload = await api(`/api/library-sessions?campaignSlug=${encodeURIComponent(CAMPAIGN_SLUG)}`);
   state.sessions = payload.sessions || [];
   state.sessionsLoaded = true;
 }
@@ -349,7 +349,7 @@ async function loadTranscript({ append = false } = {}) {
   if (reader.query) params.set('q', reader.query);
   if (reader.speaker) params.set('speaker', reader.speaker);
   try {
-    const payload = await api(`/api/library/transcript?${params}`);
+    const payload = await api(`/api/library-transcript?${params}`);
     reader.session = payload.session;
     reader.speakers = payload.speakers || [];
     reader.total = Number(payload.total || 0);

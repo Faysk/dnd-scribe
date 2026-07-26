@@ -54,9 +54,9 @@ is an export and archival format, not a query API.
 
 - Supabase JS is used by the browser only for Auth.
 - Campaign data is read through authenticated Vercel API routes.
-- `/api/library/sessions` returns lightweight session summaries.
-- `/api/library/transcript` returns text-only paginated segments.
-- `/api/library/import-local` requires the legacy campaign role `owner` or
+- `/api/library-sessions` returns lightweight session summaries.
+- `/api/library-transcript` returns text-only paginated segments.
+- `/api/library-import-local` requires the legacy campaign role `owner` or
   `master`.
 - Raw tables and views have no Data API grants for `anon` or `authenticated`.
 - All public tables have RLS enabled as defense in depth.
@@ -101,6 +101,18 @@ The API validates size and field bounds, upserts the session and its segments
 inside one transaction, and marks the session `published`. Repeating the same
 publication is idempotent and updates existing segment rows instead of
 duplicating them.
+
+For operator recovery without the browser, the same text-only boundary is
+available through:
+
+```powershell
+node tools/publish_local_text.js `
+  "E:\Project\craig-to-text\data\sessions\<recording-id>\session.json" `
+  --title "Nome da sessão"
+```
+
+Run first with `--dry-run` to verify the recording ID, segment count, text
+payload size and the explicit `audioTransferred: false` result.
 
 ## Verification gates
 

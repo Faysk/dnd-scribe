@@ -8132,7 +8132,7 @@ async function handleGet(req, res, path, query) {
       note: 'Mapa Craig carregado do deploy. Edicao em producao entra em etapa propria.'
     });
   }
-  if (path === '/api/library/sessions') {
+  if (path === '/api/library-sessions') {
     await requireCampaignAccess(req, campaign);
     res.setHeader('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
     return sendJson(res, 200, {
@@ -8141,7 +8141,7 @@ async function handleGet(req, res, path, query) {
       sessions: await listLibrarySessions(campaign)
     });
   }
-  if (path === '/api/library/transcript') {
+  if (path === '/api/library-transcript') {
     await requireCampaignAccess(req, campaign);
     res.setHeader('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
     return sendJson(res, 200, {
@@ -8193,7 +8193,7 @@ async function handlePost(req, res, path) {
   const sourceSessionId = body.sourceSessionId || decisions.sourceSessionId || DEFAULT_SOURCE_SESSION;
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
-  if (path === '/api/library/import-local') {
+  if (path === '/api/library-import-local') {
     await requireCampaignAccess(req, campaign, ['owner', 'master']);
     return sendJson(res, 200, await importLocalPublication(campaign, body));
   }

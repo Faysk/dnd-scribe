@@ -480,7 +480,7 @@ async function publishSession() {
         reviewStatus: segment.review_status || "unreviewed",
       })),
     };
-    const result = await cloudApi("/api/library/import-local", {
+    const result = await cloudApi("/api/library-import-local", {
       method: "POST",
       body: JSON.stringify(payload),
     });
