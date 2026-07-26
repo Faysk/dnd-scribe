@@ -8,6 +8,7 @@
   <meta name="description" content="DnD Scribe — sessões, transcrições e resumos da campanha." />
   <title>DnD Scribe</title>
   <link rel="icon" href="data:," />
+  <script src="/theme.js"></script>
   <link rel="stylesheet" href="/library.css" />
 </head>
 <body>
@@ -23,6 +24,10 @@
     </a>
 
     <div class="header-actions">
+      <button class="theme-toggle" type="button" data-theme-toggle>
+        <span data-theme-icon aria-hidden="true">☾</span>
+        <span data-theme-label>sistema</span>
+      </button>
       <button id="userMenuButton" class="user-menu-button" type="button" hidden aria-expanded="false">
         <span id="sessionIdentity" class="session-identity"></span>
         <span aria-hidden="true">⌄</span>

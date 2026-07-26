@@ -1,6 +1,18 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "public",
+  "redirects": [
+    {
+      "source": "/central-local",
+      "destination": "/edit/",
+      "permanent": false
+    },
+    {
+      "source": "/central-local/",
+      "destination": "/edit/",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/central-local",

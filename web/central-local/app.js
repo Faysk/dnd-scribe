@@ -10,7 +10,12 @@ const state = {
   cloud: {
     client: null,
     user: null,
+    profile: null,
     role: null,
+    capabilities: {},
+    rbac: null,
+    workspace: "content",
+    localLoaded: false,
     ready: false,
     sessions: [],
     editing: null,
@@ -95,13 +100,16 @@ async function initCloudAuth() {
     state.cloud.user = data?.session?.user || null;
     if (state.cloud.user) {
       const profile = await cloudApi("/api/auth/me?campaignSlug=yuhara-main");
+      state.cloud.profile = profile.profile || null;
       state.cloud.role = profile.campaignRole || null;
-      if (["owner", "master"].includes(state.cloud.role || "")) await loadCloudSessions();
+      state.cloud.capabilities = profile.capabilities || {};
+      if (state.cloud.capabilities.canOpenEdit) await loadCloudSessions();
     }
   } catch (error) {
     console.warn("Arquivo remoto indisponível:", error.message);
   } finally {
     state.cloud.ready = true;
+    configureWorkspaces();
     renderCloudAccess();
     if (state.session) renderSession();
   }
@@ -116,10 +124,10 @@ function renderCloudAccess() {
     list.innerHTML = '<p class="empty">Entre no DnD Scribe pela página inicial e volte ao Edit.</p>';
     return;
   }
-  if (!["owner", "master"].includes(state.cloud.role || "")) {
+  if (!state.cloud.capabilities.canOpenEdit) {
     status.textContent = "SEM PERMISSÃO";
     status.className = "health-pill degraded";
-    list.innerHTML = '<p class="empty">Esta área é exclusiva para dono e mestre da campanha.</p>';
+    list.innerHTML = '<p class="empty">Você entrou, mas o acesso ao Edit não está liberado para esta conta.</p>';
     return;
   }
   status.textContent = `${state.cloud.sessions.length} PUBLICADAS`;
@@ -131,7 +139,7 @@ function renderCloudAccess() {
       <p class="card-meta">${Number(session.segments || 0).toLocaleString("pt-BR")} falas · ${Number(session.needsReview || 0).toLocaleString("pt-BR")} aguardando revisão</p>
       ${session.summary ? `<p class="muted">${escapeHtml(session.summary)}</p>` : ""}
     </div>
-    <button class="ghost cloud-edit-button" data-source-id="${escapeHtml(session.sourceSessionId)}">Editar sessão →</button>
+    <button class="ghost cloud-edit-button" data-source-id="${escapeHtml(session.sourceSessionId)}">${state.cloud.capabilities.canEditContent ? "Editar sessão" : "Visualizar sessão"} →</button>
   </article>`).join("") || '<p class="empty">Nenhuma sessão publicada.</p>';
   document.querySelectorAll(".cloud-edit-button").forEach((button) => {
     button.addEventListener("click", () => openCloudEditor(button.dataset.sourceId));
@@ -141,6 +149,198 @@ function renderCloudAccess() {
 async function loadCloudSessions() {
   const payload = await cloudApi("/api/editor-sessions?campaignSlug=yuhara-main");
   state.cloud.sessions = payload.sessions || [];
+}
+
+function configureWorkspaces() {
+  const canUseLocal = state.cloud.capabilities.canUseLocalProcessing || state.cloud.capabilities.canReadAudio;
+  $("#localWorkspaceTab").classList.toggle("hidden", !canUseLocal);
+  $("#permissionsWorkspaceTab").classList.toggle("hidden", !state.cloud.capabilities.canManagePermissions);
+  ["#localHealthSection", "#localCandidateSection", "#localJobsSection"].forEach((selector) => {
+    $(selector).classList.toggle("hidden", !state.cloud.capabilities.canUseLocalProcessing);
+  });
+  if (!state.cloud.capabilities.canOpenEdit) {
+    document.querySelector(".workspace-tabs").classList.add("hidden");
+    return;
+  }
+  document.querySelector(".workspace-tabs").classList.remove("hidden");
+  selectWorkspace("content");
+}
+
+function localConnectionError(error) {
+  $("#bridgeBadge").textContent = "PC LOCAL DESCONECTADO";
+  $("#bridgeBadge").classList.remove("connected");
+  $("#bridgeBadge").classList.add("disconnected");
+  $("#healthStatus").textContent = "OFFLINE";
+  $("#healthStatus").className = "health-pill degraded";
+  $("#healthGrid").innerHTML = "";
+  $("#candidateList").innerHTML = `<div class="error-panel connection-error">
+    <strong>Abra o companheiro no seu PC para continuar.</strong>
+    <span>Execute <code>.\\run.ps1</code> em
+    <code>E:\\Project\\craig-to-text</code>, permita o acesso à rede local no
+    navegador e atualize esta página.</span>
+    <small>${escapeHtml(error.message)}</small>
+  </div>`;
+}
+
+async function selectWorkspace(name) {
+  if (name === "local" && !state.cloud.capabilities.canUseLocalProcessing && !state.cloud.capabilities.canReadAudio) return;
+  if (name === "permissions" && !state.cloud.capabilities.canManagePermissions) return;
+  state.cloud.workspace = name;
+  $("#cloudWorkspace").classList.toggle("hidden", name !== "content");
+  $("#localWorkspace").classList.toggle("hidden", name !== "local");
+  $("#permissionsWorkspace").classList.toggle("hidden", name !== "permissions");
+  $("#bridgeBadge").classList.toggle("hidden", name !== "local");
+  document.querySelectorAll(".workspace-tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.workspace === name);
+  });
+  if (name === "local" && !state.cloud.localLoaded) {
+    state.cloud.localLoaded = true;
+    const loader = state.cloud.capabilities.canUseLocalProcessing
+      ? loadLibrary()
+      : api("/api/sessions").then(renderSessions);
+    await loader.catch(localConnectionError);
+  }
+  if (name === "permissions" && !state.cloud.rbac) {
+    await loadPermissions().catch((error) => {
+      $("#permissionsList").innerHTML = `<div class="error-panel">${escapeHtml(error.message)}</div>`;
+    });
+  }
+}
+
+const featureRoles = {
+  edit_viewer: {
+    label: "Ver Edit",
+    description: "Abre a área sem alterar conteúdo.",
+  },
+  site_editor: {
+    label: "Editar conteúdo",
+    description: "Altera sessões, resumos e transcrições.",
+  },
+  local_operator: {
+    label: "Processar e publicar",
+    description: "Usa os arquivos e o processamento deste PC.",
+  },
+  audio_operator: {
+    label: "Acessar áudio",
+    description: "Ouve as faixas guardadas localmente.",
+  },
+};
+
+function activeFeatureAssignment(profileId, roleSlug) {
+  return (state.cloud.rbac?.assignments || []).find((assignment) => (
+    assignment.profileId === profileId
+    && assignment.roleSlug === roleSlug
+    && assignment.scopeType === "campaign"
+    && assignment.scopeId === "yuhara-main"
+    && assignment.status === "active"
+    && !assignment.endsAt
+  ));
+}
+
+function profileFeatureState(profileId) {
+  const editor = activeFeatureAssignment(profileId, "site_editor");
+  const viewer = activeFeatureAssignment(profileId, "edit_viewer");
+  return {
+    edit_viewer: Boolean(viewer || editor),
+    site_editor: Boolean(editor),
+    local_operator: Boolean(activeFeatureAssignment(profileId, "local_operator")),
+    audio_operator: Boolean(activeFeatureAssignment(profileId, "audio_operator")),
+  };
+}
+
+async function loadPermissions() {
+  $("#permissionsList").innerHTML = '<p class="empty">Carregando permissões…</p>';
+  state.cloud.rbac = await cloudApi("/api/rbac?campaignSlug=yuhara-main");
+  renderPermissions();
+}
+
+function renderPermissions() {
+  const profiles = (state.cloud.rbac?.profiles || []).filter((profile) => profile.legacyCampaignRole);
+  $("#permissionsList").innerHTML = profiles.map((profile) => {
+    const enabled = profileFeatureState(profile.id);
+    return `<article class="permission-card">
+      <div class="permission-person">
+        <strong>${escapeHtml(profile.displayName || profile.roll20Name || "Pessoa sem nome")}</strong>
+        <span>${escapeHtml(profile.email || profile.discordHandle || profile.legacyCampaignRole || "")}</span>
+      </div>
+      <div class="permission-toggles">
+        ${Object.entries(featureRoles).map(([roleSlug, feature]) => `<label class="permission-toggle">
+          <input type="checkbox" data-profile-id="${escapeHtml(profile.id)}" data-role-slug="${roleSlug}" ${enabled[roleSlug] ? "checked" : ""} />
+          <span>${escapeHtml(feature.label)}</span>
+          <small>${escapeHtml(feature.description)}</small>
+        </label>`).join("")}
+      </div>
+    </article>`;
+  }).join("") || '<p class="empty">Nenhuma pessoa vinculada à campanha.</p>';
+  document.querySelectorAll(".permission-toggle input").forEach((input) => {
+    input.addEventListener("change", () => changeFeaturePermission(input));
+  });
+}
+
+async function assignFeatureRole(profileId, roleSlug) {
+  const payload = await cloudApi("/api/rbac/assign", {
+    method: "POST",
+    body: JSON.stringify({
+      campaignSlug: "yuhara-main",
+      profileId,
+      roleSlug,
+      scopeType: "campaign",
+      scopeId: "yuhara-main",
+      reason: "Permissão alterada no Edit.",
+    }),
+  });
+  state.cloud.rbac = payload.rbac;
+}
+
+async function revokeFeatureRole(profileId, roleSlug) {
+  const assignment = activeFeatureAssignment(profileId, roleSlug);
+  if (!assignment) return;
+  const payload = await cloudApi("/api/rbac/revoke", {
+    method: "POST",
+    body: JSON.stringify({
+      campaignSlug: "yuhara-main",
+      assignmentId: assignment.id,
+      reason: "Permissão alterada no Edit.",
+    }),
+  });
+  state.cloud.rbac = payload.rbac;
+}
+
+async function changeFeaturePermission(input) {
+  const profileId = input.dataset.profileId;
+  const roleSlug = input.dataset.roleSlug;
+  const enabled = input.checked;
+  const card = input.closest(".permission-toggle");
+  card.classList.add("busy");
+  try {
+    if (roleSlug === "edit_viewer") {
+      if (enabled) {
+        if (!activeFeatureAssignment(profileId, "site_editor")) {
+          await assignFeatureRole(profileId, "edit_viewer");
+        }
+      } else {
+        await revokeFeatureRole(profileId, "site_editor");
+        await revokeFeatureRole(profileId, "edit_viewer");
+      }
+    } else if (roleSlug === "site_editor") {
+      if (enabled) {
+        await assignFeatureRole(profileId, "site_editor");
+        await revokeFeatureRole(profileId, "edit_viewer");
+      } else {
+        await revokeFeatureRole(profileId, "site_editor");
+        await assignFeatureRole(profileId, "edit_viewer");
+      }
+    } else if (enabled) {
+      await assignFeatureRole(profileId, roleSlug);
+    } else {
+      await revokeFeatureRole(profileId, roleSlug);
+    }
+    renderPermissions();
+  } catch (error) {
+    input.checked = !enabled;
+    alert(error.message);
+    card.classList.remove("busy");
+  }
 }
 
 function openCloudEditor(sourceSessionId) {
@@ -154,6 +354,12 @@ function openCloudEditor(sourceSessionId) {
   $("#cloudCover").value = session.coverImageUrl || "";
   $("#cloudSummary").value = session.summary || "";
   $("#cloudSummaryFull").value = session.summaryFull || "";
+  const readOnly = !state.cloud.capabilities.canEditContent;
+  $("#cloudEditorDialog").querySelectorAll("input, textarea").forEach((field) => {
+    field.disabled = readOnly;
+  });
+  $("#saveCloudSessionButton").classList.toggle("hidden", readOnly);
+  $("#reviewCloudTranscriptButton").textContent = readOnly ? "Ver transcrição" : "Revisar transcrição";
   $("#cloudEditorDialog").showModal();
 }
 
@@ -205,7 +411,7 @@ async function loadCloudTranscript({ append = false } = {}) {
     <time>${formatTime(Number(segment.startMs || 0) / 1000)}</time>
     <strong>${escapeHtml(segment.speaker)}</strong>
     <p>${escapeHtml(segment.text)}</p>
-    <button type="button" class="ghost cloud-segment-button" data-segment-id="${escapeHtml(segment.id)}">${reviewLabel(segment.reviewStatus)}</button>
+    <button type="button" class="ghost cloud-segment-button" data-segment-id="${escapeHtml(segment.id)}">${state.cloud.capabilities.canEditContent ? reviewLabel(segment.reviewStatus) : "Ver"}</button>
   </article>`).join("");
   $("#loadMoreCloudSegments").classList.toggle("hidden", !state.cloud.cursor);
   document.querySelectorAll(".cloud-segment-button").forEach((button) => {
@@ -230,6 +436,11 @@ function openCloudSegment(segmentId) {
   $("#cloudSegmentText").value = segment.text;
   $("#cloudSegmentStatus").value = ["approved", "needs_review", "discarded"].includes(segment.reviewStatus)
     ? segment.reviewStatus : "unreviewed";
+  const readOnly = !state.cloud.capabilities.canEditContent;
+  $("#cloudSegmentDialog").querySelectorAll("input, textarea, select").forEach((field) => {
+    field.disabled = readOnly;
+  });
+  $("#saveCloudSegmentButton").classList.toggle("hidden", readOnly);
   $("#cloudSegmentDialog").showModal();
 }
 
@@ -427,7 +638,7 @@ function renderSession() {
   const canPublish = hostedMode
     && session.status === "complete"
     && session.mode === "full"
-    && ["owner", "master"].includes(state.cloud.role || "");
+    && state.cloud.capabilities.canUseLocalProcessing;
   $("#publishButton").classList.toggle("hidden", !canPublish);
   $("#metadataTitle").value = session.title || "";
   $("#metadataDate").value = session.played_at || (session.start_time || "").slice(0, 10);
@@ -643,7 +854,7 @@ async function publishSession() {
       playedAt: session.played_at || (session.start_time || "").slice(0, 10),
       startTime: session.start_time || null,
       arc: session.arc || "",
-      summary: session.recap?.short || "",
+      summary: session.notes || session.recap?.short || "",
       publicationId: bundle.publication_id || null,
       transcriptSha256: bundle.source_manifest?.transcript_sha256 || null,
       segments: session.transcript.map((segment, index) => ({
@@ -674,6 +885,10 @@ async function publishSession() {
 }
 
 function playAt(button) {
+  if (!state.cloud.capabilities.canReadAudio) {
+    alert("Sua conta não tem permissão para acessar os áudios deste computador.");
+    return;
+  }
   const player = $("#audioPlayer");
   const url = apiUrl(
     `/api/sessions/${state.session.recording_id}/tracks/${encodeURIComponent(button.dataset.track)}`,
@@ -718,19 +933,12 @@ $("#searchInput").addEventListener("input", (event) => {
   state.query = event.target.value;
   renderTranscript();
 });
-
-loadLibrary().catch((error) => {
-  $("#bridgeBadge").textContent = "PC LOCAL DESCONECTADO";
-  $("#bridgeBadge").classList.add("disconnected");
-  $("#healthStatus").textContent = "OFFLINE";
-  $("#healthStatus").className = "health-pill error";
-  $("#healthGrid").innerHTML = "";
-  $("#candidateList").innerHTML = `<div class="error-panel connection-error">
-    <strong>Abra o companheiro no seu PC para continuar.</strong>
-    <span>Execute <code>.\\run.ps1</code> em
-    <code>E:\\Project\\craig-to-text</code>, permita o acesso à rede local no
-    navegador e atualize esta página.</span>
-    <small>${escapeHtml(error.message)}</small>
-  </div>`;
+document.querySelectorAll(".workspace-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    selectWorkspace(tab.dataset.workspace).catch((error) => alert(error.message));
+  });
+});
+$("#refreshPermissionsButton").addEventListener("click", () => {
+  loadPermissions().catch((error) => alert(error.message));
 });
 initCloudAuth();

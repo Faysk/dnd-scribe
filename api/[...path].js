@@ -370,14 +370,22 @@ function capabilitiesForRole(role, rbac = null) {
   const isDm = role === 'owner' || role === 'master';
   const permissions = permissionActionSet(rbac);
   const rbacAvailable = Boolean(rbac?.available);
+  const canManagePermissions = isDm
+    || permissions.has('campaign.access.manage')
+    || permissions.has('project.rbac.manage');
   return {
     openTestMode: false,
     canReadCampaign: Boolean(role) || permissions.has('campaign.read'),
     canReviewOwnMaterial: Boolean(role) || permissions.has('campaign.read'),
     canReviewTableMaterial: ['owner', 'master', 'reviewer'].includes(role) || permissions.has('narrative.review.manage'),
     canApproveCanon: isDm || permissions.has('narrative.canon.approve'),
-    canManageCampaign: isDm,
-    canManageAccess: isDm || permissions.has('campaign.access.manage') || permissions.has('project.rbac.manage'),
+    canManageCampaign: isDm || permissions.has('campaign.content.edit'),
+    canManageAccess: canManagePermissions,
+    canOpenEdit: permissions.has('campaign.edit.access'),
+    canEditContent: permissions.has('campaign.content.edit'),
+    canUseLocalProcessing: permissions.has('campaign.local.process'),
+    canReadAudio: permissions.has('campaign.audio.read'),
+    canManagePermissions,
     canViewMonitoring: permissions.has('project.monitor.read') || (!rbacAvailable && isDm),
     canManageTechnical: permissions.has('project.rbac.manage'),
     canRunTechnicalJobs: permissions.has('project.jobs.run')
@@ -8354,7 +8362,13 @@ async function handleGet(req, res, path, query) {
     });
   }
   if (path === '/api/editor-sessions') {
-    await requireCampaignAccess(req, campaign, ['owner', 'master']);
+    await requirePermission(req, campaign, {
+      action: 'campaign.edit.access',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para abrir o Edit.'
+    });
     res.setHeader('Cache-Control', 'private, no-store');
     return sendJson(res, 200, { ok: true, sessions: await editorSessions(campaign) });
   }
@@ -8398,18 +8412,36 @@ async function handlePost(req, res, path) {
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
   if (path === '/api/library-import-local') {
-    await requireCampaignAccess(req, campaign, ['owner', 'master']);
+    await requirePermission(req, campaign, {
+      action: 'campaign.local.process',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para publicar a partir do processamento local.'
+    });
     return sendJson(res, 200, await importLocalPublication(campaign, body));
   }
   if (path === '/api/editor-session') {
-    await requireCampaignAccess(req, campaign, ['owner', 'master']);
+    await requirePermission(req, campaign, {
+      action: 'campaign.content.edit',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para editar conteudo publicado.'
+    });
     return sendJson(res, 200, {
       ok: true,
       session: await updateEditorSession(campaign, sourceSessionId, body)
     });
   }
   if (path === '/api/editor-segment') {
-    await requireCampaignAccess(req, campaign, ['owner', 'master']);
+    await requirePermission(req, campaign, {
+      action: 'campaign.content.edit',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para revisar a transcricao.'
+    });
     return sendJson(res, 200, {
       ok: true,
       segment: await updateEditorSegment(campaign, sourceSessionId, body)

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Edit — DnD Scribe</title>
     <link rel="icon" href="data:," />
+    <script src="/theme.js"></script>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -13,7 +14,14 @@
         <span class="brand-mark">20</span>
         <span>DnD <i>Scribe</i> · Edit</span>
       </a>
-      <span class="local-badge" id="bridgeBadge">CONECTANDO AO SEU PC…</span>
+      <div class="topbar-actions">
+        <button class="theme-toggle" type="button" data-theme-toggle>
+          <span data-theme-icon aria-hidden="true">☾</span>
+          <span data-theme-label>sistema</span>
+        </button>
+        <a class="ghost topbar-link" href="/">Sessões</a>
+        <span class="local-badge hidden" id="bridgeBadge">PC LOCAL</span>
+      </div>
     </header>
 
     <main>
@@ -27,7 +35,14 @@
           </p>
         </div>
 
-        <section id="cloudLibraryPanel" class="system-panel">
+        <nav class="workspace-tabs" aria-label="Áreas do Edit">
+          <button class="workspace-tab active" type="button" data-workspace="content">Conteúdo publicado</button>
+          <button class="workspace-tab hidden" id="localWorkspaceTab" type="button" data-workspace="local">Processamento local</button>
+          <button class="workspace-tab hidden" id="permissionsWorkspaceTab" type="button" data-workspace="permissions">Permissões</button>
+        </nav>
+
+        <div id="cloudWorkspace">
+        <section id="cloudLibraryPanel" class="system-panel workspace-panel">
           <div class="section-heading compact-heading">
             <div>
               <p class="eyebrow">BANCO DE DADOS</p>
@@ -37,8 +52,24 @@
           </div>
           <div id="cloudSessionList" class="card-grid"></div>
         </section>
+        </div>
 
-        <section class="system-panel">
+        <div id="permissionsWorkspace" class="hidden">
+          <section class="system-panel workspace-panel">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">CONTROLE DE ACESSO</p>
+                <h2>Permissões por pessoa</h2>
+              </div>
+              <button class="ghost" id="refreshPermissionsButton" type="button">↻ Atualizar</button>
+            </div>
+            <p class="lede compact-lede">Você decide separadamente quem vê o Edit, quem altera conteúdo e quem pode acessar recursos do computador local.</p>
+            <div id="permissionsList" class="permissions-list"></div>
+          </section>
+        </div>
+
+        <div id="localWorkspace" class="hidden">
+        <section id="localHealthSection" class="system-panel workspace-panel">
           <div class="section-heading compact-heading">
             <div>
               <p class="eyebrow">PROCESSAMENTO LOCAL</p>
@@ -49,6 +80,7 @@
           <div id="healthGrid" class="health-grid"></div>
         </section>
 
+        <div id="localCandidateSection">
         <div class="section-heading">
           <div>
             <p class="eyebrow">GRAVAÇÕES ENCONTRADAS</p>
@@ -57,6 +89,7 @@
           <button class="ghost" id="refreshButton">↻ Atualizar</button>
         </div>
         <div id="candidateList" class="card-grid"></div>
+        </div>
 
         <div class="section-heading sessions-heading">
           <div>
@@ -66,6 +99,7 @@
         </div>
         <div id="sessionList" class="card-grid"></div>
 
+        <div id="localJobsSection">
         <div class="section-heading sessions-heading">
           <div>
             <p class="eyebrow">FILA PERSISTENTE</p>
@@ -73,6 +107,8 @@
           </div>
         </div>
         <div id="jobList" class="job-list"></div>
+        </div>
+        </div>
       </section>
 
       <section id="sessionView" class="hidden">

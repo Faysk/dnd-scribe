@@ -67,7 +67,7 @@ function authDisplayName(user = state.auth.user) {
 function showAuthenticatedHeader() {
   identity.textContent = authDisplayName();
   userMenuButton.hidden = false;
-  editMenuLink.hidden = !['owner', 'master'].includes(state.auth.campaignRole || '');
+  editMenuLink.hidden = !state.auth.capabilities?.canOpenEdit;
 }
 
 function formatSessionTitle(session = {}) {
