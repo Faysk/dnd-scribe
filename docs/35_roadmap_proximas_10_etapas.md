@@ -1,5 +1,10 @@
 # 35 — Roadmap das Proximas 10 Etapas
 
+> Estado em 26/07/2026: a expansão cloud-first deste roadmap está pausada para
+> a reformulação de custos. O plano executável atual é
+> `docs/65-plano-migracao-local-first.md`. Os itens abaixo continuam como
+> histórico e podem ser reaproveitados depois da separação local/nuvem.
+
 ## Regra de documentacao
 
 A partir daqui, cada etapa deve gerar:

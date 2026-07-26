@@ -2,6 +2,19 @@
 
 Projeto para capturar, transcrever, revisar e publicar memoria de campanha de DnD com auditoria.
 
+## Reformulacao local-first
+
+O projeto esta sendo reformulado para processar e guardar audio no PC do
+operador, usando a nuvem apenas para autenticacao e conteudo pequeno que
+precisa ser compartilhado.
+
+- Arquitetura proposta: `docs/64-arquitetura-local-first.md`
+- Plano por fases: `docs/65-plano-migracao-local-first.md`
+- Resultado da Fase 1: `docs/66-resultado-fase-1-local-first.md`
+- Resultado da Fase 2A: `docs/67-resultado-fase-2a-central-local.md`
+- Central Local em producao: `docs/68-deploy-central-local-producao.md`
+- Indice da documentacao: `docs/README.md`
+
 ## App local real
 
 O front funcional atual roda localmente com backend Python, usando Supabase real sem expor chave sensivel no navegador.
@@ -35,6 +48,23 @@ Esse app permite:
 - regenerar publicacoes;
 - baixar template de revisao do DM.
 - ouvir a playlist publica do Dandelion em um mini-player flutuante, via embed oficial do YouTube.
+
+## Companheiro local-first
+
+O código versionado do companheiro de transcrição, catálogo SQLite e revisão
+local está em `local-companion/`. A instalação operacional atual continua em
+`E:\Project\craig-to-text`.
+
+```powershell
+cd E:\Project\craig-to-text
+.\run.ps1
+```
+
+Interface hospedada:
+
+```txt
+https://dnd.faysk.dev/central-local/
+```
 
 ## App Vercel operador
 

@@ -1,4 +1,8 @@
 const DEFAULT_RUN = 'classify_candidates_v2_gpt-5.4-mini';
+const JOB_LIST_LIMIT = 20;
+const JOB_POLL_INTERVAL_MS = 30_000;
+const JOB_POLL_MAX_CYCLES = 20;
+const JOB_POLL_TABS = new Set(['upload', 'ops']);
 const CRAIG_UPLOAD_POLICY = {
   sessionRetainedTargetBytes: 250 * 1024 * 1024,
   uploadZipWarningBytes: 1200 * 1024 * 1024,
@@ -638,6 +642,8 @@ const state = {
   },
   jobs: [],
   jobsPolling: false,
+  jobsPollTimer: null,
+  jobsPollCycles: 0,
   pipelineControl: null,
   pipelineControlLoading: false,
   pipelineControlError: null,
@@ -1009,10 +1015,14 @@ async function boot() {
     const button = event.target.closest('button[data-tab]');
     if (!button) return;
     state.tab = button.dataset.tab;
+    if (!JOB_POLL_TABS.has(state.tab)) stopJobsPolling(false);
     render();
   });
   $('#tabs').addEventListener('keydown', handleTabsKeydown);
   document.addEventListener('keydown', handleTimelineKeydown);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') stopJobsPolling(false);
+  });
   window.addEventListener('hashchange', () => applyTimelineHash());
   initMusicDock();
   render();
@@ -1039,6 +1049,7 @@ function handleTabsKeydown(event) {
   event.preventDefault();
   const next = tabs[nextIndex];
   state.tab = next.dataset.tab;
+  if (!JOB_POLL_TABS.has(state.tab)) stopJobsPolling(false);
   render();
   next.focus();
 }
@@ -1105,17 +1116,14 @@ async function initAuth() {
     const { data, error } = await state.auth.client.auth.getSession();
     if (error) throw error;
     state.auth.user = data?.session?.user || null;
-    state.auth.client.auth.onAuthStateChange(async (_event, session) => {
+    state.auth.client.auth.onAuthStateChange((event, session) => {
+      const previousUserId = state.auth.user?.id || null;
       state.auth.user = session?.user || null;
       state.auth.ready = true;
       renderSiteGate();
       renderAuthPanel();
-      await loadAuthProfile(session);
-      if (canReadCampaign()) await loadCampaignData();
-      else {
-        resetCampaignData();
-        render();
-      }
+      if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') return;
+      window.setTimeout(() => syncAuthAccessAfterChange(event, session, previousUserId), 0);
     });
     state.auth.ready = true;
     renderSiteGate();
@@ -1127,6 +1135,30 @@ async function initAuth() {
     renderSiteGate();
     renderAuthPanel();
   }
+}
+
+async function syncAuthAccessAfterChange(event, session, previousUserId = null) {
+  const nextUserId = session?.user?.id || null;
+  if ((state.auth.user?.id || null) !== nextUserId) return;
+  if (event === 'SIGNED_OUT' || !nextUserId) {
+    await loadAuthProfile(null);
+    resetCampaignData();
+    render();
+    return;
+  }
+  if (!['SIGNED_IN', 'USER_UPDATED'].includes(event)) return;
+  if (state.auth.profileLoading) return;
+  if (event === 'SIGNED_IN' && previousUserId === nextUserId && state.auth.profile) return;
+
+  const couldReadCampaign = canReadCampaign();
+  await loadAuthProfile(session);
+  if ((state.auth.user?.id || null) !== nextUserId) return;
+  if (!canReadCampaign()) {
+    resetCampaignData();
+    render();
+    return;
+  }
+  if (!couldReadCampaign) await loadCampaignData();
 }
 
 function canReadCampaign() {
@@ -1190,6 +1222,7 @@ function tabAllowed(tabName) {
 }
 
 function resetCampaignData() {
+  stopJobsPolling();
   state.sessions = [];
   state.selectedSourceSessionId = null;
   state.review = null;
@@ -1719,22 +1752,45 @@ async function loadSessions(force = false) {
   }
 }
 
-async function loadJobs(scheduleNext = true) {
+function stopJobsPolling(resetBudget = true) {
+  if (state.jobsPollTimer) window.clearTimeout(state.jobsPollTimer);
+  state.jobsPollTimer = null;
+  state.jobsPolling = false;
+  if (resetBudget) state.jobsPollCycles = 0;
+}
+
+function canAutoPollJobs() {
+  return document.visibilityState === 'visible'
+    && JOB_POLL_TABS.has(state.tab)
+    && state.jobsPollCycles < JOB_POLL_MAX_CYCLES;
+}
+
+function scheduleJobsPoll() {
+  if (state.jobsPollTimer || !canAutoPollJobs()) return;
+  state.jobsPolling = true;
+  state.jobsPollTimer = window.setTimeout(async () => {
+    state.jobsPollTimer = null;
+    state.jobsPolling = false;
+    if (!canAutoPollJobs()) return;
+    state.jobsPollCycles += 1;
+    await loadJobs(true, false, true);
+  }, JOB_POLL_INTERVAL_MS);
+}
+
+async function loadJobs(scheduleNext = true, refreshControl = true, automatic = false) {
+  if (automatic && !canAutoPollJobs()) return;
+  if (!automatic) stopJobsPolling();
   try {
-    const payload = await api('/api/jobs');
+    const query = new URLSearchParams({ limit: String(JOB_LIST_LIMIT) });
+    if (state.selectedSourceSessionId) query.set('sourceSessionId', state.selectedSourceSessionId);
+    const payload = await api(`/api/jobs?${query}`);
     state.jobs = payload.jobs || [];
-    if (typeof window.refreshPipelineControl === 'function') {
+    if (refreshControl && state.selectedSourceSessionId && typeof window.refreshPipelineControl === 'function') {
       await window.refreshPipelineControl(false);
     }
     render();
-    const hasActive = state.jobs.some(job => ['running', 'retrying'].includes(job.status));
-    if (scheduleNext && hasActive && !state.jobsPolling) {
-      state.jobsPolling = true;
-      window.setTimeout(async () => {
-        state.jobsPolling = false;
-        await loadJobs(true);
-      }, 2500);
-    }
+    const hasActive = state.jobs.some(job => ['queued', 'running', 'retrying'].includes(job.status));
+    if (scheduleNext && hasActive) scheduleJobsPoll();
   } catch (_error) {
     state.jobs = state.jobs || [];
   }

@@ -54,7 +54,10 @@ const PIPELINE_SUPERVISOR_WORKFLOWS = {
   review: 'review-generation-worker.yml',
   cleanup: 'storage-cleanup-worker.yml'
 };
-const LORE_ROOT = path.join(process.cwd(), 'lore');
+const LORE_ROOT = path.join(
+  process.cwd(),
+  process.env.VERCEL ? 'lore-runtime' : 'lore'
+);
 const DANDELION_LORE_OWNER_KEYS = new Set(['dandelion', 'faysk']);
 const DANDELION_LORE_DOCS = [
   { id: 'bible', group: 'personagem', title: 'Biblia do Dandelion', path: '02_personagens/dandelion/biblia.md', tone: 'gold', featured: true },
@@ -4214,10 +4217,17 @@ function jobResponse(row) {
   };
 }
 
-async function listJobs(campaign, sourceSessionId = '') {
+async function listJobs(campaign, sourceSessionId = '', options = {}) {
+  const requestedLimit = Number.parseInt(String(options.limit ?? ''), 10);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(50, requestedLimit)) : 20;
   const params = [campaign];
-  const sourceFilter = sourceSessionId ? 'and s.source_session_id = $2' : '';
-  if (sourceSessionId) params.push(sourceSessionId);
+  let sourceFilter = '';
+  if (sourceSessionId) {
+    params.push(sourceSessionId);
+    sourceFilter = `and s.source_session_id = $${params.length}`;
+  }
+  params.push(limit);
+  const limitParameter = `$${params.length}`;
   const result = await getPool().query(
     `
 select pj.id, pj.job_type, pj.status, pj.attempts, pj.input, pj.output, pj.error,
@@ -4241,8 +4251,9 @@ left join campaigns c on c.id = s.campaign_id
 left join processing_job_step_summary jss on jss.job_id = pj.id
 left join craig_track_extraction_summary ctes on ctes.job_id = pj.id
 where c.slug = $1 ${sourceFilter}
-order by pj.created_at desc
-limit 50;`,
+order by case when pj.status in ('queued', 'running', 'retrying') then 0 else 1 end,
+         pj.created_at desc
+limit ${limitParameter}::int;`,
     params
   );
   return result.rows.map(jobResponse);
@@ -7646,7 +7657,7 @@ async function handleGet(req, res, path, query) {
     await requireCampaignAccess(req, campaign);
     return sendJson(res, 200, {
       ok: true,
-      jobs: await listJobs(campaign, query.get('sourceSessionId') || ''),
+      jobs: await listJobs(campaign, query.get('sourceSessionId') || '', { limit: query.get('limit') }),
       mode: 'supabase_prod_jobs',
       note: 'Jobs de producao sao persistidos no Supabase; execucao pesada ainda depende do worker cloud.'
     });

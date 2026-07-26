@@ -1,5 +1,12 @@
 # 03 — Arquitetura Geral
 
+> Estado em 26/07/2026: este documento descreve a arquitetura cloud-first
+> original. Ela está em reformulação por custo de storage, processamento e
+> egress. A proposta atual está em
+> `docs/64-arquitetura-local-first.md` e o plano em
+> `docs/65-plano-migracao-local-first.md`. O conteúdo abaixo permanece como
+> histórico até a primeira fase ser validada.
+
 ## Visão de alto nível
 
 ```txt

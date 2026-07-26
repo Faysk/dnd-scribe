@@ -1,5 +1,10 @@
 # 07 — Transcrição e IA
 
+> Estado em 26/07/2026: a recomendação de transcrição OpenAI abaixo está sendo
+> substituída por `faster-whisper` local, já validado em
+> `E:\Project\craig-to-text`. GPT permanece para títulos, resumos, extrações e
+> candidatos revisáveis. Veja `docs/64-arquitetura-local-first.md`.
+
 ## Objetivo
 
 Transformar áudio bruto em transcrição organizada, com timestamps, falantes e relação com personagens.

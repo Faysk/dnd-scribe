@@ -12,12 +12,16 @@ node_modules/**
 
 audio
 audio/**
+lore
+lore/**
 tmp
 tmp/**
 .agents
 .agents/**
 .codex
 .codex/**
+.tools
+.tools/**
 
 # Local/generated artifacts that are not needed by Vercel.
 __pycache__
