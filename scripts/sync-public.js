@@ -7,6 +7,16 @@ const integrationsDir = path.join(root, "integrations");
 const outputDir = path.join(root, "public");
 const requiredSource = path.join(sourceDir, "index.html");
 const requiredOutput = path.join(outputDir, "index.html");
+const browserVendors = [
+  {
+    source: path.join(root, "node_modules", "marked", "lib", "marked.umd.js"),
+    target: path.join(outputDir, "vendor", "marked.umd.js"),
+  },
+  {
+    source: path.join(root, "node_modules", "dompurify", "dist", "purify.min.js"),
+    target: path.join(outputDir, "vendor", "purify.min.js"),
+  },
+];
 
 function fail(message) {
   console.error(`sync-public: ${message}`);
@@ -58,6 +68,13 @@ fs.rmSync(outputDir, { recursive: true, force: true });
 copyDirectory(sourceDir, outputDir);
 if (fs.existsSync(integrationsDir)) {
   copyDirectory(integrationsDir, path.join(outputDir, "integrations"));
+}
+for (const vendor of browserVendors) {
+  if (!fs.existsSync(vendor.source)) {
+    fail(`browser dependency not found: ${vendor.source}`);
+  }
+  fs.mkdirSync(path.dirname(vendor.target), { recursive: true });
+  fs.copyFileSync(vendor.source, vendor.target);
 }
 
 if (!fs.existsSync(requiredOutput)) {

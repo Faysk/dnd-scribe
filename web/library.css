@@ -212,6 +212,21 @@ select:focus-visible {
   cursor: pointer;
 }
 
+.user-menu-button:hover,
+.user-menu-button[aria-expanded="true"] {
+  color: var(--paper);
+  border-color: rgba(215, 170, 97, .55);
+  background: var(--panel);
+}
+
+.menu-chevron {
+  transition: transform .18s ease;
+}
+
+.user-menu-button[aria-expanded="true"] .menu-chevron {
+  transform: rotate(180deg);
+}
+
 .theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -233,12 +248,16 @@ select:focus-visible {
   top: calc(100% + 8px);
   right: 0;
   display: grid;
-  min-width: 190px;
+  min-width: max(180px, 100%);
   padding: 7px;
   border: 1px solid var(--line);
   background: #11151a;
   border-radius: 12px;
   box-shadow: var(--shadow);
+}
+
+.user-menu[hidden] {
+  display: none;
 }
 
 :root[data-theme="light"] .user-menu {
@@ -268,6 +287,17 @@ select:focus-visible {
 .user-menu button:hover {
   color: var(--paper);
   background: var(--panel);
+}
+
+.user-menu .sign-out-menu-item {
+  margin-top: 5px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+}
+
+.user-menu .sign-out-menu-item:hover {
+  color: var(--danger);
 }
 
 .session-identity {
@@ -613,8 +643,38 @@ main {
 .summary-markdown h2 { margin: 46px 0 18px; font-size: 30px; }
 .summary-markdown h3 { margin: 34px 0 14px; font-size: 22px; }
 .summary-markdown p { margin: 0 0 14px; }
-.summary-markdown .summary-list-item { padding-left: 18px; }
-.summary-space { height: 10px; }
+.summary-markdown ul,
+.summary-markdown ol { margin: 0 0 24px; padding-left: 28px; }
+.summary-markdown li { margin: 7px 0; padding-left: 4px; }
+.summary-markdown li::marker { color: var(--gold); }
+.summary-markdown blockquote {
+  margin: 30px 0;
+  padding: 4px 0 4px 24px;
+  border-left: 3px solid var(--gold);
+  color: var(--paper);
+  font-size: 1.08em;
+  font-style: italic;
+}
+.summary-markdown blockquote p { margin: 0; }
+.summary-markdown strong { color: var(--paper); }
+.summary-markdown a { color: var(--gold-bright); text-underline-offset: 3px; }
+.summary-markdown hr { margin: 42px 0; border: 0; border-top: 1px solid var(--line); }
+.summary-markdown code {
+  padding: 2px 6px;
+  color: var(--paper);
+  background: var(--panel);
+  border-radius: 5px;
+  font: .88em "DM Mono", monospace;
+}
+.summary-markdown pre {
+  overflow-x: auto;
+  margin: 24px 0;
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.summary-markdown pre code { padding: 0; background: transparent; }
 
 .session-summary {
   display: -webkit-box;

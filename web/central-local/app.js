@@ -354,6 +354,7 @@ function openCloudEditor(sourceSessionId) {
   $("#cloudCover").value = session.coverImageUrl || "";
   $("#cloudSummary").value = session.summary || "";
   $("#cloudSummaryFull").value = session.summaryFull || "";
+  renderCloudSummaryPreview();
   const readOnly = !state.cloud.capabilities.canEditContent;
   $("#cloudEditorDialog").querySelectorAll("input, textarea").forEach((field) => {
     field.disabled = readOnly;
@@ -361,6 +362,29 @@ function openCloudEditor(sourceSessionId) {
   $("#saveCloudSessionButton").classList.toggle("hidden", readOnly);
   $("#reviewCloudTranscriptButton").textContent = readOnly ? "Ver transcrição" : "Revisar transcrição";
   $("#cloudEditorDialog").showModal();
+}
+
+function renderSafeMarkdown(markdown) {
+  const source = String(markdown || "").replace(/^[\u200B-\u200F\uFEFF]/, "");
+  if (!source.trim()) return '<p class="muted">A prévia aparecerá aqui.</p>';
+  if (!window.marked?.parse || !window.DOMPurify?.sanitize) {
+    return `<p>${escapeHtml(source || "A prévia aparecerá aqui.")}</p>`;
+  }
+  return window.DOMPurify.sanitize(window.marked.parse(source, {
+    gfm: true,
+    breaks: false,
+  }), {
+    USE_PROFILES: { html: true },
+  });
+}
+
+function renderCloudSummaryPreview() {
+  $("#cloudSummaryPreview").innerHTML = renderSafeMarkdown($("#cloudSummaryFull").value);
+}
+
+function scheduleCloudSummaryPreview() {
+  window.clearTimeout(scheduleCloudSummaryPreview.timer);
+  scheduleCloudSummaryPreview.timer = window.setTimeout(renderCloudSummaryPreview, 120);
 }
 
 async function saveCloudSession() {
@@ -933,6 +957,7 @@ $("#searchInput").addEventListener("input", (event) => {
   state.query = event.target.value;
   renderTranscript();
 });
+$("#cloudSummaryFull").addEventListener("input", scheduleCloudSummaryPreview);
 document.querySelectorAll(".workspace-tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     selectWorkspace(tab.dataset.workspace).catch((error) => alert(error.message));

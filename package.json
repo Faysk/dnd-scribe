@@ -19,6 +19,8 @@
     "smoke:routes": "node scripts/smoke-production-routes.js"
   },
   "dependencies": {
+    "dompurify": "3.4.12",
+    "marked": "18.0.7",
     "pg": "8.16.3"
   },
   "engines": {

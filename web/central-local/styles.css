@@ -393,6 +393,30 @@ textarea:focus, input:focus { border-color: var(--purple); }
 }
 .wide-field { grid-column: 1 / -1; }
 #cloudSummaryFull { min-height: 320px; }
+.markdown-preview-panel {
+  padding: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.025);
+}
+.markdown-preview { margin-top: 18px; color: var(--muted); font-size: 15px; line-height: 1.7; }
+.markdown-preview > :first-child { margin-top: 0; }
+.markdown-preview > :last-child { margin-bottom: 0; }
+.summary-markdown h1, .summary-markdown h2, .summary-markdown h3 { color: var(--ink); line-height: 1.2; }
+.summary-markdown h1 { margin: 34px 0 18px; font-size: 34px; }
+.summary-markdown h2 { margin: 30px 0 14px; font-size: 26px; }
+.summary-markdown h3 { margin: 24px 0 12px; font-size: 20px; }
+.summary-markdown p { margin: 0 0 12px; }
+.summary-markdown ul, .summary-markdown ol { margin: 0 0 20px; padding-left: 24px; }
+.summary-markdown li { margin: 5px 0; }
+.summary-markdown li::marker { color: var(--purple); }
+.summary-markdown blockquote { margin: 22px 0; padding-left: 18px; border-left: 3px solid var(--purple); color: var(--ink); font-style: italic; }
+.summary-markdown blockquote p { margin: 0; }
+.summary-markdown strong { color: var(--ink); }
+.summary-markdown a { color: var(--purple); }
+.summary-markdown hr { margin: 30px 0; border: 0; border-top: 1px solid var(--line); }
+.summary-markdown code { padding: 2px 5px; color: var(--ink); background: var(--paper-2); border-radius: 4px; font: .88em "DM Mono", monospace; }
+.summary-markdown pre { overflow-x: auto; padding: 16px; background: var(--paper-2); border: 1px solid var(--line); }
+.summary-markdown pre code { padding: 0; background: transparent; }
 .cloud-transcript-list {
   display: grid;
   max-height: 62vh;

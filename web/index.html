@@ -28,14 +28,14 @@
         <span data-theme-icon aria-hidden="true">☾</span>
         <span data-theme-label>sistema</span>
       </button>
-      <button id="userMenuButton" class="user-menu-button" type="button" hidden aria-expanded="false">
+      <button id="userMenuButton" class="user-menu-button" type="button" hidden aria-expanded="false" aria-controls="userMenu" aria-haspopup="true">
         <span id="sessionIdentity" class="session-identity"></span>
-        <span aria-hidden="true">⌄</span>
+        <span class="menu-chevron" aria-hidden="true">⌄</span>
       </button>
       <div id="userMenu" class="user-menu" hidden>
         <a href="#/">Sessões</a>
         <a id="editMenuLink" href="/edit/" hidden>Edit</a>
-        <button id="signOutButton" type="button">Sair</button>
+        <button id="signOutButton" class="sign-out-menu-item" type="button">Sair</button>
       </div>
     </div>
   </header>
@@ -53,6 +53,8 @@
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/vendor/marked.umd.js"></script>
+  <script src="/vendor/purify.min.js"></script>
   <script src="/library.js"></script>
 </body>
 </html>

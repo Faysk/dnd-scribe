@@ -70,6 +70,11 @@ function showAuthenticatedHeader() {
   editMenuLink.hidden = !state.auth.capabilities?.canOpenEdit;
 }
 
+function closeUserMenu() {
+  userMenu.hidden = true;
+  userMenuButton.setAttribute('aria-expanded', 'false');
+}
+
 function formatSessionTitle(session = {}) {
   const raw = String(session.title || '').trim();
   if (!raw) return 'Sessão sem título';
@@ -301,15 +306,17 @@ function renderSummary() {
 }
 
 function renderMarkdown(markdown) {
-  const escaped = escapeHtml(markdown);
-  return escaped.split(/\r?\n/).map(line => {
-    if (/^### /.test(line)) return `<h3>${line.slice(4)}</h3>`;
-    if (/^## /.test(line)) return `<h2>${line.slice(3)}</h2>`;
-    if (/^# /.test(line)) return `<h1>${line.slice(2)}</h1>`;
-    if (/^[*-] /.test(line)) return `<p class="summary-list-item">• ${line.slice(2)}</p>`;
-    if (!line.trim()) return '<div class="summary-space"></div>';
-    return `<p>${line}</p>`;
-  }).join('');
+  const source = String(markdown || '').replace(/^[\u200B-\u200F\uFEFF]/, '');
+  if (!window.marked?.parse || !window.DOMPurify?.sanitize) {
+    return source.split(/\r?\n\r?\n/).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join('');
+  }
+  const html = window.marked.parse(source, {
+    gfm: true,
+    breaks: false
+  });
+  return window.DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true }
+  });
 }
 
 function renderReader() {
@@ -542,6 +549,8 @@ document.addEventListener('click', async event => {
     userMenuButton.setAttribute('aria-expanded', String(opening));
     return;
   }
+  if (event.target.closest('#userMenu a, #userMenu button')) closeUserMenu();
+  if (!userMenu.hidden && !event.target.closest('#userMenu')) closeUserMenu();
   if (event.target.closest('#signOutButton')) return signOut();
   if (event.target.closest('[data-download-transcript]')) {
     try {
@@ -611,8 +620,15 @@ document.addEventListener('change', async event => {
 });
 
 window.addEventListener('hashchange', () => {
+  closeUserMenu();
   window.scrollTo({ top: 0, behavior: 'instant' });
   route();
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || userMenu.hidden) return;
+  closeUserMenu();
+  userMenuButton.focus();
 });
 
 initAuth();

@@ -226,8 +226,12 @@
           </label>
           <label class="wide-field">
             Resumo em Markdown (opcional)
-            <textarea id="cloudSummaryFull" maxlength="120000"></textarea>
+            <textarea id="cloudSummaryFull" maxlength="120000" placeholder="# Título&#10;&#10;## Seção&#10;&#10;Texto, **destaques**, listas e citações…"></textarea>
           </label>
+          <section class="wide-field markdown-preview-panel" aria-label="Prévia do resumo publicado">
+            <span class="eyebrow">PRÉVIA PUBLICADA</span>
+            <div id="cloudSummaryPreview" class="summary-markdown markdown-preview"></div>
+          </section>
         </div>
         <div class="dialog-actions">
           <button value="cancel" class="ghost">Cancelar</button>
@@ -298,6 +302,8 @@
       </form>
     </dialog>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/vendor/marked.umd.js"></script>
+    <script src="/vendor/purify.min.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
