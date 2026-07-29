@@ -241,13 +241,15 @@
         <p class="eyebrow">RESUMO PUBLICADO</p>
         <h2 id="cloudSummaryTitle">Resumo</h2>
         <div class="cloud-summary-workspace">
-          <label>
-            Markdown
+          <label class="cloud-summary-pane">
+            <span class="eyebrow">MARKDOWN</span>
             <textarea id="cloudSummaryFull" maxlength="120000" placeholder="# Título&#10;&#10;## Seção&#10;&#10;Texto, **destaques**, listas e citações…"></textarea>
           </label>
-          <section class="markdown-preview-panel" aria-label="Prévia do resumo publicado">
-            <span class="eyebrow">PRÉVIA PUBLICADA</span>
-            <div id="cloudSummaryPreview" class="summary-markdown markdown-preview"></div>
+          <section class="cloud-summary-pane" aria-label="Prévia do resumo publicado">
+            <span class="eyebrow">PUBLICAÇÃO</span>
+            <div id="cloudSummaryPreviewScroll" class="markdown-preview-panel" tabindex="0">
+              <div id="cloudSummaryPreview" class="summary-markdown markdown-preview"></div>
+            </div>
           </section>
         </div>
         <div class="dialog-actions">

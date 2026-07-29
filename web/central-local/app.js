@@ -381,11 +381,12 @@ function openCloudSummary(sourceSessionId) {
   $("#cloudSummaryTitle").textContent = session.title;
   $("#cloudSummaryFull").value = session.summaryFull || "";
   renderCloudSummaryPreview();
+  $("#cloudSummaryFull").scrollTop = 0;
+  $("#cloudSummaryPreviewScroll").scrollTop = 0;
   const readOnly = !state.cloud.capabilities.canEditContent;
   $("#cloudSummaryFull").disabled = readOnly;
   $("#saveCloudSummaryButton").classList.toggle("hidden", readOnly);
   $("#cloudSummaryDialog").showModal();
-  window.requestAnimationFrame(resizeCloudSummaryEditor);
 }
 
 function renderSafeMarkdown(markdown) {
@@ -404,16 +405,24 @@ function renderSafeMarkdown(markdown) {
 
 function renderCloudSummaryPreview() {
   $("#cloudSummaryPreview").innerHTML = renderSafeMarkdown($("#cloudSummaryFull").value);
+  window.requestAnimationFrame(() => {
+    syncCloudSummaryScroll($("#cloudSummaryFull"), $("#cloudSummaryPreviewScroll"));
+  });
 }
 
-function resizeCloudSummaryEditor() {
-  const editor = $("#cloudSummaryFull");
-  editor.style.height = "auto";
-  editor.style.height = `${Math.max(editor.scrollHeight, 480)}px`;
+function syncCloudSummaryScroll(source, target) {
+  if (syncCloudSummaryScroll.locked) return;
+  const sourceRange = source.scrollHeight - source.clientHeight;
+  const targetRange = target.scrollHeight - target.clientHeight;
+  const progress = sourceRange > 0 ? source.scrollTop / sourceRange : 0;
+  syncCloudSummaryScroll.locked = true;
+  target.scrollTop = progress * Math.max(targetRange, 0);
+  window.requestAnimationFrame(() => {
+    syncCloudSummaryScroll.locked = false;
+  });
 }
 
 function scheduleCloudSummaryPreview() {
-  resizeCloudSummaryEditor();
   window.clearTimeout(scheduleCloudSummaryPreview.timer);
   scheduleCloudSummaryPreview.timer = window.setTimeout(renderCloudSummaryPreview, 120);
 }
@@ -1022,6 +1031,12 @@ $("#searchInput").addEventListener("input", (event) => {
   renderTranscript();
 });
 $("#cloudSummaryFull").addEventListener("input", scheduleCloudSummaryPreview);
+$("#cloudSummaryFull").addEventListener("scroll", () => {
+  syncCloudSummaryScroll($("#cloudSummaryFull"), $("#cloudSummaryPreviewScroll"));
+});
+$("#cloudSummaryPreviewScroll").addEventListener("scroll", () => {
+  syncCloudSummaryScroll($("#cloudSummaryPreviewScroll"), $("#cloudSummaryFull"));
+});
 document.querySelectorAll(".workspace-tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     selectWorkspace(tab.dataset.workspace).catch((error) => alert(error.message));
