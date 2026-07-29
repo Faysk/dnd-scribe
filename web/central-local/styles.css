@@ -434,15 +434,20 @@ textarea:focus, input:focus { border-color: var(--purple); }
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
+  align-items: stretch;
+  max-height: min(64vh, 720px);
+  padding-right: 8px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 .cloud-summary-workspace > label,
 .cloud-summary-workspace > section { min-width: 0; }
-.cloud-summary-workspace #cloudSummaryFull,
-.cloud-summary-workspace .markdown-preview-panel {
-  height: min(52vh, 560px);
-  min-height: 320px;
+.cloud-summary-workspace #cloudSummaryFull {
+  min-height: 480px;
+  overflow: hidden;
+  resize: none;
 }
-.cloud-summary-workspace .markdown-preview-panel { overflow-y: auto; }
+.cloud-summary-workspace .markdown-preview-panel { min-height: 100%; }
 .markdown-preview-panel {
   padding: 18px;
   border: 1px solid var(--line);
@@ -532,9 +537,8 @@ textarea:focus, input:focus { border-color: var(--purple); }
   .metadata-panel { grid-template-columns: 1fr; }
   .metadata-fields { grid-template-columns: 1fr; }
   .cloud-editor-grid { grid-template-columns: 1fr; }
-  .cloud-summary-workspace { grid-template-columns: 1fr; }
-  .cloud-summary-workspace #cloudSummaryFull,
-  .cloud-summary-workspace .markdown-preview-panel { height: 42vh; min-height: 280px; }
+  .cloud-summary-workspace { grid-template-columns: 1fr; max-height: 68vh; }
+  .cloud-summary-workspace #cloudSummaryFull { min-height: 320px; }
   .wide-field { grid-column: auto; }
   .cloud-segment { grid-template-columns: 68px minmax(0, 1fr); }
   .cloud-segment strong, .cloud-segment p, .cloud-segment button { grid-column: 2; }

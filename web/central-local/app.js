@@ -385,6 +385,7 @@ function openCloudSummary(sourceSessionId) {
   $("#cloudSummaryFull").disabled = readOnly;
   $("#saveCloudSummaryButton").classList.toggle("hidden", readOnly);
   $("#cloudSummaryDialog").showModal();
+  window.requestAnimationFrame(resizeCloudSummaryEditor);
 }
 
 function renderSafeMarkdown(markdown) {
@@ -405,7 +406,14 @@ function renderCloudSummaryPreview() {
   $("#cloudSummaryPreview").innerHTML = renderSafeMarkdown($("#cloudSummaryFull").value);
 }
 
+function resizeCloudSummaryEditor() {
+  const editor = $("#cloudSummaryFull");
+  editor.style.height = "auto";
+  editor.style.height = `${Math.max(editor.scrollHeight, 480)}px`;
+}
+
 function scheduleCloudSummaryPreview() {
+  resizeCloudSummaryEditor();
   window.clearTimeout(scheduleCloudSummaryPreview.timer);
   scheduleCloudSummaryPreview.timer = window.setTimeout(renderCloudSummaryPreview, 120);
 }
