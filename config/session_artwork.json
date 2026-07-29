@@ -1,0 +1,48 @@
+{
+  "campaignSlug": "yuhara-main",
+  "publicBaseUrl": "https://dnd.faysk.dev/assets/sessions",
+  "sessions": [
+    {
+      "sourceSessionId": "craig-AdabEqbzngmT-stage1-full",
+      "date": "2026-06-24",
+      "title": "As Cabeças que Ainda Falam",
+      "cardSource": "lore/06_referencias_visuais/sessoes/verticais/As Cabeças que Ainda Falam.png",
+      "heroSource": "lore/06_referencias_visuais/sessoes/horizontais/As Cabeças que Ainda Falam wide.png"
+    },
+    {
+      "sourceSessionId": "craig-BIRq3nIWB4v9",
+      "date": "2026-06-27",
+      "title": "O Verde Esquisito e a Forja Impossível",
+      "cardSource": "lore/06_referencias_visuais/sessoes/verticais/O Verde Esquisito e a Forja Impossível.png",
+      "heroSource": "lore/06_referencias_visuais/sessoes/horizontais/O Verde Esquisito e a Forja Impossível wide.png"
+    },
+    {
+      "sourceSessionId": "manual-2026-07-01-20260701-sessao-235100",
+      "date": "2026-07-01",
+      "title": "O Retorno do Bardo e a Forja do Último Suspiro",
+      "cardSource": "lore/06_referencias_visuais/sessoes/verticais/O Retorno do Bardo e a Forja do Último Suspiro.png",
+      "heroSource": "lore/06_referencias_visuais/sessoes/horizontais/O Retorno do Bardo e a Forja do Último Suspiro wide.png"
+    },
+    {
+      "sourceSessionId": "manual-2026-07-05-20260705-sessao-000806",
+      "date": "2026-07-04",
+      "title": "O Caçador Marcado e o Covil dos Licantropos",
+      "cardSource": "lore/06_referencias_visuais/sessoes/verticais/O Caçador Marcado e o Covil dos Licantropos.png",
+      "heroSource": "lore/06_referencias_visuais/sessoes/horizontais/O Caçador Marcado e o Covil dos Licantropos wide.png"
+    },
+    {
+      "sourceSessionId": "fqSsIl6c2HeV",
+      "date": "2026-07-11",
+      "title": "A Entrada Atrás da Cachoeira",
+      "cardSource": "lore/06_referencias_visuais/sessoes/verticais/A Entrada Atrás da Cachoeira.png",
+      "heroSource": "lore/06_referencias_visuais/sessoes/horizontais/A Entrada Atrás da Cachoeira wide.png"
+    },
+    {
+      "sourceSessionId": "AY2M6WBqKgq9",
+      "date": "2026-07-25",
+      "title": "A Tinta das Memórias",
+      "cardSource": "lore/03_sessoes/25-07-2026/ChatGPT Image Jul 26, 2026, 11_49_48 PM.png",
+      "heroSource": "lore/03_sessoes/25-07-2026/ChatGPT Image Jul 26, 2026, 11_55_23 PM.png"
+    }
+  ]
+}

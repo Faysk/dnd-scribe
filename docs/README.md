@@ -13,6 +13,7 @@ atual.
 | [66 — Resultado da Fase 1](66-resultado-fase-1-local-first.md) | concluída | fundação local validada com sessão real |
 | [67 — Resultado da Fase 2A](67-resultado-fase-2a-central-local.md) | concluída | catálogo, fila, metadados e revisão local |
 | [68 — Central Local em produção](68-deploy-central-local-producao.md) | publicada | interface Vercel conectada ao PC |
+| [69 — Artes das sessões](69-session-artwork-library.md) | implementada | originais, otimização e URLs públicas |
 | [00 — Visão geral](00_visao_geral.md) | válida | propósito do produto |
 
 ## Componentes em revisão

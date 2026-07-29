@@ -26,3 +26,4 @@ data/review_session.generated.js
 data/review_decisions.generated.json
 # Private lore is synced to R2, not committed while the repo is public.
 lore/
+blob/
