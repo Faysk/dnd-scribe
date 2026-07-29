@@ -228,19 +228,31 @@
             Descrição curta do card
             <textarea id="cloudSummary" maxlength="2000"></textarea>
           </label>
-          <label class="wide-field">
-            Resumo em Markdown (opcional)
+        </div>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Cancelar</button>
+          <button type="button" id="saveCloudSessionButton" class="primary">Salvar e publicar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="cloudSummaryDialog" class="review-dialog cloud-summary-dialog">
+      <form method="dialog">
+        <p class="eyebrow">RESUMO PUBLICADO</p>
+        <h2 id="cloudSummaryTitle">Resumo</h2>
+        <div class="cloud-summary-workspace">
+          <label>
+            Markdown
             <textarea id="cloudSummaryFull" maxlength="120000" placeholder="# Título&#10;&#10;## Seção&#10;&#10;Texto, **destaques**, listas e citações…"></textarea>
           </label>
-          <section class="wide-field markdown-preview-panel" aria-label="Prévia do resumo publicado">
+          <section class="markdown-preview-panel" aria-label="Prévia do resumo publicado">
             <span class="eyebrow">PRÉVIA PUBLICADA</span>
             <div id="cloudSummaryPreview" class="summary-markdown markdown-preview"></div>
           </section>
         </div>
         <div class="dialog-actions">
           <button value="cancel" class="ghost">Cancelar</button>
-          <button type="button" id="saveCloudSessionButton" class="primary">Salvar e publicar</button>
-          <button type="button" id="reviewCloudTranscriptButton" class="secondary">Revisar transcrição</button>
+          <button type="button" id="saveCloudSummaryButton" class="primary">Salvar e publicar</button>
         </div>
       </form>
     </dialog>

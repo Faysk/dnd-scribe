@@ -132,17 +132,29 @@ function renderCloudAccess() {
   }
   status.textContent = `${state.cloud.sessions.length} PUBLICADAS`;
   status.className = "health-pill ok";
-  list.innerHTML = state.cloud.sessions.map((session) => `<article class="card">
+  const canEdit = state.cloud.capabilities.canEditContent;
+  list.innerHTML = state.cloud.sessions.map((session) => `<article class="card cloud-session-card">
     <div>
       <p class="eyebrow">${escapeHtml(session.sessionDate || "DATA NÃO DEFINIDA")}</p>
       <h3>${escapeHtml(session.title)}</h3>
       <p class="card-meta">${Number(session.segments || 0).toLocaleString("pt-BR")} falas · ${Number(session.needsReview || 0).toLocaleString("pt-BR")} aguardando revisão</p>
-      ${session.summary ? `<p class="muted">${escapeHtml(session.summary)}</p>` : ""}
+      ${session.summary ? `<p class="muted cloud-session-description">${escapeHtml(session.summary)}</p>` : ""}
     </div>
-    <button class="ghost cloud-edit-button" data-source-id="${escapeHtml(session.sourceSessionId)}">${state.cloud.capabilities.canEditContent ? "Editar sessão" : "Visualizar sessão"} →</button>
+    <div class="cloud-session-actions" aria-label="Ações de ${escapeHtml(session.title)}">
+      <button type="button" class="cloud-session-action" data-cloud-action="card" data-source-id="${escapeHtml(session.sourceSessionId)}" aria-label="${canEdit ? "Editar" : "Ver"} card de ${escapeHtml(session.title)}">Card</button>
+      <button type="button" class="cloud-session-action" data-cloud-action="summary" data-source-id="${escapeHtml(session.sourceSessionId)}" aria-label="${canEdit ? "Editar" : "Ver"} resumo de ${escapeHtml(session.title)}">Resumo</button>
+      <button type="button" class="cloud-session-action" data-cloud-action="transcript" data-source-id="${escapeHtml(session.sourceSessionId)}" aria-label="${canEdit ? "Revisar" : "Ver"} transcrição de ${escapeHtml(session.title)}">Transcrição</button>
+    </div>
   </article>`).join("") || '<p class="empty">Nenhuma sessão publicada.</p>';
-  document.querySelectorAll(".cloud-edit-button").forEach((button) => {
-    button.addEventListener("click", () => openCloudEditor(button.dataset.sourceId));
+  document.querySelectorAll(".cloud-session-action").forEach((button) => {
+    button.addEventListener("click", () => {
+      const sourceSessionId = button.dataset.sourceId;
+      if (button.dataset.cloudAction === "card") openCloudEditor(sourceSessionId);
+      if (button.dataset.cloudAction === "summary") openCloudSummary(sourceSessionId);
+      if (button.dataset.cloudAction === "transcript") {
+        openCloudTranscript(sourceSessionId).catch((error) => alert(error.message));
+      }
+    });
   });
 }
 
@@ -354,15 +366,25 @@ function openCloudEditor(sourceSessionId) {
   $("#cloudCover").value = session.coverImageUrl || "";
   $("#cloudHero").value = session.heroImageUrl || "";
   $("#cloudSummary").value = session.summary || "";
-  $("#cloudSummaryFull").value = session.summaryFull || "";
-  renderCloudSummaryPreview();
   const readOnly = !state.cloud.capabilities.canEditContent;
   $("#cloudEditorDialog").querySelectorAll("input, textarea").forEach((field) => {
     field.disabled = readOnly;
   });
   $("#saveCloudSessionButton").classList.toggle("hidden", readOnly);
-  $("#reviewCloudTranscriptButton").textContent = readOnly ? "Ver transcrição" : "Revisar transcrição";
   $("#cloudEditorDialog").showModal();
+}
+
+function openCloudSummary(sourceSessionId) {
+  const session = state.cloud.sessions.find((item) => item.sourceSessionId === sourceSessionId);
+  if (!session) return;
+  state.cloud.editing = session;
+  $("#cloudSummaryTitle").textContent = session.title;
+  $("#cloudSummaryFull").value = session.summaryFull || "";
+  renderCloudSummaryPreview();
+  const readOnly = !state.cloud.capabilities.canEditContent;
+  $("#cloudSummaryFull").disabled = readOnly;
+  $("#saveCloudSummaryButton").classList.toggle("hidden", readOnly);
+  $("#cloudSummaryDialog").showModal();
 }
 
 function renderSafeMarkdown(markdown) {
@@ -405,12 +427,42 @@ async function saveCloudSession() {
         coverImageUrl: $("#cloudCover").value,
         heroImageUrl: $("#cloudHero").value,
         summary: $("#cloudSummary").value,
-        summaryFull: $("#cloudSummaryFull").value,
+        summaryFull: session.summaryFull || "",
       }),
     });
     await loadCloudSessions();
     renderCloudAccess();
     $("#cloudEditorDialog").close();
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function saveCloudSummary() {
+  const session = state.cloud.editing;
+  if (!session) return;
+  const button = $("#saveCloudSummaryButton");
+  button.disabled = true;
+  try {
+    await cloudApi("/api/editor-session", {
+      method: "POST",
+      body: JSON.stringify({
+        campaignSlug: "yuhara-main",
+        sourceSessionId: session.sourceSessionId,
+        title: session.title || "",
+        sessionDate: session.sessionDate || "",
+        arc: session.arc || "",
+        coverImageUrl: session.coverImageUrl || "",
+        heroImageUrl: session.heroImageUrl || "",
+        summary: session.summary || "",
+        summaryFull: $("#cloudSummaryFull").value,
+      }),
+    });
+    await loadCloudSessions();
+    renderCloudAccess();
+    $("#cloudSummaryDialog").close();
   } catch (error) {
     alert(error.message);
   } finally {
@@ -445,8 +497,12 @@ async function loadCloudTranscript({ append = false } = {}) {
   });
 }
 
-async function openCloudTranscript() {
-  $("#cloudEditorDialog").close();
+async function openCloudTranscript(sourceSessionId) {
+  const session = sourceSessionId
+    ? state.cloud.sessions.find((item) => item.sourceSessionId === sourceSessionId)
+    : state.cloud.editing;
+  if (!session) return;
+  state.cloud.editing = session;
   state.cloud.transcript = [];
   state.cloud.cursor = null;
   await loadCloudTranscript();
@@ -948,9 +1004,7 @@ $("#publishButton").addEventListener("click", () => {
   publishSession();
 });
 $("#saveCloudSessionButton").addEventListener("click", saveCloudSession);
-$("#reviewCloudTranscriptButton").addEventListener("click", () => {
-  openCloudTranscript().catch((error) => alert(error.message));
-});
+$("#saveCloudSummaryButton").addEventListener("click", saveCloudSummary);
 $("#saveCloudSegmentButton").addEventListener("click", saveCloudSegment);
 $("#loadMoreCloudSegments").addEventListener("click", () => {
   loadCloudTranscript({ append: true }).catch((error) => alert(error.message));
