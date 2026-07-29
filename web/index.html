@@ -29,10 +29,18 @@
         <span data-theme-label>sistema</span>
       </button>
       <button id="userMenuButton" class="user-menu-button" type="button" hidden aria-expanded="false" aria-controls="userMenu" aria-haspopup="true">
-        <span id="sessionIdentity" class="session-identity"></span>
+        <span class="user-avatar" aria-hidden="true">
+          <img id="sessionAvatar" alt="" referrerpolicy="no-referrer" hidden />
+          <span id="sessionAvatarFallback" class="user-avatar-fallback">M</span>
+        </span>
+        <span id="sessionIdentity" class="sr-only"></span>
         <span class="menu-chevron" aria-hidden="true">⌄</span>
       </button>
       <div id="userMenu" class="user-menu" hidden>
+        <div class="user-menu-profile">
+          <strong id="userMenuName">Membro da mesa</strong>
+          <span>Conta conectada</span>
+        </div>
         <a href="#/">Sessões</a>
         <a id="editMenuLink" href="/edit/" hidden>Edit</a>
         <button id="signOutButton" class="sign-out-menu-item" type="button">Sair</button>

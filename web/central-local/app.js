@@ -352,6 +352,7 @@ function openCloudEditor(sourceSessionId) {
   $("#cloudDate").value = session.sessionDate || "";
   $("#cloudArc").value = session.arc || "";
   $("#cloudCover").value = session.coverImageUrl || "";
+  $("#cloudHero").value = session.heroImageUrl || "";
   $("#cloudSummary").value = session.summary || "";
   $("#cloudSummaryFull").value = session.summaryFull || "";
   renderCloudSummaryPreview();
@@ -402,6 +403,7 @@ async function saveCloudSession() {
         sessionDate: $("#cloudDate").value,
         arc: $("#cloudArc").value,
         coverImageUrl: $("#cloudCover").value,
+        heroImageUrl: $("#cloudHero").value,
         summary: $("#cloudSummary").value,
         summaryFull: $("#cloudSummaryFull").value,
       }),

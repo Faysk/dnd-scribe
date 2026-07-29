@@ -6,6 +6,7 @@ const state = {
     client: null,
     ready: false,
     user: null,
+    apiUser: null,
     profile: null,
     campaignRole: null,
     capabilities: null
@@ -27,6 +28,9 @@ const state = {
 
 const app = document.querySelector('#app');
 const identity = document.querySelector('#sessionIdentity');
+const avatar = document.querySelector('#sessionAvatar');
+const avatarFallback = document.querySelector('#sessionAvatarFallback');
+const userMenuName = document.querySelector('#userMenuName');
 const userMenuButton = document.querySelector('#userMenuButton');
 const userMenu = document.querySelector('#userMenu');
 const editMenuLink = document.querySelector('#editMenuLink');
@@ -64,8 +68,34 @@ function authDisplayName(user = state.auth.user) {
     || 'Membro da mesa';
 }
 
+function authAvatarUrl(user = state.auth.user) {
+  const value = state.auth.profile?.avatarUrl
+    || state.auth.apiUser?.avatarUrl
+    || user?.user_metadata?.avatar_url
+    || user?.user_metadata?.picture
+    || '';
+  return /^https:\/\//i.test(value) ? value : '';
+}
+
+function authInitials(name) {
+  const parts = String(name || 'M').trim().split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'M';
+}
+
 function showAuthenticatedHeader() {
-  identity.textContent = authDisplayName();
+  const displayName = authDisplayName();
+  const avatarUrl = authAvatarUrl();
+  identity.textContent = displayName;
+  userMenuName.textContent = displayName;
+  avatarFallback.textContent = authInitials(displayName);
+  avatarFallback.hidden = Boolean(avatarUrl);
+  avatar.hidden = !avatarUrl;
+  avatar.src = avatarUrl;
+  avatar.onerror = () => {
+    avatar.hidden = true;
+    avatarFallback.hidden = false;
+  };
+  userMenuButton.setAttribute('aria-label', `Abrir menu de ${displayName}`);
   userMenuButton.hidden = false;
   editMenuLink.hidden = !state.auth.capabilities?.canOpenEdit;
 }
@@ -264,6 +294,7 @@ function readerHeader(session) {
   ].filter(Boolean);
   return `
     <a class="reader-back" href="#/" aria-label="Voltar para todas as sessões">← Todas as sessões</a>
+    ${sessionHero(session)}
     <header class="reader-title">
       <span class="eyebrow">${escapeHtml(session.arc || 'Transcrição da sessão')}</span>
       <h1>${escapeHtml(formatSessionTitle(session))}</h1>
@@ -274,6 +305,16 @@ function readerHeader(session) {
         <button class="secondary-button" type="button" data-download-transcript>Baixar transcrição .md</button>
       </div>
     </header>
+  `;
+}
+
+function sessionHero(session = {}) {
+  const imageUrl = String(session.heroImageUrl || '');
+  if (!/^https:\/\//i.test(imageUrl)) return '';
+  return `
+    <figure class="reader-hero">
+      <img src="${escapeHtml(imageUrl)}" alt="Cena de ${escapeHtml(formatSessionTitle(session))}" />
+    </figure>
   `;
 }
 
@@ -293,6 +334,7 @@ function renderSummary() {
   app.innerHTML = `
     <article class="reader summary-reader">
       <a class="reader-back" href="${sourceRoute(session.sourceSessionId)}">← Voltar à transcrição</a>
+      ${sessionHero(session)}
       <header class="reader-title">
         <span class="eyebrow">Resumo da sessão</span>
         <h1>${escapeHtml(formatSessionTitle(session))}</h1>
@@ -379,6 +421,7 @@ function renderError(error, retry = 'route') {
 
 async function loadProfile() {
   const payload = await api(`/api/auth/me?campaignSlug=${encodeURIComponent(CAMPAIGN_SLUG)}`);
+  state.auth.apiUser = payload.user || null;
   state.auth.profile = payload.profile || null;
   state.auth.campaignRole = payload.campaignRole || null;
   state.auth.capabilities = payload.capabilities || null;

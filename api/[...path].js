@@ -6386,6 +6386,7 @@ select coalesce(json_agg(json_build_object(
   'summary', summary_short,
   'hasSummary', coalesce(nullif(trim(summary_full), ''), '') <> '',
   'coverImageUrl', coalesce(metadata->>'coverImageUrl', ''),
+  'heroImageUrl', coalesce(metadata->>'heroImageUrl', ''),
   'segments', segment_count,
   'participants', participant_count,
   'createdAt', created_at,
@@ -6492,6 +6493,7 @@ select
       summary: payload.session.summary_short,
       hasSummary: Boolean(String(payload.session.summary_full || '').trim()),
       coverImageUrl: payload.session.metadata?.coverImageUrl || '',
+      heroImageUrl: payload.session.metadata?.heroImageUrl || '',
       updatedAt: payload.session.updated_at
     },
     segments: visibleRows.map(row => ({
@@ -6513,7 +6515,7 @@ async function librarySessionSummary(campaign, sourceSessionId) {
   const result = await getPool().query(
     `
 select s.id, s.title, s.source_session_id, s.session_date, s.arc,
-       s.summary_short, s.summary_full, s.updated_at
+       s.summary_short, s.summary_full, s.metadata, s.updated_at
 from sessions s
 join campaigns c on c.id = s.campaign_id
 where c.slug = $1 and s.source_session_id = $2;`,
@@ -6531,6 +6533,8 @@ where c.slug = $1 and s.source_session_id = $2;`,
     summary: row.summary_short,
     summaryFull: row.summary_full,
     hasSummary: true,
+    coverImageUrl: row.metadata?.coverImageUrl || '',
+    heroImageUrl: row.metadata?.heroImageUrl || '',
     updatedAt: row.updated_at
   };
 }
@@ -6548,6 +6552,7 @@ select coalesce(json_agg(json_build_object(
   'summary', s.summary_short,
   'summaryFull', s.summary_full,
   'coverImageUrl', coalesce(s.metadata->>'coverImageUrl', ''),
+  'heroImageUrl', coalesce(s.metadata->>'heroImageUrl', ''),
   'segments', (select count(*) from transcript_segments ts where ts.session_id = s.id and coalesce(ts.is_empty, false) is false),
   'needsReview', (select count(*) from transcript_segments ts where ts.session_id = s.id and coalesce(ts.is_empty, false) is false and (ts.needs_review or ts.review_status in ('pending', 'unreviewed', 'needs_review'))),
   'updatedAt', s.updated_at
@@ -6569,6 +6574,10 @@ async function updateEditorSession(campaign, sourceSessionId, body = {}) {
   if (coverImageUrl && !/^https:\/\/[^\s]+$/i.test(coverImageUrl)) {
     throw httpError(400, 'A capa precisa usar uma URL HTTPS.');
   }
+  const heroImageUrl = String(body.heroImageUrl || '').trim().slice(0, 2000);
+  if (heroImageUrl && !/^https:\/\/[^\s]+$/i.test(heroImageUrl)) {
+    throw httpError(400, 'A imagem de destaque precisa usar uma URL HTTPS.');
+  }
   const sessionDate = String(body.sessionDate || '').trim();
   if (sessionDate && !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
     throw httpError(400, 'Data da sessao invalida.');
@@ -6582,14 +6591,18 @@ set title = $3,
     status = 'published',
     summary_short = $6,
     summary_full = $7,
-    metadata = jsonb_set(coalesce(s.metadata, '{}'::jsonb), '{coverImageUrl}', to_jsonb($8::text), true),
+    metadata = jsonb_set(
+      jsonb_set(coalesce(s.metadata, '{}'::jsonb), '{coverImageUrl}', to_jsonb($8::text), true),
+      '{heroImageUrl}', to_jsonb($9::text), true
+    ),
     updated_at = now()
 from campaigns c
 where c.id = s.campaign_id and c.slug = $1 and s.source_session_id = $2
 returning s.id, s.source_session_id, s.title, to_char(s.session_date, 'YYYY-MM-DD') session_date,
           s.arc, s.status, s.summary_short, s.summary_full,
-          coalesce(s.metadata->>'coverImageUrl', '') cover_image_url, s.updated_at;`,
-    [campaign, sourceSessionId, title, sessionDate || null, arc, summary, summaryFull, coverImageUrl]
+          coalesce(s.metadata->>'coverImageUrl', '') cover_image_url,
+          coalesce(s.metadata->>'heroImageUrl', '') hero_image_url, s.updated_at;`,
+    [campaign, sourceSessionId, title, sessionDate || null, arc, summary, summaryFull, coverImageUrl, heroImageUrl]
   );
   if (!result.rows[0]) throw httpError(404, 'Sessao nao encontrada.');
   return result.rows[0];

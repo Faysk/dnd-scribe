@@ -203,13 +203,50 @@ select:focus-visible {
 .user-menu-button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 12px;
+  gap: 6px;
+  min-width: 48px;
+  min-height: 46px;
+  padding: 4px 8px 4px 4px;
   border: 1px solid var(--line);
   color: var(--paper-soft);
   background: var(--ink-soft);
-  border-radius: 10px;
+  border-radius: 999px;
   cursor: pointer;
+}
+
+.user-menu-button[hidden] {
+  display: none;
+}
+
+.user-avatar {
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(215, 170, 97, .42);
+  background: var(--gold-fade);
+  border-radius: 50%;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-avatar-fallback {
+  color: var(--gold-bright);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.user-avatar-fallback[hidden],
+.user-avatar img[hidden] {
+  display: none;
 }
 
 .user-menu-button:hover,
@@ -248,12 +285,33 @@ select:focus-visible {
   top: calc(100% + 8px);
   right: 0;
   display: grid;
-  min-width: max(180px, 100%);
+  min-width: 210px;
   padding: 7px;
   border: 1px solid var(--line);
   background: #11151a;
   border-radius: 12px;
   box-shadow: var(--shadow);
+}
+
+.user-menu-profile {
+  display: grid;
+  gap: 2px;
+  margin: 2px 4px 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.user-menu-profile strong {
+  overflow: hidden;
+  color: var(--paper);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu-profile span {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .user-menu[hidden] {
@@ -298,15 +356,6 @@ select:focus-visible {
 
 .user-menu .sign-out-menu-item:hover {
   color: var(--danger);
-}
-
-.session-identity {
-  max-width: 240px;
-  overflow: hidden;
-  color: var(--paper-soft);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .text-button,
@@ -716,6 +765,32 @@ main {
 
 .reader-back:hover {
   color: var(--paper);
+}
+
+.reader-hero {
+  position: relative;
+  overflow: hidden;
+  margin: 0 0 44px;
+  border: 1px solid var(--line);
+  background: var(--ink-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.reader-hero::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(215, 170, 97, .12);
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+}
+
+.reader-hero img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
 }
 
 .reader-title {
