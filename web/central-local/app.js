@@ -635,10 +635,44 @@ async function retryJob(jobId) {
   await loadLibrary();
 }
 
+async function selectArchive() {
+  const button = $("#selectArchiveButton");
+  const status = $("#archiveImportStatus");
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Aguardando seleção no Windows…";
+  status.className = "import-status";
+  status.textContent = "Escolha o ZIP na janela que foi aberta.";
+  try {
+    const result = await api("/api/import/select", { method: "POST" });
+    if (result.cancelled) {
+      status.textContent = "Nenhum arquivo foi selecionado.";
+      return;
+    }
+    const filename = result.archive?.filename || "ZIP do Craig";
+    if (result.duplicate) {
+      status.textContent = `${filename} já estava importado. Abrindo a sessão existente…`;
+    } else if (result.sample_started) {
+      status.classList.add("success");
+      status.textContent = `${filename} importado com segurança. A amostra de 5 minutos já está na fila.`;
+    } else {
+      status.classList.add("warning");
+      status.textContent = result.sample_blocked_reason || `${filename} importado.`;
+    }
+    await openSession(result.session.recording_id);
+  } catch (error) {
+    status.classList.add("error");
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
+}
+
 function renderCandidates(groups) {
   const target = $("#candidateList");
   if (!groups.length) {
-    target.innerHTML = '<p class="empty">Nenhum ZIP válido encontrado na pasta de entrada.</p>';
+    target.innerHTML = '<p class="empty">Nenhum arquivo aguardando importação manual. Use “Selecionar ZIP do Craig” acima.</p>';
     return;
   }
   target.innerHTML = groups.map((group) => {
@@ -1002,6 +1036,7 @@ function playAt(button) {
 }
 
 $("#refreshButton").addEventListener("click", loadLibrary);
+$("#selectArchiveButton").addEventListener("click", selectArchive);
 $("#backButton").addEventListener("click", () => {
   clearInterval(state.poller);
   state.poller = null;

@@ -112,6 +112,28 @@ code { font-family: "DM Mono"; font-size: .8em; }
 .sessions-heading { margin-top: 72px; }
 .system-panel { margin-bottom: 72px; }
 .compact-heading { padding-top: 18px; }
+.import-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px 32px;
+  align-items: center;
+  margin: 0 0 34px;
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid var(--ink);
+  background: var(--paper-2);
+}
+.import-panel h2 {
+  margin: 6px 0 10px;
+  font-size: clamp(28px, 4vw, 44px);
+  letter-spacing: -.05em;
+}
+.import-panel p { max-width: 650px; margin-bottom: 0; color: var(--muted); line-height: 1.6; }
+.import-actions { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; justify-content: end; }
+.import-actions .primary { min-height: 48px; }
+.import-status { grid-column: 1 / -1; min-height: 24px; margin: 0 !important; font-size: 13px; }
+.import-status.success { color: #435500; }
+.import-status.warning, .import-status.error { color: #8f1d1d; }
+.candidate-heading { border-top-color: var(--line); }
 .health-pill {
   padding: 7px 11px;
   border: 1px solid var(--line);
@@ -309,6 +331,9 @@ textarea:focus, input:focus { border-color: var(--purple); }
 
 @media (max-width: 760px) {
   .local-badge { display: none; }
+  .import-panel { grid-template-columns: 1fr; }
+  .import-actions { justify-content: start; }
+  .import-actions .primary { width: 100%; }
   .card-grid { grid-template-columns: 1fr; }
   .session-header { display: block; padding-bottom: 30px; min-height: auto; }
   .export-actions { justify-content: start; margin: 20px 0; }

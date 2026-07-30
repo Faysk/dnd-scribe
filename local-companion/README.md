@@ -29,7 +29,7 @@ Abra <http://127.0.0.1:8765>. O modelo é baixado na primeira transcrição.
 Com o companheiro aberto, a mesma Central Local também pode ser acessada pela
 interface de produção:
 
-<https://dnd.faysk.dev/central-local/>
+<https://dnd.faysk.dev/edit/>
 
 No primeiro acesso pelo Chrome, permita que `dnd.faysk.dev` procure e se
 conecte a dispositivos na rede local. A página fica na Vercel, mas as chamadas
@@ -54,11 +54,17 @@ apenas para testar; para sessões longas, configure CUDA antes de processar.
 
 ## Fluxo
 
-1. Coloque o ZIP em `E:\DnD-Scribe\inbox\`.
-2. Importe o arquivo pela tela inicial.
-3. Opcionalmente preencha termos da campanha e nomes próprios.
-4. Rode primeiro o teste de 5 minutos.
-5. Quando o resultado estiver bom, processe a sessão completa.
+1. Clique em **Selecionar ZIP do Craig** no Edit ou na tela local.
+2. Escolha o ZIP **FLAC Multi-track** na janela do Windows.
+3. O companheiro valida o conteúdo, copia o ZIP com verificação SHA-256 e
+   importa as faixas sem alterar o arquivo escolhido.
+4. Se CUDA estiver disponível, o teste de 5 minutos entra automaticamente na
+   fila.
+5. Confira a amostra, ajuste os termos da campanha se necessário e então
+   processe a sessão completa.
+
+Como recuperação manual, ainda é possível colocar o ZIP em
+`E:\DnD-Scribe\inbox\` e importá-lo pela lista **Arquivos disponíveis**.
 
 Os resultados ficam em `E:\DnD-Scribe\sessions\<recording-id>\`. A aplicação
 nunca modifica o ZIP original.
@@ -91,6 +97,8 @@ transcrições e decisões continuam como arquivos dentro da raiz local.
 - `PATCH /api/sessions/<id>/segments/<segment-id>/review`: decisão e correção
   local, aplicada como uma camada sobre a transcrição original;
 - `POST /api/jobs/<job-id>/retry`: nova tentativa de um job interrompido;
+- `POST /api/import/select`: abre o seletor nativo do Windows, preserva e
+  verifica o ZIP, importa a sessão e agenda a amostra inicial;
 - `GET /api/sessions/<id>/publication-bundle.json`: pacote pequeno sem áudio,
   palavras, transcrição completa ou caminhos locais;
 - `manifest.json`: hashes SHA-256 do ZIP, faixas e transcrição.

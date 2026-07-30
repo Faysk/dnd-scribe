@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import os
+import shutil
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +19,7 @@ from .artifacts import sha256_file, write_session_manifest
 from .catalog import LocalCatalog
 from .config import load_paths
 from .craig import extract_archive, inspect_archive, list_archives
+from .file_picker import select_craig_archive
 from .health import build_health
 from .publication import build_publication_bundle
 from .reviews import apply_reviews, read_reviews, write_review
@@ -208,7 +213,10 @@ def import_archive(request: ImportRequest) -> dict:
             400,
             f"O ZIP precisa estar dentro da pasta de entrada: {PATHS.inbox}",
         ) from error
+    return _import_archive(source)
 
+
+def _import_archive(source: Path) -> dict:
     try:
         archive_info = inspect_archive(source)
         try:
@@ -235,7 +243,7 @@ def import_archive(request: ImportRequest) -> dict:
             info = temporary / "info.txt"
             if info.exists():
                 info.replace(destination / "info.txt")
-    except (ValueError, OSError) as error:
+    except (ValueError, OSError, zipfile.BadZipFile) as error:
         raise HTTPException(400, str(error)) from error
 
     value = {
@@ -258,6 +266,96 @@ def import_archive(request: ImportRequest) -> dict:
     )
     ensure_manifest(value)
     return public_session(value)
+
+
+def _copy_archive_to_inbox(source: Path) -> tuple[Path, str, bool]:
+    source = source.resolve()
+    archive_info = inspect_archive(source)
+    digest = sha256_file(source)
+    inbox = PATHS.inbox.resolve()
+    try:
+        source.relative_to(inbox)
+        return source, digest, False
+    except ValueError:
+        pass
+
+    required_bytes = archive_info.size + (100 * 1024 * 1024)
+    if shutil.disk_usage(inbox).free < required_bytes:
+        raise ValueError("Espaço insuficiente para importar o ZIP com segurança.")
+
+    destination = inbox / source.name
+    if destination.exists():
+        if sha256_file(destination) == digest:
+            return destination, digest, False
+        destination = inbox / f"{source.stem}-{digest[:12]}.zip"
+        if destination.exists():
+            if sha256_file(destination) == digest:
+                return destination, digest, False
+            destination = inbox / f"{source.stem}-{digest}.zip"
+
+    temporary = inbox / f".craig-import-{uuid4().hex}.partial"
+    try:
+        shutil.copy2(source, temporary)
+        if sha256_file(temporary) != digest:
+            raise OSError("A cópia do ZIP falhou na verificação de integridade.")
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return destination, digest, True
+
+
+@app.post("/api/import/select")
+def select_and_import_archive() -> dict:
+    try:
+        selected = select_craig_archive()
+        if selected is None:
+            return {"cancelled": True}
+        archive_info = inspect_archive(selected)
+        try:
+            session_value = public_session(store.read(archive_info.recording_id))
+            managed = selected
+            digest = sha256_file(selected)
+            copied = False
+            duplicate = True
+        except FileNotFoundError:
+            managed, digest, copied = _copy_archive_to_inbox(selected)
+            session_value = _import_archive(managed)
+            duplicate = False
+
+        sample_started = False
+        sample_blocked_reason = None
+        ready_for_sample = (
+            session_value.get("status") == "ready"
+            and not session_value.get("transcript")
+        )
+        cuda_available = build_health(PATHS, store, catalog)["cuda"]["available"]
+        if ready_for_sample and cuda_available:
+            session_value = transcribe(
+                session_value["recording_id"],
+                TranscribeRequest(sample_minutes=5),
+            )
+            sample_started = True
+        elif ready_for_sample:
+            sample_blocked_reason = (
+                "ZIP importado, mas a amostra não iniciou porque a GPU CUDA "
+                "não está disponível. Verifique o estado da máquina."
+            )
+        return {
+            "cancelled": False,
+            "duplicate": duplicate,
+            "copied": copied,
+            "sample_started": sample_started,
+            "sample_blocked_reason": sample_blocked_reason,
+            "archive": {
+                "filename": managed.name,
+                "size": archive_info.size,
+                "sha256": digest,
+                "original_preserved": True,
+            },
+            "session": session_value,
+        }
+    except (ValueError, OSError, RuntimeError, zipfile.BadZipFile) as error:
+        raise HTTPException(400, str(error)) from error
 
 
 def _run_transcription_job(

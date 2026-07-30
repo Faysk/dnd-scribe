@@ -14,6 +14,7 @@ atual.
 | [67 — Resultado da Fase 2A](67-resultado-fase-2a-central-local.md) | concluída | catálogo, fila, metadados e revisão local |
 | [68 — Central Local em produção](68-deploy-central-local-producao.md) | publicada | interface Vercel conectada ao PC |
 | [69 — Artes das sessões](69-session-artwork-library.md) | implementada | originais, otimização e URLs públicas |
+| [70 — Importação nativa do ZIP](70-importacao-zip-craig.md) | implementada | seletor do Windows, cópia verificada e amostra automática |
 | [00 — Visão geral](00_visao_geral.md) | válida | propósito do produto |
 
 ## Componentes em revisão

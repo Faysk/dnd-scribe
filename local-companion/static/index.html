@@ -38,12 +38,27 @@
           <div id="healthGrid" class="health-grid"></div>
         </section>
 
-        <div class="section-heading">
+        <section class="import-panel" aria-labelledby="importTitle">
           <div>
-            <p class="eyebrow">GRAVAÇÕES ENCONTRADAS</p>
-            <h2>Pasta de entrada local</h2>
+            <p class="eyebrow">NOVA SESSÃO</p>
+            <h2 id="importTitle">Importar gravação</h2>
+            <p>
+              Escolha o ZIP FLAC Multi-track baixado do Craig. O arquivo original
+              será preservado, e uma amostra de 5 minutos começará automaticamente.
+            </p>
           </div>
-          <button class="ghost" id="refreshButton">↻ Atualizar</button>
+          <div class="import-actions">
+            <button class="primary" id="selectArchiveButton" type="button">Selecionar ZIP do Craig</button>
+            <button class="ghost" id="refreshButton" type="button">↻ Atualizar</button>
+          </div>
+          <p class="import-status" id="archiveImportStatus" role="status" aria-live="polite"></p>
+        </section>
+
+        <div class="section-heading candidate-heading">
+          <div>
+            <p class="eyebrow">IMPORTAÇÃO MANUAL</p>
+            <h2>Arquivos disponíveis</h2>
+          </div>
         </div>
         <div id="candidateList" class="card-grid"></div>
 

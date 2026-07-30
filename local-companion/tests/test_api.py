@@ -1,9 +1,25 @@
 import importlib
 import json
+import zipfile
 
 from fastapi.testclient import TestClient
 
 from app.storage import SessionStore
+
+
+def write_craig_zip(path):
+    info = """Recording PICKER123
+
+Start time:\t2026-07-30T18:00:00.000Z
+
+Tracks:
+\talice#0 (123)
+\tbob#0 (456)
+"""
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("info.txt", info)
+        archive.writestr("1-alice.flac", b"fake-flac-alice")
+        archive.writestr("2-bob.flac", b"fake-flac-bob")
 
 
 def test_central_local_api_flow(tmp_path, monkeypatch):
@@ -108,3 +124,60 @@ def test_hosted_origin_can_access_local_companion(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://dnd.faysk.dev"
     assert response.headers["access-control-allow-private-network"] == "true"
+
+
+def test_native_picker_copies_imports_and_queues_five_minute_sample(tmp_path, monkeypatch):
+    storage = tmp_path / "managed"
+    downloads = tmp_path / "downloads"
+    downloads.mkdir()
+    source = downloads / "craig-session.zip"
+    write_craig_zip(source)
+    monkeypatch.setenv("CRAIG_TO_TEXT_ROOT", str(storage))
+
+    import app.main
+
+    main = importlib.reload(app.main)
+    monkeypatch.setattr(main, "select_craig_archive", lambda: source)
+    monkeypatch.setattr(main.executor, "submit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        main,
+        "build_health",
+        lambda paths, session_store, catalog: {
+            "cuda": {"available": True},
+        },
+    )
+
+    with TestClient(main.app) as client:
+        response = client.post("/api/import/select")
+
+    payload = response.json()
+    managed = storage / "inbox" / source.name
+    assert response.status_code == 200
+    assert payload["cancelled"] is False
+    assert payload["copied"] is True
+    assert payload["sample_started"] is True
+    assert payload["archive"]["original_preserved"] is True
+    assert payload["session"]["recording_id"] == "PICKER123"
+    assert payload["session"]["status"] == "queued"
+    assert source.is_file()
+    assert managed.is_file()
+    assert source.read_bytes() == managed.read_bytes()
+    assert not list((storage / "inbox").glob("*.partial"))
+    assert len(list((storage / "sessions" / "PICKER123" / "tracks").glob("*.flac"))) == 2
+
+
+def test_native_picker_cancel_does_not_change_archive(tmp_path, monkeypatch):
+    storage = tmp_path / "managed"
+    monkeypatch.setenv("CRAIG_TO_TEXT_ROOT", str(storage))
+
+    import app.main
+
+    main = importlib.reload(app.main)
+    monkeypatch.setattr(main, "select_craig_archive", lambda: None)
+
+    with TestClient(main.app) as client:
+        response = client.post("/api/import/select")
+
+    assert response.status_code == 200
+    assert response.json() == {"cancelled": True}
+    assert list((storage / "inbox").iterdir()) == []
