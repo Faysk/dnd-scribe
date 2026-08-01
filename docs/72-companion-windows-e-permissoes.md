@@ -34,18 +34,17 @@ original e cria uma cópia verificada na raiz gerenciada.
 | --- | --- | ---: | ---: | ---: |
 | abrir o Edit | `edit_viewer`/`site_editor` | sim | sim | sim |
 | editar conteúdo publicado | `site_editor` | sim | sim | sim |
-| baixar companion e processar com GPU | `local_operator` | sim | sim | sim |
+| baixar companion, processar com GPU e publicar | `local_operator` | sim | sim | sim |
 | ouvir áudio guardado neste PC | `audio_operator` | sim | sim | sim |
-| publicar resultado local no site | `local_publisher` | sim | não | não |
 | administrar permissões do site | `site_permissions_owner` | sim | não | não |
 
 `site_permissions_owner` não aparece como opção concedível e não pode ser
 atribuído ou revogado pela API do Edit. Uma transferência futura exige mudança
 administrativa explícita.
 
-`local_publisher` é separado de `local_operator`: processar não publica
-automaticamente. Isso permite que outras máquinas produzam e revisem o texto
-sem alterar o conteúdo público por acidente.
+Quem pode processar localmente também pode publicar o resultado. Download,
+processamento e publicação fazem parte do mesmo fluxo de `local_operator` e
+aparecem como uma única permissão no Edit.
 
 ## Distribuição segura
 

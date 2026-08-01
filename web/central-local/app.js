@@ -246,10 +246,6 @@ const featureRoles = {
     label: "Acessar áudio",
     description: "Ouve as faixas guardadas localmente.",
   },
-  local_publisher: {
-    label: "Publicar resultado",
-    description: "Envia a transcrição processada para o site.",
-  },
 };
 
 async function downloadCompanion() {
@@ -973,7 +969,7 @@ function renderSession() {
   const canPublish = hostedMode
     && session.status === "complete"
     && session.mode === "full"
-    && state.cloud.capabilities.canPublishLocal;
+    && state.cloud.capabilities.canUseLocalProcessing;
   $("#publishButton").classList.toggle("hidden", !canPublish);
   $("#metadataTitle").value = session.title || "";
   $("#metadataDate").value = session.played_at || (session.start_time || "").slice(0, 10);
