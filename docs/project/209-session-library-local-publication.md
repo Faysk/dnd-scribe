@@ -60,8 +60,8 @@ is an export and archival format, not a query API.
 - `/api/session-download` generates the complete Markdown transcript on demand.
 - `/api/editor-sessions`, `/api/editor-session` and `/api/editor-segment`
   require `owner` or `master` and power the dark `/edit` workspace.
-- `/api/library-import-local` requires the legacy campaign role `owner` or
-  `master`.
+- `/api/library-import-local` requires `campaign.local.process`, the same
+  permission used to download and operate the local companion.
 - Raw tables and views have no Data API grants for `anon` or `authenticated`.
 - All public tables have RLS enabled as defense in depth.
 - Only the reviewed campaign access RPCs remain executable by

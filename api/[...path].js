@@ -31,8 +31,7 @@ const SITE_FEATURE_ROLE_SLUGS = new Set([
   'edit_viewer',
   'site_editor',
   'local_operator',
-  'audio_operator',
-  'local_publisher'
+  'audio_operator'
 ]);
 const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_EPOCH_MS = 1420070400000n;
@@ -433,7 +432,6 @@ function capabilitiesForRole(role, rbac = null) {
     canUseLocalProcessing: permissions.has('campaign.local.process'),
     canReadAudio: permissions.has('campaign.audio.read'),
     canDownloadCompanion: permissions.has('campaign.companion.download'),
-    canPublishLocal: permissions.has('campaign.local.publish'),
     canManagePermissions,
     canViewMonitoring: permissions.has('project.monitor.read') || (!rbacAvailable && isDm),
     canManageTechnical: permissions.has('project.rbac.manage'),
@@ -8595,7 +8593,7 @@ async function handlePost(req, res, path) {
   const dryRun = Boolean(body.dryRun);
   if (path === '/api/library-import-local') {
     await requirePermission(req, campaign, {
-      action: 'campaign.local.publish',
+      action: 'campaign.local.process',
       scopeType: 'campaign',
       scopeId: campaign,
       legacyRoles: [],
