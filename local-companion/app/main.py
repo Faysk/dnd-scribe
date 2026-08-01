@@ -28,6 +28,7 @@ from .transcriber import markdown_export, transcribe_session
 
 
 PATHS = load_paths()
+COMPANION_VERSION = "0.2.0"
 store = SessionStore(PATHS.sessions)
 catalog = LocalCatalog(PATHS.storage / "craig-to-text.sqlite3")
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="transcription")
@@ -66,7 +67,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Craig to Text", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="DnD Scribe Companion", version=COMPANION_VERSION, lifespan=lifespan)
 
 HOSTED_ORIGINS = (
     "https://dnd.faysk.dev",
@@ -150,7 +151,9 @@ def ensure_manifest(session: dict) -> dict:
 
 @app.get("/api/health")
 def health() -> dict:
-    return build_health(PATHS, store, catalog)
+    payload = build_health(PATHS, store, catalog)
+    payload["companion"] = {"version": COMPANION_VERSION}
+    return payload
 
 
 @app.get("/api/candidates")

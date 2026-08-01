@@ -1,0 +1,45 @@
+name: Companion installer
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "installer/**"
+      - "local-companion/**"
+      - ".github/workflows/companion-installer.yml"
+  push:
+    branches: [main]
+    paths:
+      - "installer/**"
+      - "local-companion/**"
+      - ".github/workflows/companion-installer.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build installer
+        shell: pwsh
+        run: .\installer\build.ps1
+
+      - name: Verify embedded companion
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath '.\dist\companion-installer\DnDScribeCompanionSetup.exe' -ArgumentList '/verify' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer verification failed with exit code $($process.ExitCode)." }
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dnd-scribe-companion-windows
+          path: |
+            dist/companion-installer/DnDScribeCompanionSetup.exe
+            dist/companion-installer/release.json
+          if-no-files-found: error
+          retention-days: 14

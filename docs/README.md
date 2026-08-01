@@ -16,6 +16,7 @@ atual.
 | [69 — Artes das sessões](69-session-artwork-library.md) | implementada | originais, otimização e URLs públicas |
 | [70 — Importação nativa do ZIP](70-importacao-zip-craig.md) | implementada | seletor do Windows, cópia verificada e amostra automática |
 | [71 — Upload de imagens](71-upload-imagens-sessao.md) | implementada | seleção local, otimização WebP e upload autorizado |
+| [72 — Companion Windows e permissões](72-companion-windows-e-permissoes.md) | implementada | instalador privado, GPU local e acessos separados |
 | [00 — Visão geral](00_visao_geral.md) | válida | propósito do produto |
 
 ## Componentes em revisão
