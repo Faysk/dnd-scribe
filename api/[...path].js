@@ -23,6 +23,17 @@ const CRAIG_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
 const SESSION_IMAGE_BUCKET = 'session-images';
 const SESSION_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
+const COMPANION_RELEASE_BUCKET = 'companion-releases';
+const COMPANION_RELEASE_OBJECT = 'windows/DnDScribeCompanionSetup.exe';
+const COMPANION_RELEASE_FILENAME = 'DnDScribeCompanionSetup.exe';
+const COMPANION_RELEASE_VERSION = '0.2.0';
+const SITE_FEATURE_ROLE_SLUGS = new Set([
+  'edit_viewer',
+  'site_editor',
+  'local_operator',
+  'audio_operator',
+  'local_publisher'
+]);
 const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_EPOCH_MS = 1420070400000n;
 const DISCORD_SYNC_MAX_MESSAGES = 100;
@@ -168,6 +179,24 @@ function getSupabaseAdmin() {
     auth: { persistSession: false, autoRefreshToken: false }
   });
   return supabaseAdmin;
+}
+
+async function companionDownloadPayload() {
+  const storage = getSupabaseAdmin().storage.from(COMPANION_RELEASE_BUCKET);
+  const { data: signed, error } = await storage.createSignedUrl(
+    COMPANION_RELEASE_OBJECT,
+    300,
+    { download: COMPANION_RELEASE_FILENAME }
+  );
+  if (error || !signed?.signedUrl) {
+    throw httpError(503, `Instalador indisponivel: ${error?.message || 'URL ausente'}`);
+  }
+  return {
+    filename: COMPANION_RELEASE_FILENAME,
+    version: COMPANION_RELEASE_VERSION,
+    url: signed.signedUrl,
+    expiresAt: new Date(Date.now() + 300_000).toISOString()
+  };
 }
 
 function getCloudIngestRunner() {
@@ -387,9 +416,10 @@ function capabilitiesForRole(role, rbac = null) {
   const isDm = role === 'owner' || role === 'master';
   const permissions = permissionActionSet(rbac);
   const rbacAvailable = Boolean(rbac?.available);
-  const canManagePermissions = isDm
+  const canManageAccess = isDm
     || permissions.has('campaign.access.manage')
     || permissions.has('project.rbac.manage');
+  const canManagePermissions = permissions.has('campaign.permissions.manage');
   return {
     openTestMode: false,
     canReadCampaign: Boolean(role) || permissions.has('campaign.read'),
@@ -397,11 +427,13 @@ function capabilitiesForRole(role, rbac = null) {
     canReviewTableMaterial: ['owner', 'master', 'reviewer'].includes(role) || permissions.has('narrative.review.manage'),
     canApproveCanon: isDm || permissions.has('narrative.canon.approve'),
     canManageCampaign: isDm || permissions.has('campaign.content.edit'),
-    canManageAccess: canManagePermissions,
+    canManageAccess,
     canOpenEdit: permissions.has('campaign.edit.access'),
     canEditContent: permissions.has('campaign.content.edit'),
     canUseLocalProcessing: permissions.has('campaign.local.process'),
     canReadAudio: permissions.has('campaign.audio.read'),
+    canDownloadCompanion: permissions.has('campaign.companion.download'),
+    canPublishLocal: permissions.has('campaign.local.publish'),
     canManagePermissions,
     canViewMonitoring: permissions.has('project.monitor.read') || (!rbacAvailable && isDm),
     canManageTechnical: permissions.has('project.rbac.manage'),
@@ -1192,21 +1224,24 @@ async function rbacAdminAccess(req, campaignSlug) {
   if (!payload.authenticated) throw httpError(401, 'Login Discord ou Google obrigatorio.');
   const db = getPool();
   const profileId = payload.profile?.id || null;
-  const [projectCheck, campaignCheck] = await Promise.all([
+  const [projectCheck, campaignCheck, sitePermissionsCheck] = await Promise.all([
     profileHasPermission(db, profileId, 'project.rbac.manage', 'project', PROJECT_SCOPE_ID),
-    profileHasPermission(db, profileId, 'campaign.access.manage', 'campaign', campaignSlug)
+    profileHasPermission(db, profileId, 'campaign.access.manage', 'campaign', campaignSlug),
+    profileHasPermission(db, profileId, 'campaign.permissions.manage', 'campaign', campaignSlug)
   ]);
   const legacyAdmin = !projectCheck.available && ['owner', 'master'].includes(payload.campaignRole || '');
   const canManageTechnical = Boolean(projectCheck.allowed || legacyAdmin);
   const canManageCampaignAccess = Boolean(projectCheck.allowed || campaignCheck.allowed || legacyAdmin);
-  if (!canManageTechnical && !canManageCampaignAccess) {
-    throw httpError(403, 'Administracao de funcoes exige project.rbac.manage ou campaign.access.manage.');
+  const canManageSitePermissions = Boolean(sitePermissionsCheck.allowed);
+  if (!canManageTechnical && !canManageCampaignAccess && !canManageSitePermissions) {
+    throw httpError(403, 'Sem permissao para administrar funcoes deste projeto.');
   }
   return {
     payload,
     profileId,
     canManageTechnical,
     canManageCampaignAccess,
+    canManageSitePermissions,
     rbacAvailable: projectCheck.available && campaignCheck.available
   };
 }
@@ -1406,7 +1441,8 @@ from (
     viewer: {
       profileId: access.profileId,
       canManageTechnical: access.canManageTechnical,
-      canManageCampaignAccess: access.canManageCampaignAccess
+      canManageCampaignAccess: access.canManageCampaignAccess,
+      canManageSitePermissions: access.canManageSitePermissions
     },
     roles,
     profiles,
@@ -1421,14 +1457,21 @@ async function assignRbacRole(db, req, campaignSlug, raw) {
   const roleSlug = cleanText(raw.roleSlug || raw.role_slug, 80);
   if (!profileId || !roleSlug) throw httpError(400, 'profileId e roleSlug sao obrigatorios.');
   if (roleSlug === 'campaign_dm') throw httpError(400, 'Use a transferencia de DM para atribuir campaign_dm.');
+  if (roleSlug === 'site_permissions_owner') {
+    throw httpError(403, 'A propriedade das permissoes nao pode ser transferida pela interface.');
+  }
   if (!(await profileExists(db, profileId))) throw httpError(404, 'Perfil alvo nao encontrado.');
   const role = await roleDefinitionBySlug(db, roleSlug);
   const { scopeType, scopeId } = normalizeRbacScope(raw, campaignSlug, role);
+  const isSiteFeatureAssignment = SITE_FEATURE_ROLE_SLUGS.has(roleSlug);
+  if (isSiteFeatureAssignment && !access.canManageSitePermissions) {
+    throw httpError(403, 'Somente o proprietario das permissoes pode alterar acessos do Edit.');
+  }
   const isTechnicalAssignment = role.plane === 'technical' || scopeType === 'project';
-  if (isTechnicalAssignment && !access.canManageTechnical) {
+  if (!isSiteFeatureAssignment && isTechnicalAssignment && !access.canManageTechnical) {
     throw httpError(403, 'Funcoes tecnicas exigem project.rbac.manage.');
   }
-  if (!isTechnicalAssignment && !access.canManageCampaignAccess) {
+  if (!isSiteFeatureAssignment && !isTechnicalAssignment && !access.canManageCampaignAccess) {
     throw httpError(403, 'Funcoes da campanha exigem campaign.access.manage.');
   }
   const reason = cleanText(raw.reason, 1000) || 'Atribuicao feita pela administracao de funcoes.';
@@ -1489,14 +1532,21 @@ from (
   if (assignment.role_slug === 'campaign_dm') {
     throw httpError(400, 'Use a transferencia de DM para encerrar campaign_dm ativo.');
   }
+  if (assignment.role_slug === 'site_permissions_owner') {
+    throw httpError(403, 'A propriedade das permissoes nao pode ser revogada pela interface.');
+  }
+  const isSiteFeatureAssignment = SITE_FEATURE_ROLE_SLUGS.has(assignment.role_slug);
+  if (isSiteFeatureAssignment && !access.canManageSitePermissions) {
+    throw httpError(403, 'Somente o proprietario das permissoes pode alterar acessos do Edit.');
+  }
   const isTechnicalAssignment = assignment.role_plane === 'technical' || assignment.scope_type === 'project';
-  if (isTechnicalAssignment && !access.canManageTechnical) {
+  if (!isSiteFeatureAssignment && isTechnicalAssignment && !access.canManageTechnical) {
     throw httpError(403, 'Revogar funcao tecnica exige project.rbac.manage.');
   }
   if (!isTechnicalAssignment && (assignment.scope_type !== 'campaign' || assignment.scope_id !== campaignSlug)) {
     throw httpError(403, 'Atribuicao fora do escopo desta campanha.');
   }
-  if (!isTechnicalAssignment && !access.canManageCampaignAccess) {
+  if (!isSiteFeatureAssignment && !isTechnicalAssignment && !access.canManageCampaignAccess) {
     throw httpError(403, 'Revogar funcao da campanha exige campaign.access.manage.');
   }
   const reason = cleanText(raw.reason, 1000) || 'Revogacao feita pela administracao de funcoes.';
@@ -8493,6 +8543,17 @@ async function handleGet(req, res, path, query) {
     res.setHeader('Cache-Control', 'private, no-store');
     return sendJson(res, 200, { ok: true, sessions: await editorSessions(campaign) });
   }
+  if (path === '/api/companion-download') {
+    await requirePermission(req, campaign, {
+      action: 'campaign.companion.download',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para baixar o companheiro local.'
+    });
+    res.setHeader('Cache-Control', 'private, no-store');
+    return sendJson(res, 200, { ok: true, download: await companionDownloadPayload() });
+  }
   if (path === '/api/sessions') {
     await requireCampaignAccess(req, campaign);
     return sendJson(res, 200, { ok: true, sessions: await listSessions(campaign, runId) });
@@ -8534,7 +8595,7 @@ async function handlePost(req, res, path) {
   const dryRun = Boolean(body.dryRun);
   if (path === '/api/library-import-local') {
     await requirePermission(req, campaign, {
-      action: 'campaign.local.process',
+      action: 'campaign.local.publish',
       scopeType: 'campaign',
       scopeId: campaign,
       legacyRoles: [],

@@ -166,9 +166,12 @@ async function loadCloudSessions() {
 }
 
 function configureWorkspaces() {
-  const canUseLocal = state.cloud.capabilities.canUseLocalProcessing || state.cloud.capabilities.canReadAudio;
+  const canUseLocal = state.cloud.capabilities.canUseLocalProcessing
+    || state.cloud.capabilities.canReadAudio
+    || state.cloud.capabilities.canDownloadCompanion;
   $("#localWorkspaceTab").classList.toggle("hidden", !canUseLocal);
   $("#permissionsWorkspaceTab").classList.toggle("hidden", !state.cloud.capabilities.canManagePermissions);
+  $("#companionDownloadSection").classList.toggle("hidden", !state.cloud.capabilities.canDownloadCompanion);
   ["#localHealthSection", "#localCandidateSection", "#localJobsSection"].forEach((selector) => {
     $(selector).classList.toggle("hidden", !state.cloud.capabilities.canUseLocalProcessing);
   });
@@ -197,7 +200,10 @@ function localConnectionError(error) {
 }
 
 async function selectWorkspace(name) {
-  if (name === "local" && !state.cloud.capabilities.canUseLocalProcessing && !state.cloud.capabilities.canReadAudio) return;
+  if (name === "local"
+    && !state.cloud.capabilities.canUseLocalProcessing
+    && !state.cloud.capabilities.canReadAudio
+    && !state.cloud.capabilities.canDownloadCompanion) return;
   if (name === "permissions" && !state.cloud.capabilities.canManagePermissions) return;
   state.cloud.workspace = name;
   $("#cloudWorkspace").classList.toggle("hidden", name !== "content");
@@ -211,7 +217,9 @@ async function selectWorkspace(name) {
     state.cloud.localLoaded = true;
     const loader = state.cloud.capabilities.canUseLocalProcessing
       ? loadLibrary()
-      : api("/api/sessions").then(renderSessions);
+      : state.cloud.capabilities.canReadAudio
+        ? api("/api/sessions").then(renderSessions)
+        : Promise.resolve();
     await loader.catch(localConnectionError);
   }
   if (name === "permissions" && !state.cloud.rbac) {
@@ -231,14 +239,40 @@ const featureRoles = {
     description: "Altera sessões, resumos e transcrições.",
   },
   local_operator: {
-    label: "Processar e publicar",
-    description: "Usa os arquivos e o processamento deste PC.",
+    label: "Processar localmente",
+    description: "Baixa o companion e usa a GPU deste PC.",
   },
   audio_operator: {
     label: "Acessar áudio",
     description: "Ouve as faixas guardadas localmente.",
   },
+  local_publisher: {
+    label: "Publicar resultado",
+    description: "Envia a transcrição processada para o site.",
+  },
 };
+
+async function downloadCompanion() {
+  const button = $("#downloadCompanionButton");
+  const status = $("#companionDownloadStatus");
+  button.disabled = true;
+  status.textContent = "Preparando um download privado…";
+  try {
+    const payload = await cloudApi("/api/companion-download?campaignSlug=yuhara-main");
+    const link = document.createElement("a");
+    link.href = payload.download.url;
+    link.download = payload.download.filename || "DnDScribeCompanionSetup.exe";
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    status.textContent = `Versão ${payload.download.version} liberada. O link expira em 5 minutos.`;
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
 
 function activeFeatureAssignment(profileId, roleSlug) {
   return (state.cloud.rbac?.assignments || []).find((assignment) => (
@@ -757,6 +791,7 @@ function renderHealth() {
   $("#healthStatus").className = `health-pill ${health.status}`;
   const jobs = health.jobs || {};
   $("#healthGrid").innerHTML = [
+    ["Companion", health.companion?.version ? `v${escapeHtml(health.companion.version)}` : "Instalado"],
     ["GPU", health.cuda.available ? `${health.cuda.device_count} CUDA` : "Indisponível"],
     ["Disco livre", formatDisk(health.storage.free_bytes)],
     ["Arquivo", escapeHtml(health.storage.root)],
@@ -800,6 +835,7 @@ async function retryJob(jobId) {
 }
 
 async function selectArchive() {
+  if (!state.cloud.capabilities.canUseLocalProcessing) return;
   const button = $("#selectArchiveButton");
   const status = $("#archiveImportStatus");
   const originalLabel = button.textContent;
@@ -896,6 +932,7 @@ function renderSessions(sessions) {
 }
 
 async function importSession(button) {
+  if (!state.cloud.capabilities.canUseLocalProcessing) return;
   button.disabled = true;
   button.textContent = "Extraindo faixas…";
   try {
@@ -923,6 +960,7 @@ async function openSession(id) {
 
 function renderSession() {
   const session = state.session;
+  const canProcess = Boolean(state.cloud.capabilities.canUseLocalProcessing);
   $("#sessionTitle").textContent = session.title || session.recording_id;
   $("#sessionDate").textContent = session.start_time
     ? new Date(session.start_time).toLocaleString("pt-BR", { dateStyle: "full", timeStyle: "short" }).toUpperCase()
@@ -935,7 +973,7 @@ function renderSession() {
   const canPublish = hostedMode
     && session.status === "complete"
     && session.mode === "full"
-    && state.cloud.capabilities.canUseLocalProcessing;
+    && state.cloud.capabilities.canPublishLocal;
   $("#publishButton").classList.toggle("hidden", !canPublish);
   $("#metadataTitle").value = session.title || "";
   $("#metadataDate").value = session.played_at || (session.start_time || "").slice(0, 10);
@@ -944,7 +982,8 @@ function renderSession() {
 
   const busy = ["queued", "loading_model", "transcribing"].includes(session.status);
   const fullComplete = session.status === "complete" && session.mode === "full";
-  $("#setupPanel").classList.toggle("hidden", busy || fullComplete);
+  $("#localMetadataPanel").classList.toggle("hidden", !canProcess);
+  $("#setupPanel").classList.toggle("hidden", !canProcess || busy || fullComplete);
   $("#progressPanel").classList.toggle("hidden", !busy);
   $("#errorPanel").classList.toggle("hidden", session.status !== "error");
   $("#transcriptPanel").classList.toggle("hidden", !session.transcript?.length);
@@ -1000,6 +1039,10 @@ async function refreshSession() {
 }
 
 async function startTranscription(sampleMinutes) {
+  if (!state.cloud.capabilities.canUseLocalProcessing) {
+    alert("Sua conta não tem permissão para processar arquivos neste computador.");
+    return;
+  }
   const cpu = $("#cpuMode").checked;
   try {
     state.session = await api(`/api/sessions/${state.session.recording_id}/transcribe`, {
@@ -1020,6 +1063,8 @@ async function startTranscription(sampleMinutes) {
 
 function renderTranscript() {
   const session = state.session;
+  const canProcess = Boolean(state.cloud.capabilities.canUseLocalProcessing);
+  const canReadAudio = Boolean(state.cloud.capabilities.canReadAudio);
   $("#filterChips").innerHTML = session.speakers.map((speaker) =>
     `<button class="chip ${state.speakers.has(speaker) ? "active" : ""}" data-speaker="${escapeHtml(speaker)}">${escapeHtml(speaker)}</button>`
   ).join("");
@@ -1042,14 +1087,14 @@ function renderTranscript() {
       text = text.replace(new RegExp(`(${safeQuery})`, "giu"), "<mark>$1</mark>");
     }
     return `<article class="utterance">
-      <button class="time-button" data-track="${escapeHtml(item.track)}" data-time="${item.start}" data-speaker="${escapeHtml(item.speaker)}">
-        ${formatTime(item.start)}
-      </button>
+      ${canReadAudio
+        ? `<button class="time-button" data-track="${escapeHtml(item.track)}" data-time="${item.start}" data-speaker="${escapeHtml(item.speaker)}">${formatTime(item.start)}</button>`
+        : `<span class="time-label">${formatTime(item.start)}</span>`}
       <span class="speaker">${escapeHtml(item.speaker)}</span>
       <p>${text}</p>
-      <button class="review-button ${escapeHtml(item.review_status || "unreviewed")}" data-segment="${escapeHtml(item.id)}">
-        ${reviewLabel(item.review_status)}
-      </button>
+      ${canProcess
+        ? `<button class="review-button ${escapeHtml(item.review_status || "unreviewed")}" data-segment="${escapeHtml(item.id)}">${reviewLabel(item.review_status)}</button>`
+        : `<span class="review-state ${escapeHtml(item.review_status || "unreviewed")}">${reviewLabel(item.review_status)}</span>`}
     </article>`;
   }).join("") : '<p class="empty">Nenhuma fala corresponde aos filtros.</p>';
   document.querySelectorAll(".time-button").forEach((button) => {
@@ -1071,6 +1116,7 @@ function reviewLabel(status) {
 }
 
 function openReview(segmentId) {
+  if (!state.cloud.capabilities.canUseLocalProcessing) return;
   const segment = state.session.transcript.find((item) => item.id === segmentId);
   if (!segment) return;
   state.reviewSegment = segment;
@@ -1082,6 +1128,7 @@ function openReview(segmentId) {
 }
 
 async function saveReview() {
+  if (!state.cloud.capabilities.canUseLocalProcessing) return;
   const segment = state.reviewSegment;
   if (!segment) return;
   const button = $("#saveReviewButton");
@@ -1112,6 +1159,7 @@ async function saveReview() {
 }
 
 async function saveMetadata() {
+  if (!state.cloud.capabilities.canUseLocalProcessing) return;
   const button = $("#saveMetadataButton");
   button.disabled = true;
   try {
@@ -1200,6 +1248,7 @@ function playAt(button) {
 }
 
 $("#refreshButton").addEventListener("click", loadLibrary);
+$("#downloadCompanionButton").addEventListener("click", downloadCompanion);
 $("#selectArchiveButton").addEventListener("click", selectArchive);
 $("#backButton").addEventListener("click", () => {
   clearInterval(state.poller);

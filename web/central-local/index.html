@@ -69,6 +69,18 @@
         </div>
 
         <div id="localWorkspace" class="hidden">
+        <section id="companionDownloadSection" class="companion-download-panel hidden" aria-labelledby="companionDownloadTitle">
+          <div>
+            <p class="eyebrow">APLICATIVO WINDOWS</p>
+            <h2 id="companionDownloadTitle">Use a GPU e os arquivos deste PC</h2>
+            <p>Instale uma vez. O companion abre os ZIPs do Craig, processa com sua NVIDIA e libera os trechos de áudio somente nesta máquina.</p>
+          </div>
+          <div class="companion-download-actions">
+            <button class="primary" id="downloadCompanionButton" type="button">Baixar para Windows</button>
+            <small id="companionDownloadStatus" role="status" aria-live="polite">Acesso restrito a operadores autorizados.</small>
+          </div>
+        </section>
+
         <section id="localHealthSection" class="system-panel workspace-panel">
           <div class="section-heading compact-heading">
             <div>
@@ -141,7 +153,7 @@
           </div>
         </div>
 
-        <section class="metadata-panel">
+        <section class="metadata-panel" id="localMetadataPanel">
           <div>
             <p class="eyebrow">CATÁLOGO LOCAL</p>
             <h2>Identidade da sessão</h2>

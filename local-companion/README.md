@@ -17,6 +17,18 @@ Session são úteis para edição manual, não para este fluxo.
 
 ## Instalação no Windows
 
+### Para operadores autorizados
+
+Entre em <https://dnd.faysk.dev/edit/>, abra **Processamento local** e clique
+em **Baixar para Windows**. O instalador oficial prepara o ambiente, solicita a
+pasta de dados e cria um atalho no Desktop.
+
+O Windows pode mostrar o SmartScreen porque esta versão interna ainda não tem
+assinatura Authenticode comercial. Confira se o arquivo se chama
+`DnDScribeCompanionSetup.exe` e se foi baixado pelo Edit autenticado.
+
+### Instalação de desenvolvimento
+
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
