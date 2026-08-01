@@ -1,5 +1,10 @@
 # Craig to Text
 
+Na instalação Windows, o serviço é supervisionado pelo ícone do DnD Scribe
+junto ao relógio. O menu mostra o estado e o progresso da transcrição, permite
+iniciar/parar, reparar ou atualizar as dependências, abrir o Edit, consultar
+versões e caminhos em **Sobre**, e encerrar o serviço com **Sair**.
+
 Aplicação local para importar um ZIP **FLAC Multi-track** do
 [Craig](https://craig.chat/), transcrever cada participante separadamente e
 reunir as falas em uma linha do tempo pesquisável.

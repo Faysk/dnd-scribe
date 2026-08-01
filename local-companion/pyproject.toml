@@ -1,6 +1,6 @@
 [project]
 name = "craig-to-text"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local multi-track Craig recorder transcription and session viewer"
 requires-python = ">=3.11"
 dependencies = [

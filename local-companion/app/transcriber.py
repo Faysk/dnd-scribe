@@ -99,19 +99,19 @@ def transcribe_session(
     started = time.time()
     session["status"] = "loading_model"
     session["error"] = None
-    session["progress"] = {"stage": "checking_model"}
+    session["progress"] = {"stage": "checking_model", "percent": 1}
     update(session)
 
     model_root = model_root or session_dir.parent.parent / "model_files"
     model_path = model_root / model_name.replace("/", "--")
     required_files = ("config.json", "model.bin", "tokenizer.json")
     if not all((model_path / filename).is_file() for filename in required_files):
-        session["progress"] = {"stage": "downloading_model"}
+        session["progress"] = {"stage": "downloading_model", "percent": 3}
         update(session)
         model_path.mkdir(parents=True, exist_ok=True)
         download_model(model_name, output_dir=str(model_path))
 
-    session["progress"] = {"stage": "loading_cuda" if device == "cuda" else "loading_cpu"}
+    session["progress"] = {"stage": "loading_cuda" if device == "cuda" else "loading_cpu", "percent": 5}
     update(session)
     model = WhisperModel(
         str(model_path),
@@ -127,6 +127,7 @@ def transcribe_session(
             "track": index + 1,
             "total_tracks": track_count,
             "speaker": track["speaker"],
+            "percent": round(5 + (index / track_count) * 94),
         }
         update(session)
 
@@ -154,6 +155,7 @@ def transcribe_session(
 
         segments, info = model.transcribe(audio_input, **kwargs)
         serialized_segments = []
+        last_reported_percent = -1
         for segment in segments:
             words = [
                 {
@@ -174,6 +176,17 @@ def transcribe_session(
                     "words": words,
                 }
             )
+            track_fraction = min(1.0, float(segment.end) / max(float(info.duration), 1.0))
+            overall_percent = min(99, round(5 + ((index + track_fraction) / track_count) * 94))
+            if overall_percent >= last_reported_percent + 2:
+                session["progress"] = {
+                    "track": index + 1,
+                    "total_tracks": track_count,
+                    "speaker": track["speaker"],
+                    "percent": overall_percent,
+                }
+                update(session)
+                last_reported_percent = overall_percent
 
         track_result = {
             **track,
@@ -196,7 +209,7 @@ def transcribe_session(
     session["model"] = model_name
     session["device"] = device
     session["elapsed_seconds"] = round(time.time() - started, 1)
-    session["progress"] = {"track": track_count, "total_tracks": track_count}
+    session["progress"] = {"track": track_count, "total_tracks": track_count, "percent": 100}
     update(session)
     return session
 

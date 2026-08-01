@@ -5,7 +5,8 @@
 O Edit distribui um instalador Windows privado para pessoas autenticadas com
 permissão de processamento local. O executável não contém modelos nem áudios:
 ele instala o aplicativo em `%LOCALAPPDATA%\DnDScribe`, prepara um ambiente
-Python isolado e cria o atalho **DnD Scribe Companion** no Desktop.
+Python isolado, cria o atalho **DnD Scribe Companion** no Desktop e mantém um
+controlador junto ao relógio do Windows. O controlador inicia com o login.
 
 O operador escolhe a raiz de dados durante a instalação. ZIPs do Craig,
 faixas, modelo Whisper, transcrições, revisões e SQLite permanecem nessa raiz.
@@ -21,6 +22,11 @@ O serviço escuta somente em `127.0.0.1:8765`.
 6. permitir ao Chrome o acesso à rede local;
 7. selecionar o ZIP FLAC Multi-track pelo seletor do Windows;
 8. validar a amostra de cinco minutos antes da sessão completa.
+
+O menu do ícone informa se o serviço está parado, rodando ou processando. Em
+processamento, mostra a porcentagem e a etapa atual. Também permite abrir o
+Edit, iniciar/parar o serviço, atualizar ou reparar as dependências locais,
+consultar versão e pastas em **Sobre**, ou encerrar tudo com **Sair**.
 
 A primeira instalação baixa as dependências Python. A primeira transcrição
 baixa o modelo `large-v3-turbo`. O computador precisa de driver NVIDIA recente,
