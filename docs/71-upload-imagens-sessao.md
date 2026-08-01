@@ -16,6 +16,8 @@ permissão de conteúdo.
    arquivo pela função da Vercel.
 5. Ao salvar, as URLs públicas de capa e destaque continuam no metadata da
    sessão.
+6. Se uma imagem hospedada pelo projeto foi substituída ou removida, o backend
+   apaga a versão antiga do Storage depois de salvar os novos metadados.
 
 ## Limites e segurança
 
@@ -26,6 +28,8 @@ permissão de conteúdo.
 - não existe política aberta de upload no bucket;
 - a chave secreta permanece somente no backend;
 - cada alteração usa um caminho novo para evitar imagem antiga no cache da CDN.
+- a limpeza automática só remove arquivos do bucket, campanha e sessão atuais;
+  URLs externas antigas continuam intocadas.
 
 ## Custos
 

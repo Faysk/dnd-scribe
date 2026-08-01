@@ -6625,6 +6625,33 @@ where c.slug = $1 and s.source_session_id = $2;`,
   };
 }
 
+function sessionImageObjectPath(publicUrl, campaign, sessionId) {
+  if (!publicUrl) return '';
+  const supabaseUrl = String(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+  if (!supabaseUrl) return '';
+  const prefix = `${supabaseUrl}/storage/v1/object/public/${SESSION_IMAGE_BUCKET}/`;
+  if (!publicUrl.startsWith(prefix)) return '';
+  let objectPath;
+  try {
+    objectPath = decodeURIComponent(publicUrl.slice(prefix.length));
+  } catch {
+    return '';
+  }
+  const expectedPrefix = `${slugify(campaign)}/${sessionId}/`;
+  if (!objectPath.startsWith(expectedPrefix) || !objectPath.endsWith('.webp') || objectPath.includes('..')) return '';
+  return objectPath;
+}
+
+async function removeReplacedSessionImages(previous, next, campaign, sessionId) {
+  const paths = [previous.coverImageUrl, previous.heroImageUrl]
+    .filter((url) => url && url !== next.coverImageUrl && url !== next.heroImageUrl)
+    .map((url) => sessionImageObjectPath(url, campaign, sessionId))
+    .filter(Boolean);
+  if (!paths.length) return;
+  const { error } = await getSupabaseAdmin().storage.from(SESSION_IMAGE_BUCKET).remove([...new Set(paths)]);
+  if (error) console.warn('Nao foi possivel remover imagens substituidas da sessao.', error.message);
+}
+
 async function updateEditorSession(campaign, sourceSessionId, body = {}) {
   const title = cleanText(body.title, 160);
   if (!title) throw httpError(400, 'O titulo da sessao e obrigatorio.');
@@ -6645,6 +6672,12 @@ async function updateEditorSession(campaign, sourceSessionId, body = {}) {
   }
   const result = await getPool().query(
     `
+with previous as materialized (
+  select s.id, s.metadata
+  from sessions s
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1 and s.source_session_id = $2
+)
 update sessions s
 set title = $3,
     session_date = coalesce($4::date, s.session_date),
@@ -6657,15 +6690,29 @@ set title = $3,
       '{heroImageUrl}', to_jsonb($9::text), true
     ),
     updated_at = now()
-from campaigns c
-where c.id = s.campaign_id and c.slug = $1 and s.source_session_id = $2
+from previous p
+where s.id = p.id
 returning s.id, s.source_session_id, s.title, to_char(s.session_date, 'YYYY-MM-DD') session_date,
           s.arc, s.status, s.summary_short, s.summary_full,
           coalesce(s.metadata->>'coverImageUrl', '') cover_image_url,
-          coalesce(s.metadata->>'heroImageUrl', '') hero_image_url, s.updated_at;`,
+          coalesce(s.metadata->>'heroImageUrl', '') hero_image_url,
+          coalesce(p.metadata->>'coverImageUrl', '') previous_cover_image_url,
+          coalesce(p.metadata->>'heroImageUrl', '') previous_hero_image_url,
+          s.updated_at;`,
     [campaign, sourceSessionId, title, sessionDate || null, arc, summary, summaryFull, coverImageUrl, heroImageUrl]
   );
   if (!result.rows[0]) throw httpError(404, 'Sessao nao encontrada.');
+  await removeReplacedSessionImages(
+    {
+      coverImageUrl: result.rows[0].previous_cover_image_url,
+      heroImageUrl: result.rows[0].previous_hero_image_url
+    },
+    { coverImageUrl, heroImageUrl },
+    campaign,
+    result.rows[0].id
+  );
+  delete result.rows[0].previous_cover_image_url;
+  delete result.rows[0].previous_hero_image_url;
   return result.rows[0];
 }
 
