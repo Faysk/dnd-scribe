@@ -231,14 +231,44 @@
             Arco
             <input id="cloudArc" maxlength="160" />
           </label>
-          <label class="wide-field">
-            URL HTTPS da capa (opcional)
-            <input id="cloudCover" maxlength="2000" placeholder="https://…" />
-          </label>
-          <label class="wide-field">
-            URL HTTPS da imagem de destaque (opcional)
-            <input id="cloudHero" maxlength="2000" placeholder="https://…" />
-          </label>
+          <section class="wide-field image-editor" data-image-kind="cover" aria-labelledby="cloudCoverLabel">
+            <div class="image-editor-copy">
+              <strong id="cloudCoverLabel">Capa do card</strong>
+              <span>Imagem vertical recomendada. O site otimiza para WebP antes de enviar.</span>
+              <div class="image-editor-actions">
+                <label class="ghost image-picker-button">
+                  Escolher imagem
+                  <input id="cloudCoverFile" type="file" accept="image/jpeg,image/png,image/webp" />
+                </label>
+                <button class="ghost image-remove-button" id="removeCloudCover" type="button">Remover</button>
+              </div>
+              <small class="image-upload-status" id="cloudCoverStatus" role="status"></small>
+            </div>
+            <div class="image-preview image-preview-cover">
+              <img id="cloudCoverPreview" alt="Prévia da capa do card" />
+              <span id="cloudCoverEmpty">Sem capa</span>
+            </div>
+            <input id="cloudCover" type="hidden" />
+          </section>
+          <section class="wide-field image-editor" data-image-kind="hero" aria-labelledby="cloudHeroLabel">
+            <div class="image-editor-copy">
+              <strong id="cloudHeroLabel">Imagem de destaque</strong>
+              <span>Imagem horizontal recomendada para o topo da sessão.</span>
+              <div class="image-editor-actions">
+                <label class="ghost image-picker-button">
+                  Escolher imagem
+                  <input id="cloudHeroFile" type="file" accept="image/jpeg,image/png,image/webp" />
+                </label>
+                <button class="ghost image-remove-button" id="removeCloudHero" type="button">Remover</button>
+              </div>
+              <small class="image-upload-status" id="cloudHeroStatus" role="status"></small>
+            </div>
+            <div class="image-preview image-preview-hero">
+              <img id="cloudHeroPreview" alt="Prévia da imagem de destaque" />
+              <span id="cloudHeroEmpty">Sem destaque</span>
+            </div>
+            <input id="cloudHero" type="hidden" />
+          </section>
           <label class="wide-field">
             Descrição curta do card
             <textarea id="cloudSummary" maxlength="2000"></textarea>
@@ -334,7 +364,7 @@
         </div>
       </form>
     </dialog>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0"></script>
     <script src="/vendor/marked.umd.js"></script>
     <script src="/vendor/purify.min.js"></script>
     <script src="./app.js"></script>

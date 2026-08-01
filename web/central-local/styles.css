@@ -451,6 +451,40 @@ textarea:focus, input:focus { border-color: var(--purple); }
   gap: 14px;
 }
 .wide-field { grid-column: 1 / -1; }
+.image-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 18px;
+  align-items: center;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.025);
+}
+.image-editor-copy { display: grid; gap: 7px; align-content: center; }
+.image-editor-copy > strong { font-size: 14px; }
+.image-editor-copy > span { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.image-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; }
+.image-picker-button { position: relative; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; }
+.image-picker-button input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.image-remove-button { border-color: var(--line); }
+.image-upload-status { min-height: 18px; color: var(--muted); font-size: 11px; }
+.image-upload-status.success { color: var(--acid); }
+.image-upload-status.error { color: var(--orange); }
+.image-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 118px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+}
+.image-preview-cover { aspect-ratio: 3 / 4; }
+.image-preview-hero { aspect-ratio: 16 / 9; }
+.image-preview img { width: 100%; height: 100%; object-fit: cover; }
+.image-preview img:not([src]) { display: none; }
+.image-preview span { color: var(--muted); font: 500 10px "DM Mono", monospace; text-transform: uppercase; }
 #cloudSummaryFull { min-height: 320px; }
 .cloud-summary-workspace {
   display: grid;
@@ -572,6 +606,8 @@ textarea:focus, input:focus { border-color: var(--purple); }
   .metadata-panel { grid-template-columns: 1fr; }
   .metadata-fields { grid-template-columns: 1fr; }
   .cloud-editor-grid { grid-template-columns: 1fr; }
+  .image-editor { grid-template-columns: 1fr; }
+  .image-preview { width: min(100%, 360px); }
   .cloud-summary-workspace { grid-template-columns: 1fr; }
   .cloud-summary-workspace #cloudSummaryFull,
   .cloud-summary-workspace .markdown-preview-panel { height: 48vh; min-height: 320px; }

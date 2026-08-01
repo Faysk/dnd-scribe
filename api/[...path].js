@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { Pool } = require('pg');
+const { createClient } = require('@supabase/supabase-js');
 const {
   parseRoll20ChatText,
   parseRoll20DiceRoll,
@@ -20,6 +21,8 @@ const DEFAULT_ACTOR = 'renanyuhara';
 const PROJECT_SCOPE_ID = 'dnd-scribe';
 const CRAIG_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
+const SESSION_IMAGE_BUCKET = 'session-images';
+const SESSION_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_EPOCH_MS = 1420070400000n;
 const DISCORD_SYNC_MAX_MESSAGES = 100;
@@ -137,6 +140,7 @@ const CANDIDATE_STATUS = {
 let pool;
 let cloudIngestRunner;
 let cloudExtractRunner;
+let supabaseAdmin;
 
 function getPool() {
   if (pool) return pool;
@@ -151,6 +155,19 @@ function getPool() {
     ssl: { rejectUnauthorized: false }
   });
   return pool;
+}
+
+function getSupabaseAdmin() {
+  if (supabaseAdmin) return supabaseAdmin;
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const secretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!supabaseUrl || !secretKey) {
+    throw httpError(503, 'Storage de imagens nao esta configurado neste ambiente.');
+  }
+  supabaseAdmin = createClient(supabaseUrl, secretKey, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+  return supabaseAdmin;
 }
 
 function getCloudIngestRunner() {
@@ -6564,6 +6581,50 @@ where c.slug = $1;`,
   ) || [];
 }
 
+async function createEditorImageUpload(campaign, sourceSessionId, body = {}) {
+  const kind = cleanText(body.kind, 20);
+  const contentType = cleanText(body.contentType, 80).toLowerCase();
+  const sizeBytes = Number(body.sizeBytes || 0);
+  if (!['cover', 'hero'].includes(kind)) {
+    throw httpError(400, 'Tipo de imagem invalido.');
+  }
+  if (contentType !== 'image/webp') {
+    throw httpError(400, 'A imagem precisa ser convertida para WebP antes do upload.');
+  }
+  if (!Number.isInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > SESSION_IMAGE_MAX_BYTES) {
+    throw httpError(400, 'A imagem otimizada precisa ter no maximo 3 MB.');
+  }
+  const result = await getPool().query(
+    `
+select s.id
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1 and s.source_session_id = $2;`,
+    [campaign, sourceSessionId]
+  );
+  const session = result.rows[0];
+  if (!session) throw httpError(404, 'Sessao nao encontrada.');
+
+  const objectPath = [
+    slugify(campaign),
+    session.id,
+    `${kind}-${Date.now()}-${crypto.randomUUID()}.webp`
+  ].join('/');
+  const storage = getSupabaseAdmin().storage.from(SESSION_IMAGE_BUCKET);
+  const { data: signed, error } = await storage.createSignedUploadUrl(objectPath);
+  if (error || !signed?.token) {
+    throw httpError(502, `Nao foi possivel preparar o upload: ${error?.message || 'token ausente'}`);
+  }
+  const { data: publicAsset } = storage.getPublicUrl(objectPath);
+  return {
+    bucket: SESSION_IMAGE_BUCKET,
+    path: objectPath,
+    token: signed.token,
+    publicUrl: publicAsset.publicUrl,
+    maxBytes: SESSION_IMAGE_MAX_BYTES
+  };
+}
+
 async function updateEditorSession(campaign, sourceSessionId, body = {}) {
   const title = cleanText(body.title, 160);
   if (!title) throw httpError(400, 'O titulo da sessao e obrigatorio.');
@@ -8445,6 +8506,19 @@ async function handlePost(req, res, path) {
     return sendJson(res, 200, {
       ok: true,
       session: await updateEditorSession(campaign, sourceSessionId, body)
+    });
+  }
+  if (path === '/api/editor-image-upload-url') {
+    await requirePermission(req, campaign, {
+      action: 'campaign.content.edit',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para enviar imagens da sessao.'
+    });
+    return sendJson(res, 200, {
+      ok: true,
+      upload: await createEditorImageUpload(campaign, sourceSessionId, body)
     });
   }
   if (path === '/api/editor-segment') {

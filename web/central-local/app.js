@@ -22,6 +22,8 @@ const state = {
     transcript: [],
     cursor: null,
     segment: null,
+    imageDrafts: { cover: null, hero: null },
+    imagePreviewUrls: { cover: null, hero: null },
   },
 };
 
@@ -365,13 +367,165 @@ function openCloudEditor(sourceSessionId) {
   $("#cloudArc").value = session.arc || "";
   $("#cloudCover").value = session.coverImageUrl || "";
   $("#cloudHero").value = session.heroImageUrl || "";
+  resetCloudImageEditor("cover", session.coverImageUrl || "");
+  resetCloudImageEditor("hero", session.heroImageUrl || "");
   $("#cloudSummary").value = session.summary || "";
   const readOnly = !state.cloud.capabilities.canEditContent;
   $("#cloudEditorDialog").querySelectorAll("input, textarea").forEach((field) => {
     field.disabled = readOnly;
   });
   $("#saveCloudSessionButton").classList.toggle("hidden", readOnly);
+  $("#removeCloudCover").disabled = readOnly || !session.coverImageUrl;
+  $("#removeCloudHero").disabled = readOnly || !session.heroImageUrl;
   $("#cloudEditorDialog").showModal();
+}
+
+function cloudImageElements(kind) {
+  const prefix = kind === "cover" ? "cloudCover" : "cloudHero";
+  return {
+    input: $(`#${prefix}`),
+    file: $(`#${prefix}File`),
+    preview: $(`#${prefix}Preview`),
+    empty: $(`#${prefix}Empty`),
+    status: $(`#${prefix}Status`),
+    remove: kind === "cover" ? $("#removeCloudCover") : $("#removeCloudHero"),
+  };
+}
+
+function releaseCloudImagePreview(kind) {
+  const current = state.cloud.imagePreviewUrls[kind];
+  if (current) URL.revokeObjectURL(current);
+  state.cloud.imagePreviewUrls[kind] = null;
+}
+
+function renderCloudImagePreview(kind, url, message = "") {
+  const elements = cloudImageElements(kind);
+  if (url) elements.preview.src = url;
+  else elements.preview.removeAttribute("src");
+  elements.empty.classList.toggle("hidden", Boolean(url));
+  elements.status.className = "image-upload-status";
+  elements.status.textContent = message;
+  elements.remove.disabled = !state.cloud.capabilities.canEditContent || !url;
+}
+
+function resetCloudImageEditor(kind, url) {
+  releaseCloudImagePreview(kind);
+  state.cloud.imageDrafts[kind] = null;
+  const elements = cloudImageElements(kind);
+  elements.input.value = url;
+  elements.file.value = "";
+  renderCloudImagePreview(kind, url, url ? "Imagem publicada." : "Nenhuma imagem selecionada.");
+}
+
+function canvasBlob(canvas, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => blob ? resolve(blob) : reject(new Error("Não foi possível otimizar a imagem.")),
+      "image/webp",
+      quality,
+    );
+  });
+}
+
+async function decodeCloudImage(source) {
+  if (window.createImageBitmap) return createImageBitmap(source);
+  const objectUrl = URL.createObjectURL(source);
+  try {
+    const image = new Image();
+    image.src = objectUrl;
+    await image.decode();
+    return {
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      source: image,
+      close() {},
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function optimizeCloudImage(source, kind) {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(source.type)) {
+    throw new Error("Escolha uma imagem JPG, PNG ou WebP.");
+  }
+  if (source.size > 25 * 1024 * 1024) {
+    throw new Error("A imagem original precisa ter no máximo 25 MB.");
+  }
+  const bitmap = await decodeCloudImage(source);
+  const limits = kind === "cover"
+    ? { width: 1200, height: 1600 }
+    : { width: 1920, height: 1200 };
+  const scale = Math.min(1, limits.width / bitmap.width, limits.height / bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("O navegador não conseguiu preparar a imagem.");
+  context.drawImage(bitmap.source || bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  let blob = await canvasBlob(canvas, .84);
+  if (blob.size > 3 * 1024 * 1024) blob = await canvasBlob(canvas, .68);
+  if (blob.size > 3 * 1024 * 1024) {
+    throw new Error("A imagem continua acima de 3 MB após a otimização.");
+  }
+  return new File([blob], `${kind}.webp`, { type: "image/webp" });
+}
+
+async function selectCloudImage(kind, file) {
+  if (!file) return;
+  const elements = cloudImageElements(kind);
+  elements.status.className = "image-upload-status";
+  elements.status.textContent = "Otimizando no seu navegador…";
+  try {
+    const optimized = await optimizeCloudImage(file, kind);
+    releaseCloudImagePreview(kind);
+    const previewUrl = URL.createObjectURL(optimized);
+    state.cloud.imagePreviewUrls[kind] = previewUrl;
+    state.cloud.imageDrafts[kind] = optimized;
+    elements.input.value = "";
+    renderCloudImagePreview(
+      kind,
+      previewUrl,
+      `Pronta para enviar · ${(optimized.size / 1024).toFixed(0)} KB`,
+    );
+    elements.status.classList.add("success");
+  } catch (error) {
+    elements.status.classList.add("error");
+    elements.status.textContent = error.message;
+    elements.file.value = "";
+  }
+}
+
+function removeCloudImage(kind) {
+  releaseCloudImagePreview(kind);
+  state.cloud.imageDrafts[kind] = null;
+  const elements = cloudImageElements(kind);
+  elements.input.value = "";
+  elements.file.value = "";
+  renderCloudImagePreview(kind, "", "A imagem será removida ao salvar.");
+}
+
+async function uploadCloudImage(kind, file, session) {
+  const payload = await cloudApi("/api/editor-image-upload-url", {
+    method: "POST",
+    body: JSON.stringify({
+      campaignSlug: "yuhara-main",
+      sourceSessionId: session.sourceSessionId,
+      kind,
+      contentType: file.type,
+      sizeBytes: file.size,
+    }),
+  });
+  const upload = payload.upload;
+  const { error } = await state.cloud.client.storage
+    .from(upload.bucket)
+    .uploadToSignedUrl(upload.path, upload.token, file, {
+      contentType: "image/webp",
+      cacheControl: "31536000",
+    });
+  if (error) throw new Error(`Falha ao enviar ${kind === "cover" ? "a capa" : "o destaque"}: ${error.message}`);
+  return upload.publicUrl;
 }
 
 function openCloudSummary(sourceSessionId) {
@@ -432,7 +586,16 @@ async function saveCloudSession() {
   if (!session) return;
   const button = $("#saveCloudSessionButton");
   button.disabled = true;
+  const originalLabel = button.textContent;
   try {
+    button.textContent = "Enviando imagens…";
+    const coverImageUrl = state.cloud.imageDrafts.cover
+      ? await uploadCloudImage("cover", state.cloud.imageDrafts.cover, session)
+      : $("#cloudCover").value;
+    const heroImageUrl = state.cloud.imageDrafts.hero
+      ? await uploadCloudImage("hero", state.cloud.imageDrafts.hero, session)
+      : $("#cloudHero").value;
+    button.textContent = "Salvando…";
     await cloudApi("/api/editor-session", {
       method: "POST",
       body: JSON.stringify({
@@ -441,8 +604,8 @@ async function saveCloudSession() {
         title: $("#cloudTitle").value,
         sessionDate: $("#cloudDate").value,
         arc: $("#cloudArc").value,
-        coverImageUrl: $("#cloudCover").value,
-        heroImageUrl: $("#cloudHero").value,
+        coverImageUrl,
+        heroImageUrl,
         summary: $("#cloudSummary").value,
         summaryFull: session.summaryFull || "",
       }),
@@ -454,6 +617,7 @@ async function saveCloudSession() {
     alert(error.message);
   } finally {
     button.disabled = false;
+    button.textContent = originalLabel;
   }
 }
 
@@ -1056,6 +1220,10 @@ $("#publishButton").addEventListener("click", () => {
   publishSession();
 });
 $("#saveCloudSessionButton").addEventListener("click", saveCloudSession);
+$("#cloudCoverFile").addEventListener("change", (event) => selectCloudImage("cover", event.target.files?.[0]));
+$("#cloudHeroFile").addEventListener("change", (event) => selectCloudImage("hero", event.target.files?.[0]));
+$("#removeCloudCover").addEventListener("click", () => removeCloudImage("cover"));
+$("#removeCloudHero").addEventListener("click", () => removeCloudImage("hero"));
 $("#saveCloudSummaryButton").addEventListener("click", saveCloudSummary);
 $("#saveCloudSegmentButton").addEventListener("click", saveCloudSegment);
 $("#loadMoreCloudSegments").addEventListener("click", () => {
