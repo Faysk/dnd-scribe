@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -18,8 +19,9 @@ namespace DnDScribe.CompanionSetup
 
     internal sealed class SetupForm : Form
     {
-        private const string Version = "0.2.0";
+        private const string Version = "0.3.0";
         private const string PayloadResource = "DnDScribe.CompanionPayload.zip";
+        private const string TrayResource = "DnDScribe.CompanionTray.exe";
         private readonly TextBox dataRoot = new TextBox();
         private readonly TextBox log = new TextBox();
         private readonly Button installButton = new Button();
@@ -44,7 +46,7 @@ namespace DnDScribe.CompanionSetup
 
             Label folderLabel = LabelAt("PASTA DOS ZIPS, ÁUDIOS E TRANSCRIÇÕES", 34, 220, 620, 22, 8F, FontStyle.Bold, Color.FromArgb(220, 172, 89));
             dataRoot.SetBounds(34, 248, 532, 34);
-            dataRoot.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "DnD Scribe");
+            dataRoot.Text = ExistingDataRoot() ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "DnD Scribe");
             dataRoot.AccessibleName = "Pasta de dados do DnD Scribe";
             dataRoot.BackColor = Color.FromArgb(20, 25, 32);
             dataRoot.ForeColor = ForeColor;
@@ -133,7 +135,7 @@ namespace DnDScribe.CompanionSetup
                 Append("Instalação concluída. Abrindo o DnD Scribe…");
                 MessageBox.Show(
                     this,
-                    "Companion instalado. O atalho foi criado no Desktop.\n\n" +
+                    "Companion instalado. O controlador ficará junto ao relógio do Windows e iniciará com o seu login.\n\n" +
                     "Na primeira execução, permita ao Chrome acessar a rede local.",
                     "Tudo pronto",
                     MessageBoxButtons.OK,
@@ -162,6 +164,11 @@ namespace DnDScribe.CompanionSetup
             string venvDir = Path.Combine(runtimeDir, ".venv");
             Directory.CreateDirectory(versionsDir);
             Directory.CreateDirectory(runtimeDir);
+
+            Append("Encerrando a versão anterior, se estiver aberta…");
+            StopExistingCompanion(baseDir, selectedRoot);
+            string legacyLauncher = Path.Combine(baseDir, "Iniciar DnD Scribe Companion.cmd");
+            if (File.Exists(legacyLauncher)) File.Delete(legacyLauncher);
 
             Append("Preparando os arquivos do companion…");
             SafeDelete(stagingDir, baseDir);
@@ -200,18 +207,24 @@ namespace DnDScribe.CompanionSetup
             Run(venvPython, "-m pip install --upgrade pip==26.1.2 setuptools==83.0.0", null, 600000);
             Run(venvPython, "-m pip install --upgrade " + Quote(versionDir), null, 1800000);
 
-            string launchPath = Path.Combine(baseDir, "Iniciar DnD Scribe Companion.cmd");
-            File.WriteAllText(launchPath, BuildLauncher(venvPython, versionDir, selectedRoot));
+            string trayPath = InstallTray(baseDir);
             File.WriteAllText(Path.Combine(baseDir, "data-root.txt"), selectedRoot);
-            CreateShortcut(launchPath);
+            File.WriteAllText(Path.Combine(baseDir, "current-version.txt"), Version);
+            CreateShortcut(
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "DnD Scribe Companion.lnk"),
+                trayPath);
+            CreateShortcut(
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "DnD Scribe Companion.lnk"),
+                trayPath);
 
-            Append("Iniciando o companion…");
+            Append("Iniciando o controlador junto ao relógio…");
             Process.Start(new ProcessStartInfo {
-                FileName = launchPath,
+                FileName = trayPath,
                 WorkingDirectory = baseDir,
-                UseShellExecute = true
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
             });
-            Thread.Sleep(1800);
             Process.Start(new ProcessStartInfo {
                 FileName = "https://dnd.faysk.dev/edit/",
                 UseShellExecute = true
@@ -292,26 +305,93 @@ namespace DnDScribe.CompanionSetup
             }
         }
 
-        private string BuildLauncher(string python, string appDir, string selectedRoot)
+        private string InstallTray(string baseDir)
         {
-            return "@echo off\r\n" +
-                   "title DnD Scribe Companion\r\n" +
-                   "set \"CRAIG_TO_TEXT_ROOT=" + selectedRoot.Replace("%", "%%") + "\"\r\n" +
-                   Quote(python) + " -m uvicorn app.main:app --app-dir " + Quote(appDir) + " --host 127.0.0.1 --port 8765\r\n" +
-                   "echo.\r\necho O companion foi encerrado. Pressione qualquer tecla para fechar.\r\npause >nul\r\n";
+            string target = Path.Combine(baseDir, "DnDScribeCompanion.exe");
+            string temporary = target + ".installing";
+            using (Stream input = Assembly.GetExecutingAssembly().GetManifestResourceStream(TrayResource))
+            {
+                if (input == null) throw new InvalidOperationException("O instalador está sem o controlador da bandeja.");
+                using (FileStream output = File.Create(temporary)) input.CopyTo(output);
+            }
+            if (File.Exists(target)) File.Delete(target);
+            File.Move(temporary, target);
+            return target;
         }
 
-        private void CreateShortcut(string launchPath)
+        private string ExistingDataRoot()
         {
-            string shortcutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "DnD Scribe Companion.lnk");
+            try
+            {
+                string config = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DnDScribe", "data-root.txt");
+                if (!File.Exists(config)) return null;
+                string value = File.ReadAllText(config).Trim();
+                return String.IsNullOrWhiteSpace(value) ? null : value;
+            }
+            catch { return null; }
+        }
+
+        private void CreateShortcut(string shortcutPath, string targetPath)
+        {
             Type shellType = Type.GetTypeFromProgID("WScript.Shell");
             object shell = Activator.CreateInstance(shellType);
             object shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { shortcutPath });
             Type shortcutType = shortcut.GetType();
-            shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { launchPath });
-            shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { Path.GetDirectoryName(launchPath) });
+            shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { targetPath });
+            shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { Path.GetDirectoryName(targetPath) });
             shortcutType.InvokeMember("Description", BindingFlags.SetProperty, null, shortcut, new object[] { "Iniciar o DnD Scribe Companion" });
             shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
+        }
+
+        private void StopExistingCompanion(string baseDir, string selectedRoot)
+        {
+            foreach (Process process in Process.GetProcessesByName("DnDScribeCompanion"))
+            {
+                try { process.Kill(); process.WaitForExit(5000); } catch { }
+            }
+
+            string runtimeFile = Path.Combine(selectedRoot, "companion-runtime.json");
+            if (File.Exists(runtimeFile))
+            {
+                Match match = Regex.Match(File.ReadAllText(runtimeFile), "\\\"pid\\\"\\s*:\\s*(\\d+)");
+                if (match.Success) StopPythonProcess(Int32.Parse(match.Groups[1].Value), baseDir);
+            }
+
+            try
+            {
+                string netstat = Run("netstat.exe", "-ano -p tcp", null, 20000);
+                foreach (string line in netstat.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (line.IndexOf("127.0.0.1:8765", StringComparison.OrdinalIgnoreCase) < 0 || line.IndexOf("LISTENING", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    string[] parts = Regex.Split(line.Trim(), "\\s+");
+                    int pid;
+                    if (parts.Length > 0 && Int32.TryParse(parts[parts.Length - 1], out pid)) StopPythonProcess(pid, baseDir);
+                }
+            }
+            catch { }
+
+            foreach (Process process in Process.GetProcessesByName("cmd"))
+            {
+                try
+                {
+                    if (String.Equals(process.MainWindowTitle, "DnD Scribe Companion", StringComparison.OrdinalIgnoreCase)) process.Kill();
+                }
+                catch { }
+            }
+        }
+
+        private void StopPythonProcess(int pid, string baseDir)
+        {
+            try
+            {
+                Process process = Process.GetProcessById(pid);
+                string executable = process.MainModule.FileName;
+                string allowed = Path.GetFullPath(Path.Combine(baseDir, "Runtime")) + Path.DirectorySeparatorChar;
+                if (!Path.GetFullPath(executable).StartsWith(allowed, StringComparison.OrdinalIgnoreCase)) return;
+                process.Kill();
+                process.WaitForExit(5000);
+            }
+            catch { }
         }
 
         private void SafeDelete(string target, string baseDir)
@@ -362,9 +442,11 @@ namespace DnDScribe.CompanionSetup
         {
             try
             {
+                using (Stream tray = Assembly.GetExecutingAssembly().GetManifestResourceStream("DnDScribe.CompanionTray.exe"))
                 using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("DnDScribe.CompanionPayload.zip"))
                 using (ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Read))
                 {
+                    if (tray == null || tray.Length == 0) return false;
                     bool hasApplication = false;
                     bool hasProject = false;
                     foreach (ZipArchiveEntry entry in archive.Entries)

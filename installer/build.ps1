@@ -9,6 +9,7 @@ $outputRoot = [System.IO.Path]::GetFullPath($OutputDirectory)
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("dnd-scribe-installer-" + [guid]::NewGuid().ToString('N'))
 $payloadRoot = Join-Path $temporaryRoot 'payload'
 $payloadZip = Join-Path $temporaryRoot 'companion-payload.zip'
+$trayExecutable = Join-Path $temporaryRoot 'DnDScribeCompanion.exe'
 $executable = Join-Path $outputRoot 'DnDScribeCompanionSetup.exe'
 
 New-Item -ItemType Directory -Force -Path $payloadRoot, $outputRoot | Out-Null
@@ -28,8 +29,21 @@ try {
     if (-not $compiler) { throw 'Compilador .NET Framework não encontrado.' }
 
     & $compiler /nologo /target:winexe /platform:anycpu /optimize+ `
+        "/out:$trayExecutable" `
+        /reference:System.dll `
+        /reference:System.Core.dll `
+        /reference:System.Drawing.dll `
+        /reference:System.Windows.Forms.dll `
+        /reference:System.Web.Extensions.dll `
+        (Join-Path $PSScriptRoot 'CompanionTray.cs')
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $trayExecutable)) {
+        throw 'Falha ao compilar o controlador da bandeja.'
+    }
+
+    & $compiler /nologo /target:winexe /platform:anycpu /optimize+ `
         "/out:$executable" `
         "/resource:$payloadZip,DnDScribe.CompanionPayload.zip" `
+        "/resource:$trayExecutable,DnDScribe.CompanionTray.exe" `
         /reference:System.dll `
         /reference:System.Core.dll `
         /reference:System.Drawing.dll `
@@ -40,6 +54,7 @@ try {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $executable)) {
         throw 'Falha ao compilar o instalador.'
     }
+    Copy-Item -LiteralPath $trayExecutable -Destination (Join-Path $outputRoot 'DnDScribeCompanion.exe') -Force
 
     $file = Get-Item -LiteralPath $executable
     $hash = Get-FileHash -LiteralPath $executable -Algorithm SHA256
@@ -47,7 +62,7 @@ try {
         path = $file.FullName
         bytes = $file.Length
         sha256 = $hash.Hash.ToLowerInvariant()
-        version = '0.2.0'
+        version = '0.3.0'
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputRoot 'release.json') -Encoding utf8
     Get-Content -Raw -LiteralPath (Join-Path $outputRoot 'release.json')
 }

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
@@ -28,7 +30,7 @@ from .transcriber import markdown_export, transcribe_session
 
 
 PATHS = load_paths()
-COMPANION_VERSION = "0.2.0"
+COMPANION_VERSION = "0.3.0"
 store = SessionStore(PATHS.sessions)
 catalog = LocalCatalog(PATHS.storage / "craig-to-text.sqlite3")
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="transcription")
@@ -36,6 +38,19 @@ executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="transcription")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    runtime_file = PATHS.storage / "companion-runtime.json"
+    runtime_file.write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "version": COMPANION_VERSION,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     catalog.fail_interrupted_jobs()
     for interrupted in store.list():
         catalog.ensure_session(
@@ -64,7 +79,15 @@ async def lifespan(_: FastAPI):
                 status="failed",
                 error=f"{type(error).__name__}: {error}",
             )
-    yield
+    try:
+        yield
+    finally:
+        try:
+            runtime = json.loads(runtime_file.read_text(encoding="utf-8"))
+            if runtime.get("pid") == os.getpid():
+                runtime_file.unlink(missing_ok=True)
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
 
 
 app = FastAPI(title="DnD Scribe Companion", version=COMPANION_VERSION, lifespan=lifespan)
