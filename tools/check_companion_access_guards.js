@@ -9,7 +9,7 @@ const migration = fs.readFileSync(
   'utf8'
 );
 const removalMigration = fs.readFileSync(
-  path.join(root, 'supabase', 'migrations', '20260801150118_remove_local_publisher_permission.sql'),
+  path.join(root, 'supabase', 'migrations', '20260801150510_remove_local_publisher_permission.sql'),
   'utf8'
 );
 
