@@ -15,7 +15,15 @@ node_modules/
 .vercel/
 __pycache__/
 *.pyc
+.tools/**
+!.tools/*.py
+!.tools/*.ps1
+!.tools/*.md
+!.tools/*.csv
+!.tools/project_docs/
+!.tools/project_docs/**
 data/review_session.generated.js
 data/review_decisions.generated.json
 # Private lore is synced to R2, not committed while the repo is public.
 lore/
+blob/

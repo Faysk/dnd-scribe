@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Edit — DnD Scribe</title>
+    <link rel="icon" href="data:," />
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">20</span>
+        <span>DnD <i>Scribe</i> · Edit</span>
+      </a>
+      <div class="topbar-actions">
+        <button class="theme-toggle" type="button" data-theme-toggle>
+          <span data-theme-icon aria-hidden="true">☾</span>
+          <span data-theme-label>sistema</span>
+        </button>
+        <a class="ghost topbar-link" href="/">Sessões</a>
+        <span class="local-badge hidden" id="bridgeBadge">PC LOCAL</span>
+      </div>
+    </header>
+
+    <main>
+      <section id="libraryView">
+        <div class="hero">
+          <p class="eyebrow">EDIÇÃO DA CAMPANHA</p>
+          <h1>Publique primeiro.<br /><em>Refine quando quiser.</em></h1>
+          <p class="lede">
+            Todas as transcrições completas entram no arquivo. Aqui você ajusta
+            título, capa, descrição, resumo e revisa cada fala posteriormente.
+          </p>
+        </div>
+
+        <nav class="workspace-tabs" aria-label="Áreas do Edit">
+          <button class="workspace-tab active" type="button" data-workspace="content">Conteúdo publicado</button>
+          <button class="workspace-tab hidden" id="localWorkspaceTab" type="button" data-workspace="local">Processamento local</button>
+          <button class="workspace-tab hidden" id="permissionsWorkspaceTab" type="button" data-workspace="permissions">Permissões</button>
+        </nav>
+
+        <div id="cloudWorkspace">
+        <section id="cloudLibraryPanel" class="system-panel workspace-panel">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">BANCO DE DADOS</p>
+              <h2>Sessões publicadas</h2>
+            </div>
+            <span id="cloudStatus" class="health-pill">Autenticando…</span>
+          </div>
+          <div id="cloudSessionList" class="card-grid"></div>
+        </section>
+        </div>
+
+        <div id="permissionsWorkspace" class="hidden">
+          <section class="system-panel workspace-panel">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">CONTROLE DE ACESSO</p>
+                <h2>Permissões por pessoa</h2>
+              </div>
+              <button class="ghost" id="refreshPermissionsButton" type="button">↻ Atualizar</button>
+            </div>
+            <p class="lede compact-lede">Você decide separadamente quem vê o Edit, quem altera conteúdo e quem pode acessar recursos do computador local.</p>
+            <div id="permissionsList" class="permissions-list"></div>
+          </section>
+        </div>
+
+        <div id="localWorkspace" class="hidden">
+        <section id="localHealthSection" class="system-panel workspace-panel">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">PROCESSAMENTO LOCAL</p>
+              <h2>Estado da máquina</h2>
+            </div>
+            <span id="healthStatus" class="health-pill">Verificando…</span>
+          </div>
+          <div id="healthGrid" class="health-grid"></div>
+        </section>
+
+        <div id="localCandidateSection">
+        <section class="import-panel" aria-labelledby="importTitle">
+          <div>
+            <p class="eyebrow">NOVA SESSÃO</p>
+            <h2 id="importTitle">Importar gravação</h2>
+            <p>
+              Escolha o ZIP FLAC Multi-track baixado do Craig. Ele permanece no
+              seu PC, e uma amostra de 5 minutos começa automaticamente.
+            </p>
+          </div>
+          <div class="import-actions">
+            <button class="primary" id="selectArchiveButton" type="button">Selecionar ZIP do Craig</button>
+            <button class="ghost" id="refreshButton" type="button">↻ Atualizar</button>
+          </div>
+          <p class="import-status" id="archiveImportStatus" role="status" aria-live="polite"></p>
+        </section>
+
+        <div class="section-heading candidate-heading">
+          <div>
+            <p class="eyebrow">IMPORTAÇÃO MANUAL</p>
+            <h2>Arquivos disponíveis</h2>
+          </div>
+        </div>
+        <div id="candidateList" class="card-grid"></div>
+        </div>
+
+        <div class="section-heading sessions-heading">
+          <div>
+            <p class="eyebrow">BIBLIOTECA</p>
+            <h2>Sessões importadas</h2>
+          </div>
+        </div>
+        <div id="sessionList" class="card-grid"></div>
+
+        <div id="localJobsSection">
+        <div class="section-heading sessions-heading">
+          <div>
+            <p class="eyebrow">FILA PERSISTENTE</p>
+            <h2>Processamentos locais</h2>
+          </div>
+        </div>
+        <div id="jobList" class="job-list"></div>
+        </div>
+        </div>
+      </section>
+
+      <section id="sessionView" class="hidden">
+        <button class="back-button" id="backButton">← Todas as sessões</button>
+        <div class="session-header">
+          <div>
+            <p class="eyebrow" id="sessionDate">SESSÃO</p>
+            <h1 id="sessionTitle">Gravação</h1>
+            <div id="speakerChips" class="chips"></div>
+          </div>
+          <div class="export-actions">
+            <button id="publishButton" class="primary hidden" type="button">Publicar no arquivo</button>
+            <a id="publicationButton" class="ghost" href="#">↓ Pacote publicável</a>
+            <a id="exportButton" class="ghost" href="#">↓ Transcrição Markdown</a>
+          </div>
+        </div>
+
+        <section class="metadata-panel">
+          <div>
+            <p class="eyebrow">CATÁLOGO LOCAL</p>
+            <h2>Identidade da sessão</h2>
+          </div>
+          <div class="metadata-fields">
+            <label>
+              Título
+              <input id="metadataTitle" maxlength="160" placeholder="Nome da sessão" />
+            </label>
+            <label>
+              Data
+              <input id="metadataDate" type="date" />
+            </label>
+            <label>
+              Arco
+              <input id="metadataArc" maxlength="160" placeholder="Arco ou capítulo" />
+            </label>
+            <label class="metadata-notes">
+              Notas do operador
+              <textarea id="metadataNotes" maxlength="4000" placeholder="Dúvidas e lembretes locais"></textarea>
+            </label>
+          </div>
+          <button id="saveMetadataButton" class="primary">Salvar metadados</button>
+        </section>
+
+        <div id="setupPanel" class="setup-panel">
+          <div>
+            <p class="eyebrow">ANTES DE COMEÇAR</p>
+            <h2>Ensine os nomes da campanha</h2>
+            <p class="muted">Separados por vírgula: personagens, cidades, deuses e itens.</p>
+            <textarea id="glossary" placeholder="Dandelion, Astel, Screaky, Barovia…"></textarea>
+          </div>
+          <div class="run-options">
+            <button id="sampleButton" class="secondary">Testar 5 minutos</button>
+            <button id="fullButton" class="primary">Transcrever sessão completa →</button>
+            <label><input id="cpuMode" type="checkbox" /> Usar CPU (somente diagnóstico)</label>
+          </div>
+        </div>
+
+        <div id="progressPanel" class="progress-panel hidden">
+          <div class="spinner"></div>
+          <div>
+            <p class="eyebrow">PROCESSANDO LOCALMENTE</p>
+            <h2 id="progressTitle">Preparando modelo…</h2>
+            <p id="progressText" class="muted"></p>
+          </div>
+        </div>
+
+        <div id="errorPanel" class="error-panel hidden"></div>
+
+        <div id="transcriptPanel" class="hidden">
+          <div id="reviewSummary" class="review-summary"></div>
+          <div class="transcript-tools">
+            <label class="search-box">
+              <span>⌕</span>
+              <input id="searchInput" type="search" placeholder="Buscar na sessão…" />
+            </label>
+            <div id="filterChips" class="chips"></div>
+          </div>
+          <div class="transcript-layout">
+            <div id="transcriptList" class="transcript-list"></div>
+            <aside class="now-playing">
+              <p class="eyebrow">OUVIR FAIXA</p>
+              <strong id="audioSpeaker">Selecione uma fala</strong>
+              <audio id="audioPlayer" controls preload="metadata"></audio>
+              <p class="muted">Clique no horário de uma fala para ouvir a partir daquele ponto.</p>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="cloudEditorDialog" class="review-dialog cloud-editor-dialog">
+      <form method="dialog" id="cloudEditorForm">
+        <p class="eyebrow">SESSÃO PUBLICADA</p>
+        <h2 id="cloudEditorTitle">Editar sessão</h2>
+        <div class="cloud-editor-grid">
+          <label>
+            Título
+            <input id="cloudTitle" maxlength="160" />
+          </label>
+          <label>
+            Data
+            <input id="cloudDate" type="date" />
+          </label>
+          <label>
+            Arco
+            <input id="cloudArc" maxlength="160" />
+          </label>
+          <section class="wide-field image-editor" data-image-kind="cover" aria-labelledby="cloudCoverLabel">
+            <div class="image-editor-copy">
+              <strong id="cloudCoverLabel">Capa do card</strong>
+              <span>Imagem vertical recomendada. O site otimiza para WebP antes de enviar.</span>
+              <div class="image-editor-actions">
+                <label class="ghost image-picker-button">
+                  Escolher imagem
+                  <input id="cloudCoverFile" type="file" accept="image/jpeg,image/png,image/webp" />
+                </label>
+                <button class="ghost image-remove-button" id="removeCloudCover" type="button">Remover</button>
+              </div>
+              <small class="image-upload-status" id="cloudCoverStatus" role="status"></small>
+            </div>
+            <div class="image-preview image-preview-cover">
+              <img id="cloudCoverPreview" alt="Prévia da capa do card" />
+              <span id="cloudCoverEmpty">Sem capa</span>
+            </div>
+            <input id="cloudCover" type="hidden" />
+          </section>
+          <section class="wide-field image-editor" data-image-kind="hero" aria-labelledby="cloudHeroLabel">
+            <div class="image-editor-copy">
+              <strong id="cloudHeroLabel">Imagem de destaque</strong>
+              <span>Imagem horizontal recomendada para o topo da sessão.</span>
+              <div class="image-editor-actions">
+                <label class="ghost image-picker-button">
+                  Escolher imagem
+                  <input id="cloudHeroFile" type="file" accept="image/jpeg,image/png,image/webp" />
+                </label>
+                <button class="ghost image-remove-button" id="removeCloudHero" type="button">Remover</button>
+              </div>
+              <small class="image-upload-status" id="cloudHeroStatus" role="status"></small>
+            </div>
+            <div class="image-preview image-preview-hero">
+              <img id="cloudHeroPreview" alt="Prévia da imagem de destaque" />
+              <span id="cloudHeroEmpty">Sem destaque</span>
+            </div>
+            <input id="cloudHero" type="hidden" />
+          </section>
+          <label class="wide-field">
+            Descrição curta do card
+            <textarea id="cloudSummary" maxlength="2000"></textarea>
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Cancelar</button>
+          <button type="button" id="saveCloudSessionButton" class="primary">Salvar e publicar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="cloudSummaryDialog" class="review-dialog cloud-summary-dialog">
+      <form method="dialog">
+        <p class="eyebrow">RESUMO PUBLICADO</p>
+        <h2 id="cloudSummaryTitle">Resumo</h2>
+        <div class="cloud-summary-workspace">
+          <label class="cloud-summary-pane">
+            <span class="eyebrow">MARKDOWN</span>
+            <textarea id="cloudSummaryFull" maxlength="120000" placeholder="# Título&#10;&#10;## Seção&#10;&#10;Texto, **destaques**, listas e citações…"></textarea>
+          </label>
+          <section class="cloud-summary-pane" aria-label="Prévia do resumo publicado">
+            <span class="eyebrow">PUBLICAÇÃO</span>
+            <div id="cloudSummaryPreviewScroll" class="markdown-preview-panel" tabindex="0">
+              <div id="cloudSummaryPreview" class="summary-markdown markdown-preview"></div>
+            </div>
+          </section>
+        </div>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Cancelar</button>
+          <button type="button" id="saveCloudSummaryButton" class="primary">Salvar e publicar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="cloudTranscriptDialog" class="review-dialog cloud-transcript-dialog">
+      <form method="dialog">
+        <p class="eyebrow">REVISÃO POSTERIOR</p>
+        <h2 id="cloudTranscriptTitle">Transcrição</h2>
+        <div id="cloudTranscriptList" class="cloud-transcript-list"></div>
+        <button type="button" id="loadMoreCloudSegments" class="ghost hidden">Carregar mais</button>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Fechar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="cloudSegmentDialog" class="review-dialog">
+      <form method="dialog">
+        <p class="eyebrow">REVISAR FALA PUBLICADA</p>
+        <h2 id="cloudSegmentTitle">Fala</h2>
+        <label>Speaker<input id="cloudSegmentSpeaker" maxlength="160" /></label>
+        <label>Texto corrigido<textarea id="cloudSegmentText" maxlength="10000"></textarea></label>
+        <label>Estado
+          <select id="cloudSegmentStatus">
+            <option value="unreviewed">Não revisado</option>
+            <option value="approved">Aprovado</option>
+            <option value="needs_review">Rever depois</option>
+            <option value="discarded">Descartado</option>
+          </select>
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Cancelar</button>
+          <button type="button" id="saveCloudSegmentButton" class="primary">Salvar revisão</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="reviewDialog" class="review-dialog">
+      <form method="dialog" id="reviewForm">
+        <p class="eyebrow">REVISÃO LOCAL</p>
+        <h2 id="reviewDialogTitle">Revisar fala</h2>
+        <label>
+          Speaker
+          <input id="reviewSpeaker" maxlength="160" />
+        </label>
+        <label>
+          Texto corrigido
+          <textarea id="reviewText" maxlength="10000"></textarea>
+        </label>
+        <label>
+          Estado
+          <select id="reviewStatus">
+            <option value="unreviewed">Não revisado</option>
+            <option value="approved">Aprovado</option>
+            <option value="needs_review">Rever depois</option>
+            <option value="discarded">Descartado</option>
+          </select>
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Cancelar</button>
+          <button type="button" id="saveReviewButton" class="primary">Salvar revisão</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0"></script>
+    <script src="/vendor/marked.umd.js"></script>
+    <script src="/vendor/purify.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

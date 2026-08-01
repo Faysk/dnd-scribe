@@ -1,0 +1,13 @@
+id;slug;titulo;start_s;end_s;duration_s;objetivo;loopavel;abertura
+01;portal_da_cancao;Abriu o portal da cancao;0.000;20.460;20.460;micro-historia de apresentacao;nao;portal abrindo e Dandi chegando
+02;magia_pelo_ar;Quando Dandi pega o alaude;20.460;48.560;28.100;apresentar magia e personagens;nao;Dandi ja em cena
+03;desafio_bate_palma;Bate palma no Funk Quack;70.943;86.540;15.597;passinho participativo;sim;palmas e pes no primeiro segundo
+04;refrao_funk_quack;Todo mundo faz quack quack;83.560;98.200;14.640;hook principal da musica;sim;turma olhando para a camera
+05;som_ate_euclix;Do castelo ate Euclix;121.560;131.560;10.000;micro-historia do som viajando;nao;castelo e trilha musical
+06;ninguem_fica_pra_tras;Ninguem fica pra tras;131.560;142.560;11.000;mensagem inclusiva e convite;sim;Dandi com os amigos
+07;astel_screaky_resistem;Astel e Screaky tentam resistir;171.902;188.445;16.543;comedia de personagens;nao;portal comecando a girar
+08;fantasminha_trompetao;O fantasminha do trompetao;188.445;204.560;16.115;apresentar fantasminha e dragao;nao;estrelinha na janela
+09;grande_final;Pequenos herois prontos pra cantar;213.245;243.560;30.315;finale musical completo;sim;impacto do refrao final
+10;nao_era_bagunca;Nao era bagunca era ensaio;256.560;277.000;20.440;piada e encerramento;nao;Dandi falando com a camera
+11;aventura_final_55s;Do trompetao ao grande final;188.445;243.560;55.115;mini videoclipe com arco completo;nao;fantasminha azul em acao
+12;quack_loop_8s;Funk Quack em oito segundos;83.841;91.967;8.126;loop ultracurto do hook;sim;primeiro Funk Quack sem introducao

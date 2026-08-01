@@ -1,0 +1,148 @@
+id;section;start_s;end_s;duration_s;lyric_or_beat;camera;motion_hint;cut;playback_speed;crop_zoom;saturation;contrast;brightness;transition_in;transition_s;fade_out_s;emphasis
+001;intro_spoken;0.000;0.392;0.392;[Intro - Spoken playful MC voice];wide establishing;slow push in;hard;0.94;1.01;1.02;1.01;0.0;none;0.0;0.0;soft
+002;intro_spoken;0.392;3.061;2.668;Atenção, atenção!;medium close;flash and push;hard;1.12;1.035;1.02;1.01;0.0;flash;0.1;0.0;attention
+003;intro_spoken;3.061;6.200;3.139;Abriu o portal da canção!;wide hero;spiral zoom;hard;1.04;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+004;intro_spoken;6.200;9.660;3.460;Dandi chegou!;hero full body;bounce zoom;hard;1.12;1.035;1.02;1.01;0.0;none;0.0;0.0;beat
+005;intro_spoken;9.660;13.120;3.460;Dragãozinho voou!;upward shot;pan up;hard;1.04;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+006;intro_spoken;13.120;16.423;3.303;Fantasminha afinou!;medium close;gentle wobble;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+007;intro_spoken;16.423;20.460;4.037;E agora... todo mundo no quack!;group medium;quick push;hard;1.12;1.04;1.02;1.01;0.0;flash;0.08;0.0;group_hit
+008;intro_sung;20.460;20.878;0.418;[Intro - Sung];wide establishing;soft dissolve;hard;0.94;1.01;1.02;1.01;0.0;none;0.0;0.0;soft
+009;intro_sung;20.878;24.219;3.341;Vem chegando de repente;medium full;side pan;hard;1.04;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+010;intro_sung;24.219;27.560;3.341;todo mundo fica contente;reaction shot;push to crowd;hard;1.04;1.03;1.02;1.01;0.0;none;0.0;0.0;push
+011;intro_sung;27.560;30.560;3.000;Vem chegando de repente;medium;spin pan;hard;1.04;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+012;intro_sung;30.560;33.560;3.000;todo mundo fica contente;group shot;arc pan;hard;1.04;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+013;intro_sung;33.560;37.560;4.000;Tem magia pelo ar;wide upward;tilt up;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+014;intro_sung;37.560;41.560;4.000;tem estrelinha a brilhar;close;twinkle pulse;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+015;intro_sung;41.560;45.141;3.581;Quando o Dandi pega o alaúde;medium hero;slow push;hard;0.94;1.01;1.02;1.01;0.0;none;0.0;0.0;soft
+016;intro_sung;45.141;48.560;3.419;ninguém consegue parar;dance circle;rhythm cuts;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+017;verse_1;48.560;48.754;0.194;[Verse 1 - Playful male vocal];wide;quick cut;hard;1.28;1.035;1.02;1.01;0.0;none;0.0;0.0;beat
+018;verse_1;48.754;50.304;1.550;Lá no reino colorido;wide establishing;slow pan;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+019;verse_1;50.304;51.855;1.550;começou uma confusão;wide comedy;shaky bounce;hard;1.28;1.035;1.02;1.01;0.0;none;0.0;0.0;beat
+020;verse_1;51.855;53.560;1.705;Não era susto, era música;medium;soft push;hard;0.94;1.01;1.02;1.01;0.0;none;0.0;0.0;soft
+021;verse_1;53.560;55.560;2.000;chamando pro refrão;wide path;forward pan;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+022;verse_1;55.560;57.560;2.000;Tem fantasma pequenino;close;small bounce;hard;1.12;1.02;1.02;1.01;0.0;none;0.0;0.0;beat
+023;verse_1;57.560;59.560;2.000;fazendo uuu no coral;medium group;wave pan;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+024;verse_1;59.560;61.310;1.750;Tem dragão batendo asa;medium upward;wing flutter;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+025;verse_1;61.310;63.060;1.750;num passinho especial;medium comedy;step zoom;hard;1.04;1.03;1.02;1.01;0.0;none;0.0;0.0;push
+026;verse_1;63.060;64.810;1.750;No embalo do Dandi;overhead slight;circle pan;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+027;verse_1;64.810;66.560;1.750;ninguém fica pra trás;wide group;pull back;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+028;verse_1;66.560;68.508;1.948;Ô iai, ô iai;medium group;sway;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+029;verse_1;68.508;70.943;2.435;vem dançar no funk quack;close hero;push in;hard;1.04;1.02;1.02;1.01;0.0;none;0.0;0.0;push
+030;pre_chorus_1;70.943;71.247;0.304;[Pre-Chorus - Clap and dance build];floor shot;pulse;hard;1.0;1.0;1.05;1.018;0.003;none;0.0;0.0;none
+031;pre_chorus_1;71.247;73.560;2.313;Bate palma, bate o pé;close detail;beat cuts;hard;1.12;1.02;1.05;1.018;0.003;none;0.0;0.0;beat
+032;pre_chorus_1;73.560;76.893;3.333;gira, gira como quiser;medium;spin;hard;1.04;1.02;1.05;1.018;0.003;none;0.0;0.0;travel
+033;pre_chorus_1;76.893;80.402;3.509;Quando o alaúde faz plim-plim;macro;string sparkle;hard;1.0;1.0;1.05;1.018;0.003;none;0.0;0.0;none
+034;pre_chorus_1;80.402;83.560;3.158;todo mundo vem assim!;wide group;quick zoom;hard;1.12;1.035;1.05;1.018;0.003;none;0.0;0.0;beat
+035;chorus_1;83.560;83.841;0.281;[Chorus - Kids call and response];group hero;pop cut;hard;1.28;1.02;1.08;1.025;0.004;none;0.0;0.0;chorus_setup
+036;chorus_1;83.841;85.189;1.348;Funk quack;close hero;beat punch;hard;1.28;1.045;1.08;1.025;0.004;flash;0.08;0.0;chorus_entry
+037;chorus_1;85.189;86.538;1.348;Funk quack;medium;beat punch;hard;1.28;1.035;1.08;1.025;0.004;none;0.0;0.0;beat
+038;chorus_1;86.538;88.560;2.022;Bate palma no funk quack;wide group;clap cuts;hard;1.12;1.035;1.08;1.025;0.004;none;0.0;0.0;beat
+039;chorus_1;88.560;89.499;0.939;Quack quack;close;pop zoom;hard;1.28;1.02;1.08;1.025;0.004;none;0.0;0.0;beat
+040;chorus_1;89.499;90.438;0.939;Quack quack;reaction close;pop zoom;hard;1.28;1.02;1.08;1.025;0.004;none;0.0;0.0;beat
+041;chorus_1;90.438;91.975;1.537;Dandi trouxe o funk quack;hero group;push;hard;1.04;1.03;1.08;1.025;0.004;none;0.0;0.0;push
+042;chorus_1;91.975;92.999;1.024;Funk quack;upward;arc pan;hard;1.1;1.02;1.08;1.025;0.004;none;0.0;0.0;travel
+043;chorus_1;92.999;94.023;1.024;Funk quack;medium;bounce;hard;1.28;1.035;1.08;1.025;0.004;none;0.0;0.0;beat
+044;chorus_1;94.023;95.560;1.537;Vem dançar no funk quack;medium group;forward pan;hard;1.1;1.02;1.08;1.025;0.004;none;0.0;0.0;travel
+045;chorus_1;95.560;96.286;0.726;Quack quack;close;beat pop;hard;1.28;1.02;1.08;1.025;0.004;none;0.0;0.0;beat
+046;chorus_1;96.286;97.012;0.726;Quack quack;reaction close;beat pop;hard;1.28;1.02;1.08;1.025;0.004;none;0.0;0.0;beat
+047;chorus_1;97.012;98.200;1.188;Todo mundo faz quack quack!;wide finale;quick pullback;hard;1.28;1.035;1.08;1.025;0.004;none;0.0;0.0;beat
+048;instrumental;98.200;98.365;0.165;[Instrumental Break - Magical dance break];wide;glow pulse;hard;1.0;1.0;1.05;1.018;0.003;none;0.0;0.0;instrumental_setup
+049;instrumental;98.365;99.553;1.188;colorful synth lead;abstract wide;vertical rise;hard;1.0;1.0;1.05;1.018;0.003;flash;0.08;0.0;instrumental_entry
+050;instrumental;99.553;100.742;1.188;light tamborzão beat;medium;beat pulse;hard;1.28;1.035;1.05;1.018;0.003;none;0.0;0.0;beat
+051;instrumental;100.742;101.864;1.122;clapping rhythm;close detail;cut on beat;hard;1.28;1.02;1.05;1.018;0.003;none;0.0;0.0;beat
+052;instrumental;101.864;103.184;1.320;cute ghost choir: uuu-quack, uuu-quack;medium group;sway;hard;1.0;1.0;1.05;1.018;0.003;none;0.0;0.0;none
+053;instrumental;103.184;104.372;1.188;magical lute plucks: plim-plim;macro;string shimmer;hard;1.0;1.0;1.05;1.018;0.003;none;0.0;0.0;none
+054;instrumental;104.372;105.560;1.188;tiny dragon giggle;close upward;bounce;hard;1.28;1.02;1.05;1.018;0.003;none;0.0;0.0;beat
+055;verse_2;105.560;106.301;0.741;[Verse 2 - Playful male vocal];medium;soft cut;hard;0.94;1.01;1.02;1.01;0.0;none;0.0;0.0;soft
+056;verse_2;106.301;111.930;5.630;Vem chegando de repente;medium;side pan;hard;1.04;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+057;verse_2;111.930;117.560;5.630;todo mundo fica contente;crowd reaction;pan;hard;1.04;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+058;verse_2;117.560;119.560;2.000;Vem chegando de repente;wide path;tracking;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+059;verse_2;119.560;121.560;2.000;todo mundo fica contente;medium;quick cuts;hard;1.12;1.035;1.02;1.01;0.0;none;0.0;0.0;beat
+060;verse_2;121.560;123.363;1.803;Do castelo até Euclix;wide journey;pan across;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+061;verse_2;123.363;125.003;1.639;o som foi passear;wide;follow trail;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+062;verse_2;125.003;126.560;1.557;Quando a nota fez plim-plim;close detail;spark pop;hard;1.28;1.02;1.02;1.01;0.0;none;0.0;0.0;beat
+063;verse_2;126.560;128.284;1.724;todo mundo quis dançar;wide group;circle pan;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+064;verse_2;128.284;129.922;1.638;Não é truque de susto;medium comedy;soft shake;hard;0.94;1.01;1.02;1.01;0.0;none;0.0;0.0;soft
+065;verse_2;129.922;131.560;1.638;nem feitiço sem final;medium;trail fade;hard;0.94;1.01;1.02;1.01;0.0;none;0.0;0.0;soft
+066;verse_2;131.560;133.560;2.000;É o Dandi com seus amigos;group portrait;slow push;hard;0.94;1.01;1.02;1.01;0.0;none;0.0;0.0;soft
+067;verse_2;133.560;135.560;2.000;fazendo festa no quintal;wide cozy;gentle pan;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+068;verse_2;135.560;137.433;1.873;No embalo do Dandi;medium;circle pan;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+069;verse_2;137.433;139.306;1.873;ninguém fica pra trás;medium group;pull in;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+070;verse_2;139.306;140.785;1.479;Ô iai, ô iai;medium;sway;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+071;verse_2;140.785;142.560;1.775;vem dançar no funk quack;close hero;push;hard;1.04;1.02;1.02;1.01;0.0;none;0.0;0.0;push
+072;pre_chorus_2;142.560;142.908;0.348;[Pre-Chorus - Clap and dance build];detail;beat cut;hard;1.28;1.02;1.05;1.018;0.003;none;0.0;0.0;beat
+073;pre_chorus_2;142.908;145.412;2.504;Bate palma, bate o pé;close detail;beat cut;hard;1.12;1.02;1.05;1.018;0.003;none;0.0;0.0;beat
+074;pre_chorus_2;145.412;147.917;2.504;gira, gira como quiser;medium;spin;hard;1.1;1.02;1.05;1.018;0.003;none;0.0;0.0;travel
+075;pre_chorus_2;147.917;150.560;2.643;Quando o alaúde faz plim-plim;macro;spark;hard;1.0;1.0;1.05;1.018;0.003;none;0.0;0.0;none
+076;pre_chorus_2;150.560;156.706;6.146;todo mundo vem assim!;wide group;pop;hard;1.12;1.035;1.05;1.018;0.003;none;0.0;0.0;beat
+077;chorus_2;156.706;157.560;0.854;[Chorus - Kids call and response];group;quick push;hard;1.28;1.02;1.08;1.025;0.004;none;0.0;0.0;chorus_setup
+078;chorus_2;157.560;158.688;1.128;Funk quack;close;beat pop;hard;1.28;1.045;1.08;1.025;0.004;flash;0.08;0.0;chorus_entry
+079;chorus_2;158.688;159.816;1.128;Funk quack;medium;beat pop;hard;1.28;1.035;1.08;1.025;0.004;none;0.0;0.0;beat
+080;chorus_2;159.816;161.560;1.744;Bate palma no funk quack;medium group;clap cuts;hard;1.12;1.035;1.08;1.025;0.004;none;0.0;0.0;beat
+081;chorus_2;161.560;162.481;0.921;Quack quack;close;pop;hard;1.28;1.02;1.08;1.025;0.004;none;0.0;0.0;beat
+082;chorus_2;162.481;163.402;0.921;Quack quack;close group;pop;hard;1.28;1.02;1.08;1.025;0.004;none;0.0;0.0;beat
+083;chorus_2;163.402;164.968;1.566;Dandi trouxe o funk quack;hero group;push;hard;1.04;1.03;1.08;1.025;0.004;none;0.0;0.0;push
+084;chorus_2;164.968;165.981;1.013;Funk quack;medium;beat;hard;1.28;1.035;1.08;1.025;0.004;none;0.0;0.0;beat
+085;chorus_2;165.981;166.994;1.013;Funk quack;upward;arc;hard;1.1;1.02;1.08;1.025;0.004;none;0.0;0.0;travel
+086;chorus_2;166.994;168.560;1.566;Vem dançar no funk quack;overhead;rotate;hard;1.1;1.02;1.08;1.025;0.004;none;0.0;0.0;travel
+087;chorus_2;168.560;169.463;0.903;Quack quack;close group;pop;hard;1.28;1.02;1.08;1.025;0.004;none;0.0;0.0;beat
+088;chorus_2;169.463;170.366;0.903;Quack quack;group close;pop;hard;1.28;1.02;1.08;1.025;0.004;none;0.0;0.0;beat
+089;chorus_2;170.366;171.902;1.535;Todo mundo faz quack quack!;wide group;pullback;hard;1.0;1.0;1.08;1.025;0.004;none;0.0;0.0;none
+090;bridge;171.902;172.128;0.226;[Bridge - Spoken playful MC voice];wide;glow rise;hard;1.0;1.0;1.02;1.01;0.0;portal_glow;0.14;0.0;portal_entry
+091;bridge;172.128;173.754;1.626;Segura, segura;medium comedy;shake;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+092;bridge;173.754;175.560;1.806;que o portal vai girar!;wide portal;spin zoom;hard;1.12;1.035;1.02;1.01;0.0;none;0.0;0.0;portal_spin
+093;bridge;175.560;177.332;1.772;Se o castelo virar festa;wide;lights on;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+094;bridge;177.332;179.016;1.684;é só começar a dançar!;group;downbeat;hard;1.12;1.035;1.02;1.01;0.0;none;0.0;0.0;beat
+095;bridge;179.016;180.788;1.772;Astel fez cara séria;medium close;foot tap reveal;hard;0.94;1.015;1.02;1.01;0.0;none;0.0;0.0;comedy_hold
+096;bridge;180.788;182.560;1.772;Screaky fingiu que não;medium close;comic pause;hard;0.94;1.015;1.02;1.01;0.0;none;0.0;0.0;comedy_hold
+097;bridge;182.560;185.060;2.500;Mas quando bateu o tum-tum;close detail;beat pulse;hard;1.12;1.045;1.02;1.01;0.0;none;0.0;0.0;tum_tum
+098;bridge;185.060;187.560;2.500;todo mundo entrou no refrão!;wide group;burst;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+099;shout;187.560;187.752;0.192;[Shout];group;freeze pop;hard;1.28;1.035;1.05;1.018;0.003;none;0.0;0.0;beat
+100;shout;187.752;188.445;0.692;Vai!;wide burst;impact zoom;hard;1.28;1.06;1.05;1.018;0.003;flash;0.1;0.0;vai_impact
+101;verse_3;188.445;188.637;0.192;[Verse 3 - Energetic male vocal];wide interior;dissolve;hard;0.94;1.01;1.02;1.01;0.0;dip_black;0.14;0.0;scene_change
+102;verse_3;188.637;190.098;1.462;Tem estrelinha na janela;close;twinkle;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+103;verse_3;190.098;191.560;1.462;tem risada no salão;medium group;gentle pan;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+104;verse_3;191.560;193.218;1.658;Tem fantasminha azul;medium close;push;hard;1.04;1.02;1.02;1.01;0.0;none;0.0;0.0;push
+105;verse_3;193.218;195.060;1.842;tocando seu trompetão;hero close;note burst;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+106;verse_3;195.060;196.810;1.750;Tem dragãozinho no céu;upward hero;tilt up;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+107;verse_3;196.810;198.560;1.750;fazendo volta sem parar;wide upward;spiral pan;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+108;verse_3;198.560;201.560;3.000;E o Dandi no meio da roda;overhead slight;circle;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+109;verse_3;201.560;204.560;3.000;chamando todo mundo pra cantar;medium group;push;hard;1.04;1.03;1.02;1.01;0.0;none;0.0;0.0;push
+110;verse_3;204.560;206.826;2.266;No embalo do Dandi;wide;rotate;hard;1.1;1.02;1.02;1.01;0.0;none;0.0;0.0;travel
+111;verse_3;206.826;209.091;2.266;ninguém fica pra trás;wide group;pullback;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+112;verse_3;209.091;210.980;1.888;Ô iai, ô iai;medium;sway;hard;1.0;1.0;1.02;1.01;0.0;none;0.0;0.0;none
+113;verse_3;210.980;213.245;2.266;vem dançar no funk quack;hero group;push;hard;1.04;1.03;1.02;1.01;0.0;none;0.0;0.0;push
+114;final_chorus;213.245;213.560;0.315;[Final Chorus - Big joyful finale];wide hero;impact cut;hard;1.28;1.02;1.11;1.035;0.006;none;0.0;0.0;final_chorus_setup
+115;final_chorus;213.560;214.503;0.943;Funk quack;hero;beat pop;hard;1.28;1.05;1.11;1.035;0.006;flash;0.08;0.0;final_chorus_entry
+116;final_chorus;214.503;215.447;0.943;Funk quack;wide;beat pop;hard;1.28;1.035;1.11;1.035;0.006;none;0.0;0.0;beat
+117;final_chorus;215.447;216.862;1.415;Bate palma no funk quack;close;clap cut;hard;1.28;1.02;1.11;1.035;0.006;none;0.0;0.0;beat
+118;final_chorus;216.862;217.711;0.849;Quack quack;close;pop;hard;1.28;1.02;1.11;1.035;0.006;none;0.0;0.0;beat
+119;final_chorus;217.711;218.560;0.849;Quack quack;close group;pop;hard;1.28;1.02;1.11;1.035;0.006;none;0.0;0.0;beat
+120;final_chorus;218.560;220.104;1.544;Dandi trouxe o funk quack;hero;upward trail;hard;1.0;1.0;1.11;1.035;0.006;none;0.0;0.0;none
+121;final_chorus;220.104;221.134;1.029;Funk quack;upward;arc;hard;1.1;1.02;1.11;1.035;0.006;none;0.0;0.0;travel
+122;final_chorus;221.134;222.163;1.029;Funk quack;medium;beat;hard;1.28;1.035;1.11;1.035;0.006;none;0.0;0.0;beat
+123;final_chorus;222.163;223.707;1.544;Vem dançar no funk quack;wide;rotate;hard;1.1;1.02;1.11;1.035;0.006;none;0.0;0.0;travel
+124;final_chorus;223.707;224.634;0.926;Quack quack;close;pop;hard;1.28;1.02;1.11;1.035;0.006;none;0.0;0.0;beat
+125;final_chorus;224.634;225.560;0.926;Quack quack;close group;pop;hard;1.28;1.02;1.11;1.035;0.006;none;0.0;0.0;beat
+126;final_chorus;225.560;227.480;1.920;Todo mundo faz quack quack!;wide hero;pullback;hard;1.0;1.0;1.11;1.035;0.006;none;0.0;0.0;none
+127;final_chorus;227.480;228.680;1.200;Funk quack;hero close;impact;hard;1.28;1.02;1.11;1.035;0.006;none;0.0;0.0;beat
+128;final_chorus;228.680;229.880;1.200;Funk quack;wide;impact;hard;1.28;1.035;1.11;1.035;0.006;none;0.0;0.0;beat
+129;final_chorus;229.880;231.560;1.680;Bate palma no funk quack;detail;beat cut;hard;1.12;1.02;1.11;1.035;0.006;none;0.0;0.0;beat
+130;final_chorus;231.560;232.378;0.818;Quack quack;close;pop;hard;1.28;1.02;1.11;1.035;0.006;none;0.0;0.0;beat
+131;final_chorus;232.378;233.196;0.818;Quack quack;group close;pop;hard;1.28;1.02;1.11;1.035;0.006;none;0.0;0.0;beat
+132;final_chorus;233.196;234.560;1.364;Dandi trouxe o funk quack;hero;flare;hard;1.0;1.0;1.11;1.035;0.006;none;0.0;0.0;none
+133;final_chorus;234.560;236.617;2.057;Dandi e Dragões;hero group;slow push;hard;0.94;1.01;1.11;1.035;0.006;none;0.0;0.0;soft
+134;final_chorus;236.617;238.560;1.943;magia pelo ar;wide upward;tilt up;hard;1.0;1.0;1.11;1.035;0.006;none;0.0;0.0;none
+135;final_chorus;238.560;241.060;2.500;Pequenos heróis;medium hero;push;hard;1.04;1.03;1.11;1.035;0.006;none;0.0;0.0;push
+136;final_chorus;241.060;243.560;2.500;prontos pra cantar!;wide hero;hold;hard;0.94;1.01;1.11;1.035;0.006;none;0.0;0.0;soft
+137;outro;243.560;243.971;0.411;[Outro - Fading crowd and cute ghosts];wide soft;fade;hard;0.92;1.01;0.97;0.99;0.004;dip_black;0.2;0.0;outro_entry
+138;outro;243.971;246.765;2.795;Vem chegando de repente;medium;slow pan;hard;1.04;1.02;0.97;0.99;0.004;none;0.0;0.0;travel
+139;outro;246.765;249.560;2.795;todo mundo fica contente;cozy group;slow push;hard;0.94;1.01;0.97;0.99;0.004;none;0.0;0.0;soft
+140;outro;249.560;253.060;3.500;Vem chegando de repente;detail;reverse trail;hard;1.0;1.0;0.97;0.99;0.004;none;0.0;0.0;none
+141;outro;253.060;256.560;3.500;todo mundo fica contente;cozy group;fade;hard;0.94;1.01;0.97;0.99;0.004;none;0.0;0.0;soft
+142;dandi_spoken;256.560;256.846;0.286;[Dandi - Spoken funny outro];medium close;comedy pause;hard;0.92;1.01;0.97;0.99;0.004;dip_black;0.12;0.0;comedy_setup
+143;dandi_spoken;256.846;258.560;1.714;Eu avisei...;close;hold;hard;0.9;1.015;0.97;0.99;0.004;none;0.0;0.0;comedy_hold
+144;dandi_spoken;258.560;260.503;1.943;não era bagunça.;medium;small reveal;hard;1.0;1.0;0.97;0.99;0.004;none;0.0;0.0;none
+145;dandi_spoken;260.503;262.560;2.057;Era ensaio!;wide cozy;comedy pop;hard;1.12;1.035;0.97;0.99;0.004;none;0.0;0.0;punchline
+146;fade;262.560;271.585;9.025;(fade out with laughter, quacks, tiny dragon giggle, and cute ghost choir);cozy wide;fade to warm;hard;0.9;1.01;0.97;0.99;0.004;none;0.0;0.0;soft_fade
+147;end;271.585;277.000;5.415;end card visual no text;soft close;fade out;hard;0.88;1.01;0.97;0.99;0.004;none;0.0;2.0;final_fade

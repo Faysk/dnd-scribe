@@ -1,0 +1,29 @@
+[project]
+name = "craig-to-text"
+version = "0.1.0"
+description = "Local multi-track Craig recorder transcription and session viewer"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "faster-whisper>=1.2,<2",
+  "nvidia-cublas-cu12>=12,<13; sys_platform == 'win32'",
+  "nvidia-cudnn-cu12>=9,<10; sys_platform == 'win32'",
+  "python-multipart>=0.0.20,<1",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<9",
+  "httpx>=0.28,<1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

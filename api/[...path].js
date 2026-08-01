@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { Pool } = require('pg');
+const { createClient } = require('@supabase/supabase-js');
 const {
   parseRoll20ChatText,
   parseRoll20DiceRoll,
@@ -20,6 +21,8 @@ const DEFAULT_ACTOR = 'renanyuhara';
 const PROJECT_SCOPE_ID = 'dnd-scribe';
 const CRAIG_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const CRAIG_UPLOAD_EXPIRES_SECONDS = 900;
+const SESSION_IMAGE_BUCKET = 'session-images';
+const SESSION_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_EPOCH_MS = 1420070400000n;
 const DISCORD_SYNC_MAX_MESSAGES = 100;
@@ -54,7 +57,10 @@ const PIPELINE_SUPERVISOR_WORKFLOWS = {
   review: 'review-generation-worker.yml',
   cleanup: 'storage-cleanup-worker.yml'
 };
-const LORE_ROOT = path.join(process.cwd(), 'lore');
+const LORE_ROOT = path.join(
+  process.cwd(),
+  process.env.VERCEL ? 'lore-runtime' : 'lore'
+);
 const DANDELION_LORE_OWNER_KEYS = new Set(['dandelion', 'faysk']);
 const DANDELION_LORE_DOCS = [
   { id: 'bible', group: 'personagem', title: 'Biblia do Dandelion', path: '02_personagens/dandelion/biblia.md', tone: 'gold', featured: true },
@@ -134,6 +140,7 @@ const CANDIDATE_STATUS = {
 let pool;
 let cloudIngestRunner;
 let cloudExtractRunner;
+let supabaseAdmin;
 
 function getPool() {
   if (pool) return pool;
@@ -148,6 +155,19 @@ function getPool() {
     ssl: { rejectUnauthorized: false }
   });
   return pool;
+}
+
+function getSupabaseAdmin() {
+  if (supabaseAdmin) return supabaseAdmin;
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const secretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!supabaseUrl || !secretKey) {
+    throw httpError(503, 'Storage de imagens nao esta configurado neste ambiente.');
+  }
+  supabaseAdmin = createClient(supabaseUrl, secretKey, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+  return supabaseAdmin;
 }
 
 function getCloudIngestRunner() {
@@ -367,14 +387,22 @@ function capabilitiesForRole(role, rbac = null) {
   const isDm = role === 'owner' || role === 'master';
   const permissions = permissionActionSet(rbac);
   const rbacAvailable = Boolean(rbac?.available);
+  const canManagePermissions = isDm
+    || permissions.has('campaign.access.manage')
+    || permissions.has('project.rbac.manage');
   return {
     openTestMode: false,
     canReadCampaign: Boolean(role) || permissions.has('campaign.read'),
     canReviewOwnMaterial: Boolean(role) || permissions.has('campaign.read'),
     canReviewTableMaterial: ['owner', 'master', 'reviewer'].includes(role) || permissions.has('narrative.review.manage'),
     canApproveCanon: isDm || permissions.has('narrative.canon.approve'),
-    canManageCampaign: isDm,
-    canManageAccess: isDm || permissions.has('campaign.access.manage') || permissions.has('project.rbac.manage'),
+    canManageCampaign: isDm || permissions.has('campaign.content.edit'),
+    canManageAccess: canManagePermissions,
+    canOpenEdit: permissions.has('campaign.edit.access'),
+    canEditContent: permissions.has('campaign.content.edit'),
+    canUseLocalProcessing: permissions.has('campaign.local.process'),
+    canReadAudio: permissions.has('campaign.audio.read'),
+    canManagePermissions,
     canViewMonitoring: permissions.has('project.monitor.read') || (!rbacAvailable && isDm),
     canManageTechnical: permissions.has('project.rbac.manage'),
     canRunTechnicalJobs: permissions.has('project.jobs.run')
@@ -4214,10 +4242,17 @@ function jobResponse(row) {
   };
 }
 
-async function listJobs(campaign, sourceSessionId = '') {
+async function listJobs(campaign, sourceSessionId = '', options = {}) {
+  const requestedLimit = Number.parseInt(String(options.limit ?? ''), 10);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(50, requestedLimit)) : 20;
   const params = [campaign];
-  const sourceFilter = sourceSessionId ? 'and s.source_session_id = $2' : '';
-  if (sourceSessionId) params.push(sourceSessionId);
+  let sourceFilter = '';
+  if (sourceSessionId) {
+    params.push(sourceSessionId);
+    sourceFilter = `and s.source_session_id = $${params.length}`;
+  }
+  params.push(limit);
+  const limitParameter = `$${params.length}`;
   const result = await getPool().query(
     `
 select pj.id, pj.job_type, pj.status, pj.attempts, pj.input, pj.output, pj.error,
@@ -4241,8 +4276,9 @@ left join campaigns c on c.id = s.campaign_id
 left join processing_job_step_summary jss on jss.job_id = pj.id
 left join craig_track_extraction_summary ctes on ctes.job_id = pj.id
 where c.slug = $1 ${sourceFilter}
-order by pj.created_at desc
-limit 50;`,
+order by case when pj.status in ('queued', 'running', 'retrying') then 0 else 1 end,
+         pj.created_at desc
+limit ${limitParameter}::int;`,
     params
   );
   return result.rows.map(jobResponse);
@@ -6287,6 +6323,714 @@ select coalesce(json_agg(item order by item->>'sessionDate' desc nulls last, ite
   ) || [];
 }
 
+function libraryPageSize(value) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  if (!Number.isFinite(parsed)) return 120;
+  return Math.max(40, Math.min(parsed, 200));
+}
+
+function encodeLibraryCursor(row) {
+  if (!row) return null;
+  return Buffer.from(JSON.stringify({
+    startMs: Number(row.start_ms ?? 2147483647),
+    sequence: Number(row.source_sequence ?? 2147483647),
+    id: row.id
+  })).toString('base64url');
+}
+
+function decodeLibraryCursor(value) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(String(value), 'base64url').toString('utf8'));
+    if (!parsed?.id) return null;
+    return {
+      startMs: Number.isFinite(Number(parsed.startMs)) ? Number(parsed.startMs) : 2147483647,
+      sequence: Number.isFinite(Number(parsed.sequence)) ? Number(parsed.sequence) : 2147483647,
+      id: String(parsed.id)
+    };
+  } catch (_error) {
+    throw httpError(400, 'Cursor de transcricao invalido.');
+  }
+}
+
+async function listLibrarySessions(campaign) {
+  return await data(
+    `
+with segment_stats as (
+  select
+    session_id,
+    count(*) filter (where coalesce(is_empty, false) is false) as segment_count,
+    count(distinct coalesce(nullif(character_name, ''), nullif(speaker_name, ''), track_key))
+      filter (where coalesce(is_empty, false) is false) as speaker_count
+  from transcript_segments
+  group by session_id
+),
+session_rows as (
+  select
+    s.id,
+    s.title,
+    s.source_session_id,
+    s.source_system,
+    s.session_date,
+    s.started_at,
+    s.ended_at,
+    s.arc,
+    s.status,
+    s.duration_ms,
+    s.summary_short,
+    s.summary_full,
+    s.metadata,
+    s.created_at,
+    s.updated_at,
+    coalesce(ss.segment_count, 0) as segment_count,
+    coalesce(ss.speaker_count, 0) as participant_count
+  from sessions s
+  join campaigns c on c.id = s.campaign_id
+  left join segment_stats ss on ss.session_id = s.id
+  where c.slug = $1
+)
+select coalesce(json_agg(json_build_object(
+  'id', id,
+  'title', title,
+  'sourceSessionId', source_session_id,
+  'sourceSystem', source_system,
+  'sessionDate', to_char(session_date, 'YYYY-MM-DD'),
+  'startedAt', started_at,
+  'endedAt', ended_at,
+  'arc', arc,
+  'status', status,
+  'durationMs', duration_ms,
+  'summary', summary_short,
+  'hasSummary', coalesce(nullif(trim(summary_full), ''), '') <> '',
+  'coverImageUrl', coalesce(metadata->>'coverImageUrl', ''),
+  'heroImageUrl', coalesce(metadata->>'heroImageUrl', ''),
+  'segments', segment_count,
+  'participants', participant_count,
+  'createdAt', created_at,
+  'updatedAt', updated_at
+) order by coalesce(session_date, created_at::date) desc, created_at desc), '[]'::json) data
+from session_rows;`,
+    [campaign]
+  ) || [];
+}
+
+async function libraryTranscriptPage(campaign, sourceSessionId, options = {}) {
+  const limit = libraryPageSize(options.limit);
+  const cursor = decodeLibraryCursor(options.cursor);
+  const search = String(options.search || '').trim().slice(0, 120);
+  const speaker = String(options.speaker || '').trim().slice(0, 120);
+  const params = [
+    campaign,
+    sourceSessionId,
+    cursor?.startMs ?? null,
+    cursor?.sequence ?? null,
+    cursor?.id ?? null,
+    search || null,
+    speaker || null,
+    limit + 1
+  ];
+  const result = await getPool().query(
+    `
+with target as (
+  select s.id, s.title, s.source_session_id, s.source_system, s.session_date,
+         s.started_at, s.ended_at, s.arc, s.status, s.duration_ms,
+         s.summary_short, s.summary_full, s.metadata, s.created_at, s.updated_at
+  from sessions s
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1 and s.source_session_id = $2
+),
+filtered as (
+  select
+    ts.id,
+    ts.source_segment_id,
+    ts.source_sequence,
+    ts.start_ms,
+    ts.end_ms,
+    ts.speaker_name,
+    ts.character_name,
+    ts.track_key,
+    ts.text,
+    ts.review_status,
+    ts.needs_review
+  from transcript_segments ts
+  join target t on t.id = ts.session_id
+  where coalesce(ts.is_empty, false) is false
+    and (
+      $3::integer is null
+      or (
+        coalesce(ts.start_ms, 2147483647),
+        coalesce(ts.source_sequence, 2147483647),
+        ts.id
+      ) > ($3::integer, $4::integer, $5::uuid)
+    )
+    and (
+      $6::text is null
+      or to_tsvector('portuguese', ts.text) @@ websearch_to_tsquery('portuguese', $6)
+    )
+    and (
+      $7::text is null
+      or coalesce(nullif(ts.character_name, ''), nullif(ts.speaker_name, ''), ts.track_key, '') = $7
+    )
+  order by coalesce(ts.start_ms, 2147483647), coalesce(ts.source_sequence, 2147483647), ts.id
+  limit $8
+)
+select
+  (select row_to_json(t) from target t) session,
+  coalesce((select json_agg(row_to_json(f) order by coalesce(f.start_ms, 2147483647), coalesce(f.source_sequence, 2147483647), f.id) from filtered f), '[]'::json) segments,
+  coalesce((
+    select json_agg(speaker order by speaker)
+    from (
+      select distinct coalesce(nullif(ts.character_name, ''), nullif(ts.speaker_name, ''), ts.track_key) speaker
+      from transcript_segments ts
+      join target t on t.id = ts.session_id
+      where coalesce(ts.is_empty, false) is false
+        and coalesce(nullif(ts.character_name, ''), nullif(ts.speaker_name, ''), ts.track_key) is not null
+    ) speakers
+  ), '[]'::json) speakers,
+  (select count(*)::int from transcript_segments ts join target t on t.id = ts.session_id where coalesce(ts.is_empty, false) is false) total;`,
+    params
+  );
+  const payload = result.rows[0] || {};
+  if (!payload.session) throw httpError(404, 'Sessao nao encontrada.');
+  const rows = payload.segments || [];
+  const hasMore = rows.length > limit;
+  const visibleRows = hasMore ? rows.slice(0, limit) : rows;
+  return {
+    session: {
+      id: payload.session.id,
+      title: payload.session.title,
+      sourceSessionId: payload.session.source_session_id,
+      sourceSystem: payload.session.source_system,
+      sessionDate: payload.session.session_date,
+      startedAt: payload.session.started_at,
+      endedAt: payload.session.ended_at,
+      arc: payload.session.arc,
+      status: payload.session.status,
+      durationMs: payload.session.duration_ms,
+      summary: payload.session.summary_short,
+      hasSummary: Boolean(String(payload.session.summary_full || '').trim()),
+      coverImageUrl: payload.session.metadata?.coverImageUrl || '',
+      heroImageUrl: payload.session.metadata?.heroImageUrl || '',
+      updatedAt: payload.session.updated_at
+    },
+    segments: visibleRows.map(row => ({
+      id: row.source_segment_id || row.id,
+      startMs: row.start_ms,
+      endMs: row.end_ms,
+      speaker: row.character_name || row.speaker_name || row.track_key || 'Mesa',
+      text: row.text,
+      reviewStatus: row.review_status,
+      needsReview: row.needs_review
+    })),
+    speakers: payload.speakers || [],
+    total: Number(payload.total || 0),
+    nextCursor: hasMore ? encodeLibraryCursor(visibleRows.at(-1)) : null
+  };
+}
+
+async function librarySessionSummary(campaign, sourceSessionId) {
+  const result = await getPool().query(
+    `
+select s.id, s.title, s.source_session_id, s.session_date, s.arc,
+       s.summary_short, s.summary_full, s.metadata, s.updated_at
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1 and s.source_session_id = $2;`,
+    [campaign, sourceSessionId]
+  );
+  const row = result.rows[0];
+  if (!row) throw httpError(404, 'Sessao nao encontrada.');
+  if (!String(row.summary_full || '').trim()) throw httpError(404, 'Esta sessao ainda nao possui resumo.');
+  return {
+    id: row.id,
+    title: row.title,
+    sourceSessionId: row.source_session_id,
+    sessionDate: dateOnly(row.session_date),
+    arc: row.arc,
+    summary: row.summary_short,
+    summaryFull: row.summary_full,
+    hasSummary: true,
+    coverImageUrl: row.metadata?.coverImageUrl || '',
+    heroImageUrl: row.metadata?.heroImageUrl || '',
+    updatedAt: row.updated_at
+  };
+}
+
+async function editorSessions(campaign) {
+  return await data(
+    `
+select coalesce(json_agg(json_build_object(
+  'id', s.id,
+  'sourceSessionId', s.source_session_id,
+  'title', s.title,
+  'sessionDate', to_char(s.session_date, 'YYYY-MM-DD'),
+  'arc', s.arc,
+  'status', s.status,
+  'summary', s.summary_short,
+  'summaryFull', s.summary_full,
+  'coverImageUrl', coalesce(s.metadata->>'coverImageUrl', ''),
+  'heroImageUrl', coalesce(s.metadata->>'heroImageUrl', ''),
+  'segments', (select count(*) from transcript_segments ts where ts.session_id = s.id and coalesce(ts.is_empty, false) is false),
+  'needsReview', (select count(*) from transcript_segments ts where ts.session_id = s.id and coalesce(ts.is_empty, false) is false and (ts.needs_review or ts.review_status in ('pending', 'unreviewed', 'needs_review'))),
+  'updatedAt', s.updated_at
+) order by coalesce(s.session_date, s.created_at::date) desc, s.created_at desc), '[]'::json) data
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1;`,
+    [campaign]
+  ) || [];
+}
+
+async function createEditorImageUpload(campaign, sourceSessionId, body = {}) {
+  const kind = cleanText(body.kind, 20);
+  const contentType = cleanText(body.contentType, 80).toLowerCase();
+  const sizeBytes = Number(body.sizeBytes || 0);
+  if (!['cover', 'hero'].includes(kind)) {
+    throw httpError(400, 'Tipo de imagem invalido.');
+  }
+  if (contentType !== 'image/webp') {
+    throw httpError(400, 'A imagem precisa ser convertida para WebP antes do upload.');
+  }
+  if (!Number.isInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > SESSION_IMAGE_MAX_BYTES) {
+    throw httpError(400, 'A imagem otimizada precisa ter no maximo 3 MB.');
+  }
+  const result = await getPool().query(
+    `
+select s.id
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1 and s.source_session_id = $2;`,
+    [campaign, sourceSessionId]
+  );
+  const session = result.rows[0];
+  if (!session) throw httpError(404, 'Sessao nao encontrada.');
+
+  const objectPath = [
+    slugify(campaign),
+    session.id,
+    `${kind}-${Date.now()}-${crypto.randomUUID()}.webp`
+  ].join('/');
+  const storage = getSupabaseAdmin().storage.from(SESSION_IMAGE_BUCKET);
+  const { data: signed, error } = await storage.createSignedUploadUrl(objectPath);
+  if (error || !signed?.token) {
+    throw httpError(502, `Nao foi possivel preparar o upload: ${error?.message || 'token ausente'}`);
+  }
+  const { data: publicAsset } = storage.getPublicUrl(objectPath);
+  return {
+    bucket: SESSION_IMAGE_BUCKET,
+    path: objectPath,
+    token: signed.token,
+    publicUrl: publicAsset.publicUrl,
+    maxBytes: SESSION_IMAGE_MAX_BYTES
+  };
+}
+
+function sessionImageObjectPath(publicUrl, campaign, sessionId) {
+  if (!publicUrl) return '';
+  const supabaseUrl = String(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+  if (!supabaseUrl) return '';
+  const prefix = `${supabaseUrl}/storage/v1/object/public/${SESSION_IMAGE_BUCKET}/`;
+  if (!publicUrl.startsWith(prefix)) return '';
+  let objectPath;
+  try {
+    objectPath = decodeURIComponent(publicUrl.slice(prefix.length));
+  } catch {
+    return '';
+  }
+  const expectedPrefix = `${slugify(campaign)}/${sessionId}/`;
+  if (!objectPath.startsWith(expectedPrefix) || !objectPath.endsWith('.webp') || objectPath.includes('..')) return '';
+  return objectPath;
+}
+
+async function removeReplacedSessionImages(previous, next, campaign, sessionId) {
+  const paths = [previous.coverImageUrl, previous.heroImageUrl]
+    .filter((url) => url && url !== next.coverImageUrl && url !== next.heroImageUrl)
+    .map((url) => sessionImageObjectPath(url, campaign, sessionId))
+    .filter(Boolean);
+  if (!paths.length) return;
+  const { error } = await getSupabaseAdmin().storage.from(SESSION_IMAGE_BUCKET).remove([...new Set(paths)]);
+  if (error) console.warn('Nao foi possivel remover imagens substituidas da sessao.', error.message);
+}
+
+async function updateEditorSession(campaign, sourceSessionId, body = {}) {
+  const title = cleanText(body.title, 160);
+  if (!title) throw httpError(400, 'O titulo da sessao e obrigatorio.');
+  const summary = String(body.summary || '').trim().slice(0, 2000) || null;
+  const summaryFull = String(body.summaryFull || '').trim().slice(0, 120000) || null;
+  const arc = cleanText(body.arc, 160) || null;
+  const coverImageUrl = String(body.coverImageUrl || '').trim().slice(0, 2000);
+  if (coverImageUrl && !/^https:\/\/[^\s]+$/i.test(coverImageUrl)) {
+    throw httpError(400, 'A capa precisa usar uma URL HTTPS.');
+  }
+  const heroImageUrl = String(body.heroImageUrl || '').trim().slice(0, 2000);
+  if (heroImageUrl && !/^https:\/\/[^\s]+$/i.test(heroImageUrl)) {
+    throw httpError(400, 'A imagem de destaque precisa usar uma URL HTTPS.');
+  }
+  const sessionDate = String(body.sessionDate || '').trim();
+  if (sessionDate && !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    throw httpError(400, 'Data da sessao invalida.');
+  }
+  const result = await getPool().query(
+    `
+with previous as materialized (
+  select s.id, s.metadata
+  from sessions s
+  join campaigns c on c.id = s.campaign_id
+  where c.slug = $1 and s.source_session_id = $2
+)
+update sessions s
+set title = $3,
+    session_date = coalesce($4::date, s.session_date),
+    arc = $5,
+    status = 'published',
+    summary_short = $6,
+    summary_full = $7,
+    metadata = jsonb_set(
+      jsonb_set(coalesce(s.metadata, '{}'::jsonb), '{coverImageUrl}', to_jsonb($8::text), true),
+      '{heroImageUrl}', to_jsonb($9::text), true
+    ),
+    updated_at = now()
+from previous p
+where s.id = p.id
+returning s.id, s.source_session_id, s.title, to_char(s.session_date, 'YYYY-MM-DD') session_date,
+          s.arc, s.status, s.summary_short, s.summary_full,
+          coalesce(s.metadata->>'coverImageUrl', '') cover_image_url,
+          coalesce(s.metadata->>'heroImageUrl', '') hero_image_url,
+          coalesce(p.metadata->>'coverImageUrl', '') previous_cover_image_url,
+          coalesce(p.metadata->>'heroImageUrl', '') previous_hero_image_url,
+          s.updated_at;`,
+    [campaign, sourceSessionId, title, sessionDate || null, arc, summary, summaryFull, coverImageUrl, heroImageUrl]
+  );
+  if (!result.rows[0]) throw httpError(404, 'Sessao nao encontrada.');
+  await removeReplacedSessionImages(
+    {
+      coverImageUrl: result.rows[0].previous_cover_image_url,
+      heroImageUrl: result.rows[0].previous_hero_image_url
+    },
+    { coverImageUrl, heroImageUrl },
+    campaign,
+    result.rows[0].id
+  );
+  delete result.rows[0].previous_cover_image_url;
+  delete result.rows[0].previous_hero_image_url;
+  return result.rows[0];
+}
+
+async function updateEditorSegment(campaign, sourceSessionId, body = {}) {
+  const segmentId = String(body.segmentId || '').trim();
+  const text = String(body.text || '').trim().slice(0, 10000);
+  const speaker = cleanText(body.speaker, 160);
+  const requestedReviewStatus = String(body.reviewStatus || 'approved').trim();
+  const reviewStatus = requestedReviewStatus === 'unreviewed' ? 'pending' : requestedReviewStatus;
+  if (!segmentId || !text || !speaker) throw httpError(400, 'Fala, speaker e texto sao obrigatorios.');
+  if (!['pending', 'approved', 'needs_review', 'discarded'].includes(reviewStatus)) {
+    throw httpError(400, 'Estado de revisao invalido.');
+  }
+  const result = await getPool().query(
+    `
+update transcript_segments ts
+set text = $4,
+    text_chars = char_length($4),
+    text_words = array_length(regexp_split_to_array(trim($4), '\\s+'), 1),
+    speaker_name = $5,
+    character_name = null,
+    review_status = $6,
+    needs_review = $6 in ('pending', 'needs_review')
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where ts.session_id = s.id
+  and c.slug = $1
+  and s.source_session_id = $2
+  and (ts.source_segment_id = $3 or ts.id::text = $3)
+returning ts.source_segment_id, ts.id, ts.start_ms, ts.end_ms, ts.speaker_name,
+          ts.character_name, ts.track_key, ts.text, ts.review_status, ts.needs_review;`,
+    [campaign, sourceSessionId, segmentId, text, speaker, reviewStatus]
+  );
+  if (!result.rows[0]) throw httpError(404, 'Fala nao encontrada.');
+  const row = result.rows[0];
+  return {
+    id: row.source_segment_id || row.id,
+    startMs: row.start_ms,
+    endMs: row.end_ms,
+    speaker: row.character_name || row.speaker_name || row.track_key || 'Mesa',
+    text: row.text,
+    reviewStatus: row.review_status,
+    needsReview: row.needs_review
+  };
+}
+
+async function sessionMarkdown(campaign, sourceSessionId) {
+  const result = await getPool().query(
+    `
+select s.title, s.session_date, s.arc, s.summary_short,
+       coalesce(json_agg(json_build_object(
+         'startMs', ts.start_ms,
+         'speaker', coalesce(nullif(ts.character_name, ''), nullif(ts.speaker_name, ''), ts.track_key, 'Mesa'),
+         'text', ts.text
+       ) order by coalesce(ts.start_ms, 2147483647), coalesce(ts.source_sequence, 2147483647), ts.id)
+       filter (where ts.id is not null and coalesce(ts.is_empty, false) is false), '[]'::json) segments
+from sessions s
+join campaigns c on c.id = s.campaign_id
+left join transcript_segments ts on ts.session_id = s.id
+where c.slug = $1 and s.source_session_id = $2
+group by s.id;`,
+    [campaign, sourceSessionId]
+  );
+  const session = result.rows[0];
+  if (!session) throw httpError(404, 'Sessao nao encontrada.');
+  const clock = milliseconds => {
+    const seconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainder = seconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+  };
+  const lines = [
+    `# ${session.title}`,
+    '',
+    session.session_date ? `**Data:** ${dateOnly(session.session_date)}` : '',
+    session.arc ? `**Arco:** ${session.arc}` : '',
+    session.summary_short ? `\n${session.summary_short}` : '',
+    '',
+    '## Transcrição completa',
+    ''
+  ].filter((line, index, values) => line || values[index - 1] !== '');
+  for (const segment of session.segments || []) {
+    lines.push(`**[${clock(segment.startMs)}] ${segment.speaker}**`, '', segment.text, '');
+  }
+  return `${lines.join('\n').trim()}\n`;
+}
+
+function cleanLocalPublication(body = {}) {
+  const sourceId = String(body.sourceId || body.source_id || '').trim();
+  if (!/^[A-Za-z0-9_-]{4,128}$/.test(sourceId)) {
+    throw httpError(400, 'ID local da sessao invalido.');
+  }
+  const rawSegments = Array.isArray(body.segments) ? body.segments : [];
+  if (!rawSegments.length) throw httpError(400, 'A publicacao nao possui falas.');
+  if (rawSegments.length > 6000) throw httpError(400, 'A publicacao excede 6000 falas.');
+  let totalChars = 0;
+  const sourceSegmentIds = new Set();
+  const segments = rawSegments.flatMap((item, index) => {
+    if (item?.reviewStatus === 'discarded' || item?.review_status === 'discarded') return [];
+    const text = String(item?.text || '').trim();
+    if (!text) return [];
+    if (text.length > 10000) throw httpError(400, `Fala ${index + 1} excede 10000 caracteres.`);
+    totalChars += text.length;
+    if (totalChars > 4_000_000) throw httpError(400, 'A publicacao excede o limite de texto.');
+    const rawStartMs = Number(item.startMs ?? Number(item.start || 0) * 1000);
+    const rawEndMs = Number(item.endMs ?? Number(item.end || 0) * 1000);
+    if (!Number.isFinite(rawStartMs) || !Number.isFinite(rawEndMs)) {
+      throw httpError(400, `Horario invalido na fala ${index + 1}.`);
+    }
+    const startMs = Math.max(0, Math.round(rawStartMs));
+    const endMs = Math.max(startMs, Math.round(rawEndMs));
+    const sourceSegmentId = String(item.id ?? index).slice(0, 240);
+    if (sourceSegmentIds.has(sourceSegmentId)) {
+      throw httpError(400, `ID duplicado na fala ${index + 1}.`);
+    }
+    sourceSegmentIds.add(sourceSegmentId);
+    const localReview = String(item.reviewStatus || item.review_status || 'unreviewed');
+    return [{
+      source_segment_id: sourceSegmentId,
+      source_sequence: index,
+      start_ms: startMs,
+      end_ms: endMs,
+      track_key: String(item.track || item.trackKey || item.speaker || 'mesa').slice(0, 240),
+      speaker_name: String(item.speaker || item.trackKey || item.track || 'Mesa').slice(0, 240),
+      character_name: String(item.character || item.characterName || '').trim().slice(0, 240) || null,
+      text,
+      text_chars: text.length,
+      text_words: text.split(/\s+/u).filter(Boolean).length,
+      review_status: localReview === 'approved'
+        ? 'approved'
+        : localReview === 'needs_review' ? 'needs_review' : 'pending',
+      needs_review: localReview === 'needs_review',
+      metadata: { source: 'local_companion', localReviewStatus: localReview }
+    }];
+  });
+  if (!segments.length) throw httpError(400, 'A publicacao nao possui falas validas.');
+  const startTime = body.startTime || body.start_time || null;
+  const parsedStart = startTime ? new Date(startTime) : null;
+  const startIso = parsedStart && !Number.isNaN(parsedStart.getTime()) ? parsedStart.toISOString() : null;
+  const sessionDate = String(body.playedAt || body.played_at || startIso?.slice(0, 10) || '').slice(0, 10);
+  if (sessionDate && !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+    throw httpError(400, 'Data local da sessao invalida.');
+  }
+  const durationMs = Math.max(...segments.map(item => item.end_ms), 0);
+  const endedAt = startIso ? new Date(new Date(startIso).getTime() + durationMs).toISOString() : null;
+  return {
+    sourceId,
+    title: String(body.title || '').trim().slice(0, 240) || `Sessao ${sessionDate || sourceId}`,
+    sessionDate: sessionDate || null,
+    startTime: startIso,
+    endedAt,
+    durationMs,
+    arc: String(body.arc || '').trim().slice(0, 240) || null,
+    summary: String(body.summary || body.recap?.short || '').trim().slice(0, 4000) || null,
+    publicationId: String(body.publicationId || body.publication_id || '').slice(0, 240) || null,
+    transcriptSha256: String(body.transcriptSha256 || body.transcript_sha256 || '').slice(0, 128) || null,
+    segments
+  };
+}
+
+async function importLocalPublication(campaign, body) {
+  const publication = cleanLocalPublication(body);
+  const db = await getPool().connect();
+  try {
+    await db.query('begin');
+    const existing = await db.query(
+      `
+select s.id, s.source_system
+from sessions s
+join campaigns c on c.id = s.campaign_id
+where c.slug = $1 and s.source_session_id = $2
+limit 1
+for update;`,
+      [campaign, publication.sourceId]
+    );
+    const existingSession = existing.rows[0] || null;
+    if (existingSession && existingSession.source_system !== 'local_companion') {
+      throw httpError(409, 'Este ID ja pertence a uma sessao de outra origem.');
+    }
+    let sessionId = existingSession?.id || null;
+    const metadata = JSON.stringify({
+      localPublication: {
+        publicationId: publication.publicationId,
+        transcriptSha256: publication.transcriptSha256,
+        publishedAt: new Date().toISOString(),
+        audioLocation: 'local_only'
+      }
+    });
+    if (sessionId) {
+      await db.query(
+        `
+update sessions
+set title = $3,
+    session_date = $4::date,
+    started_at = $5::timestamptz,
+    ended_at = $6::timestamptz,
+    duration_ms = $7,
+    arc = $8,
+    summary_short = $9,
+    status = 'published',
+    metadata = coalesce(metadata, '{}'::jsonb) || $10::jsonb,
+    updated_at = now()
+where id = $2::uuid;`,
+        [
+          campaign,
+          sessionId,
+          publication.title,
+          publication.sessionDate,
+          publication.startTime,
+          publication.endedAt,
+          publication.durationMs,
+          publication.arc,
+          publication.summary,
+          metadata
+        ]
+      );
+    } else {
+      const inserted = await db.query(
+        `
+insert into sessions (
+  campaign_id, title, slug, session_date, arc, status, summary_short,
+  source_system, source_session_id, started_at, ended_at, duration_ms, metadata
+)
+select c.id, $2, $3, $4::date, $5, 'published', $6,
+       'local_companion', $7, $8::timestamptz, $9::timestamptz, $10, $11::jsonb
+from campaigns c
+where c.slug = $1
+returning id;`,
+        [
+          campaign,
+          publication.title,
+          `local-${publication.sourceId.toLowerCase()}`,
+          publication.sessionDate,
+          publication.arc,
+          publication.summary,
+          publication.sourceId,
+          publication.startTime,
+          publication.endedAt,
+          publication.durationMs,
+          metadata
+        ]
+      );
+      if (!inserted.rows.length) throw httpError(404, 'Campanha nao encontrada.');
+      sessionId = inserted.rows[0].id;
+    }
+    const serializedSegments = JSON.stringify(publication.segments);
+    await db.query(
+      `
+insert into transcript_segments (
+  session_id, source_segment_id, source_sequence, start_ms, end_ms,
+  track_key, speaker_name, character_name, text, text_chars, text_words,
+  language, is_empty, needs_review, review_status, metadata
+)
+select
+  $1::uuid, item.source_segment_id, item.source_sequence, item.start_ms, item.end_ms,
+  item.track_key, item.speaker_name, item.character_name, item.text,
+  item.text_chars, item.text_words, 'pt', false, item.needs_review,
+  item.review_status, item.metadata
+from jsonb_to_recordset($2::jsonb) as item(
+  source_segment_id text,
+  source_sequence integer,
+  start_ms integer,
+  end_ms integer,
+  track_key text,
+  speaker_name text,
+  character_name text,
+  text text,
+  text_chars integer,
+  text_words integer,
+  needs_review boolean,
+  review_status text,
+  metadata jsonb
+)
+on conflict (session_id, source_segment_id) where source_segment_id is not null
+do update set
+  source_sequence = excluded.source_sequence,
+  start_ms = excluded.start_ms,
+  end_ms = excluded.end_ms,
+  track_key = excluded.track_key,
+  speaker_name = excluded.speaker_name,
+  character_name = excluded.character_name,
+  text = excluded.text,
+  text_chars = excluded.text_chars,
+  text_words = excluded.text_words,
+  needs_review = excluded.needs_review,
+  review_status = excluded.review_status,
+  metadata = excluded.metadata;`,
+      [sessionId, serializedSegments]
+    );
+    await db.query(
+      `
+delete from transcript_segments ts
+where ts.session_id = $1::uuid
+  and ts.source_segment_id is not null
+  and not exists (
+    select 1
+    from jsonb_to_recordset($2::jsonb) as item(source_segment_id text)
+    where item.source_segment_id = ts.source_segment_id
+  );`,
+      [sessionId, serializedSegments]
+    );
+    await db.query('commit');
+    return {
+      ok: true,
+      sourceSessionId: publication.sourceId,
+      sessionId,
+      segments: publication.segments.length,
+      status: 'published'
+    };
+  } catch (error) {
+    await db.query('rollback').catch(() => {});
+    throw error;
+  } finally {
+    db.release();
+  }
+}
+
 async function responseSummary(campaign, sourceSessionId, runId, db = getPool()) {
   return await data(
     `
@@ -7646,7 +8390,7 @@ async function handleGet(req, res, path, query) {
     await requireCampaignAccess(req, campaign);
     return sendJson(res, 200, {
       ok: true,
-      jobs: await listJobs(campaign, query.get('sourceSessionId') || ''),
+      jobs: await listJobs(campaign, query.get('sourceSessionId') || '', { limit: query.get('limit') }),
       mode: 'supabase_prod_jobs',
       note: 'Jobs de producao sao persistidos no Supabase; execucao pesada ainda depende do worker cloud.'
     });
@@ -7698,6 +8442,57 @@ async function handleGet(req, res, path, query) {
       note: 'Mapa Craig carregado do deploy. Edicao em producao entra em etapa propria.'
     });
   }
+  if (path === '/api/library-sessions') {
+    await requireCampaignAccess(req, campaign);
+    res.setHeader('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
+    return sendJson(res, 200, {
+      ok: true,
+      campaignSlug: campaign,
+      sessions: await listLibrarySessions(campaign)
+    });
+  }
+  if (path === '/api/library-transcript') {
+    await requireCampaignAccess(req, campaign);
+    res.setHeader('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
+    return sendJson(res, 200, {
+      ok: true,
+      ...(await libraryTranscriptPage(campaign, sourceSessionId, {
+        cursor: query.get('cursor') || '',
+        limit: query.get('limit') || '',
+        search: query.get('q') || '',
+        speaker: query.get('speaker') || ''
+      }))
+    });
+  }
+  if (path === '/api/session-download') {
+    await requireCampaignAccess(req, campaign);
+    const markdown = await sessionMarkdown(campaign, sourceSessionId);
+    const filename = `transcricao-${String(sourceSessionId || 'sessao').replace(/[^a-z0-9_-]+/gi, '-')}.md`;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.end(markdown);
+  }
+  if (path === '/api/library-summary') {
+    await requireCampaignAccess(req, campaign);
+    res.setHeader('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
+    return sendJson(res, 200, {
+      ok: true,
+      session: await librarySessionSummary(campaign, sourceSessionId)
+    });
+  }
+  if (path === '/api/editor-sessions') {
+    await requirePermission(req, campaign, {
+      action: 'campaign.edit.access',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para abrir o Edit.'
+    });
+    res.setHeader('Cache-Control', 'private, no-store');
+    return sendJson(res, 200, { ok: true, sessions: await editorSessions(campaign) });
+  }
   if (path === '/api/sessions') {
     await requireCampaignAccess(req, campaign);
     return sendJson(res, 200, { ok: true, sessions: await listSessions(campaign, runId) });
@@ -7737,6 +8532,55 @@ async function handlePost(req, res, path) {
   const sourceSessionId = body.sourceSessionId || decisions.sourceSessionId || DEFAULT_SOURCE_SESSION;
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
+  if (path === '/api/library-import-local') {
+    await requirePermission(req, campaign, {
+      action: 'campaign.local.process',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para publicar a partir do processamento local.'
+    });
+    return sendJson(res, 200, await importLocalPublication(campaign, body));
+  }
+  if (path === '/api/editor-session') {
+    await requirePermission(req, campaign, {
+      action: 'campaign.content.edit',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para editar conteudo publicado.'
+    });
+    return sendJson(res, 200, {
+      ok: true,
+      session: await updateEditorSession(campaign, sourceSessionId, body)
+    });
+  }
+  if (path === '/api/editor-image-upload-url') {
+    await requirePermission(req, campaign, {
+      action: 'campaign.content.edit',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para enviar imagens da sessao.'
+    });
+    return sendJson(res, 200, {
+      ok: true,
+      upload: await createEditorImageUpload(campaign, sourceSessionId, body)
+    });
+  }
+  if (path === '/api/editor-segment') {
+    await requirePermission(req, campaign, {
+      action: 'campaign.content.edit',
+      scopeType: 'campaign',
+      scopeId: campaign,
+      legacyRoles: [],
+      error: 'Sem permissao para revisar a transcricao.'
+    });
+    return sendJson(res, 200, {
+      ok: true,
+      segment: await updateEditorSegment(campaign, sourceSessionId, body)
+    });
+  }
   if (path === '/api/rbac/assign') {
     const client = await getPool().connect();
     try {

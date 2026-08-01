@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Craig to Text</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">C</span>
+        <span>Craig <i>to</i> Text</span>
+      </a>
+      <span class="local-badge" id="bridgeBadge">CONECTANDO AO SEU PC…</span>
+    </header>
+
+    <main>
+      <section id="libraryView">
+        <div class="hero">
+          <p class="eyebrow">ARQUIVO DA CAMPANHA</p>
+          <h1>Seis horas de caos.<br /><em>Uma história legível.</em></h1>
+          <p class="lede">
+            Importe as faixas separadas do Craig, transcreva na sua GPU e encontre
+            qualquer fala da sessão em segundos.
+          </p>
+        </div>
+
+        <section class="system-panel">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">CENTRAL LOCAL</p>
+              <h2>Estado da máquina</h2>
+            </div>
+            <span id="healthStatus" class="health-pill">Verificando…</span>
+          </div>
+          <div id="healthGrid" class="health-grid"></div>
+        </section>
+
+        <section class="import-panel" aria-labelledby="importTitle">
+          <div>
+            <p class="eyebrow">NOVA SESSÃO</p>
+            <h2 id="importTitle">Importar gravação</h2>
+            <p>
+              Escolha o ZIP FLAC Multi-track baixado do Craig. O arquivo original
+              será preservado, e uma amostra de 5 minutos começará automaticamente.
+            </p>
+          </div>
+          <div class="import-actions">
+            <button class="primary" id="selectArchiveButton" type="button">Selecionar ZIP do Craig</button>
+            <button class="ghost" id="refreshButton" type="button">↻ Atualizar</button>
+          </div>
+          <p class="import-status" id="archiveImportStatus" role="status" aria-live="polite"></p>
+        </section>
+
+        <div class="section-heading candidate-heading">
+          <div>
+            <p class="eyebrow">IMPORTAÇÃO MANUAL</p>
+            <h2>Arquivos disponíveis</h2>
+          </div>
+        </div>
+        <div id="candidateList" class="card-grid"></div>
+
+        <div class="section-heading sessions-heading">
+          <div>
+            <p class="eyebrow">BIBLIOTECA</p>
+            <h2>Sessões importadas</h2>
+          </div>
+        </div>
+        <div id="sessionList" class="card-grid"></div>
+
+        <div class="section-heading sessions-heading">
+          <div>
+            <p class="eyebrow">FILA PERSISTENTE</p>
+            <h2>Processamentos locais</h2>
+          </div>
+        </div>
+        <div id="jobList" class="job-list"></div>
+      </section>
+
+      <section id="sessionView" class="hidden">
+        <button class="back-button" id="backButton">← Todas as sessões</button>
+        <div class="session-header">
+          <div>
+            <p class="eyebrow" id="sessionDate">SESSÃO</p>
+            <h1 id="sessionTitle">Gravação</h1>
+            <div id="speakerChips" class="chips"></div>
+          </div>
+          <div class="export-actions">
+            <a id="publicationButton" class="ghost" href="#">↓ Pacote publicável</a>
+            <a id="exportButton" class="ghost" href="#">↓ Transcrição Markdown</a>
+          </div>
+        </div>
+
+        <section class="metadata-panel">
+          <div>
+            <p class="eyebrow">CATÁLOGO LOCAL</p>
+            <h2>Identidade da sessão</h2>
+          </div>
+          <div class="metadata-fields">
+            <label>
+              Título
+              <input id="metadataTitle" maxlength="160" placeholder="Nome da sessão" />
+            </label>
+            <label>
+              Data
+              <input id="metadataDate" type="date" />
+            </label>
+            <label>
+              Arco
+              <input id="metadataArc" maxlength="160" placeholder="Arco ou capítulo" />
+            </label>
+            <label class="metadata-notes">
+              Notas do operador
+              <textarea id="metadataNotes" maxlength="4000" placeholder="Dúvidas e lembretes locais"></textarea>
+            </label>
+          </div>
+          <button id="saveMetadataButton" class="primary">Salvar metadados</button>
+        </section>
+
+        <div id="setupPanel" class="setup-panel">
+          <div>
+            <p class="eyebrow">ANTES DE COMEÇAR</p>
+            <h2>Ensine os nomes da campanha</h2>
+            <p class="muted">Separados por vírgula: personagens, cidades, deuses e itens.</p>
+            <textarea id="glossary" placeholder="Dandelion, Astel, Screaky, Barovia…"></textarea>
+          </div>
+          <div class="run-options">
+            <button id="sampleButton" class="secondary">Testar 5 minutos</button>
+            <button id="fullButton" class="primary">Transcrever sessão completa →</button>
+            <label><input id="cpuMode" type="checkbox" /> Usar CPU (somente diagnóstico)</label>
+          </div>
+        </div>
+
+        <div id="progressPanel" class="progress-panel hidden">
+          <div class="spinner"></div>
+          <div>
+            <p class="eyebrow">PROCESSANDO LOCALMENTE</p>
+            <h2 id="progressTitle">Preparando modelo…</h2>
+            <p id="progressText" class="muted"></p>
+          </div>
+        </div>
+
+        <div id="errorPanel" class="error-panel hidden"></div>
+
+        <div id="transcriptPanel" class="hidden">
+          <div id="reviewSummary" class="review-summary"></div>
+          <div class="transcript-tools">
+            <label class="search-box">
+              <span>⌕</span>
+              <input id="searchInput" type="search" placeholder="Buscar na sessão…" />
+            </label>
+            <div id="filterChips" class="chips"></div>
+          </div>
+          <div class="transcript-layout">
+            <div id="transcriptList" class="transcript-list"></div>
+            <aside class="now-playing">
+              <p class="eyebrow">OUVIR FAIXA</p>
+              <strong id="audioSpeaker">Selecione uma fala</strong>
+              <audio id="audioPlayer" controls preload="metadata"></audio>
+              <p class="muted">Clique no horário de uma fala para ouvir a partir daquele ponto.</p>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="reviewDialog" class="review-dialog">
+      <form method="dialog" id="reviewForm">
+        <p class="eyebrow">REVISÃO LOCAL</p>
+        <h2 id="reviewDialogTitle">Revisar fala</h2>
+        <label>
+          Speaker
+          <input id="reviewSpeaker" maxlength="160" />
+        </label>
+        <label>
+          Texto corrigido
+          <textarea id="reviewText" maxlength="10000"></textarea>
+        </label>
+        <label>
+          Estado
+          <select id="reviewStatus">
+            <option value="unreviewed">Não revisado</option>
+            <option value="approved">Aprovado</option>
+            <option value="needs_review">Rever depois</option>
+            <option value="discarded">Descartado</option>
+          </select>
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">Cancelar</button>
+          <button type="button" id="saveReviewButton" class="primary">Salvar revisão</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="./app.js"></script>
+  </body>
+</html>

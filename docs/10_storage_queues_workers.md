@@ -1,5 +1,10 @@
 # 10 — Storage, Queues e Workers
 
+> Estado em 26/07/2026: R2 e filas cloud deixam de ser requisito do fluxo
+> normal na proposta local-first. Áudio, transcrição completa e jobs ficam no
+> PC do operador; a nuvem recebe apenas publicações pequenas e aprovadas. Veja
+> `docs/64-arquitetura-local-first.md`.
+
 ## Objetivo
 
 Definir como lidar com arquivos grandes e processamento demorado.
