@@ -6,12 +6,14 @@ on:
     paths:
       - "installer/**"
       - "local-companion/**"
+      - "api/companion-release.js"
       - ".github/workflows/companion-installer.yml"
   push:
     branches: [main]
     paths:
       - "installer/**"
       - "local-companion/**"
+      - "api/companion-release.js"
       - ".github/workflows/companion-installer.yml"
 
 permissions:
@@ -45,3 +47,49 @@ jobs:
             dist/companion-installer/release.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish installer to private production storage
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          DND_CRON_SECRET: ${{ secrets.CRON_SECRET || secrets.DND_CRON_SECRET }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:DND_CRON_SECRET)) {
+            throw 'CRON_SECRET or DND_CRON_SECRET is required to publish the Companion release.'
+          }
+
+          $release = Get-Content -Raw -LiteralPath '.\dist\companion-installer\release.json' | ConvertFrom-Json
+          $exe = (Resolve-Path '.\dist\companion-installer\DnDScribeCompanionSetup.exe').Path
+          $sha = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne [string]$release.sha256) {
+            throw "Installer SHA-256 does not match release.json. expected=$($release.sha256) actual=$sha"
+          }
+
+          $version = [string]$release.version
+          $headers = @{
+            Authorization = "Bearer $env:DND_CRON_SECRET"
+            'X-Companion-Version' = $version
+            'X-Companion-Sha256' = $sha
+            'Content-Type' = 'application/vnd.microsoft.portable-executable'
+          }
+
+          $uri = 'https://dnd.faysk.dev/api/companion-release'
+          $lastError = $null
+          for ($attempt = 1; $attempt -le 18; $attempt++) {
+            try {
+              $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -InFile $exe -TimeoutSec 30
+              if (-not $response.ok) { throw 'Production release endpoint returned ok=false.' }
+              if ([string]$response.sha256 -ne $sha) { throw 'Published SHA-256 does not match local installer.' }
+              if ([string]$response.version -ne $version) { throw 'Published version does not match release.json.' }
+              Write-Host "Published Companion $version with SHA-256 $sha"
+              $lastError = $null
+              break
+            }
+            catch {
+              $lastError = $_
+              if ($attempt -eq 18) { break }
+              Write-Host "Release endpoint not ready (attempt $attempt/18): $($_.Exception.Message)"
+              Start-Sleep -Seconds 10
+            }
+          }
+          if ($null -ne $lastError) { throw $lastError }
