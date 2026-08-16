@@ -8,6 +8,7 @@ import tempfile
 import time
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from .catalog import LocalCatalog
@@ -19,6 +20,7 @@ from .storage import SessionStore
 
 _STORAGE_PROBE_TTL_SECONDS = 60.0
 _STORAGE_PROBE_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_STORAGE_PROBE_LOCK = Lock()
 
 
 def _writable(directory: Path) -> tuple[bool, str | None]:
@@ -33,23 +35,24 @@ def _writable(directory: Path) -> tuple[bool, str | None]:
 
 def _storage_probe(directory: Path, *, force: bool = False) -> dict[str, Any]:
     key = str(directory.resolve())
-    now = time.monotonic()
-    cached = _STORAGE_PROBE_CACHE.get(key)
-    if not force and cached and now - cached[0] < _STORAGE_PROBE_TTL_SECONDS:
-        return dict(cached[1])
-    writable, write_error = _writable(directory)
-    atomic_replace = atomic_replace_probe(directory) if writable else {
-        "ok": False,
-        "error": write_error,
-    }
-    result = {
-        "writable": writable,
-        "write_error": write_error,
-        "atomic_replace": atomic_replace,
-        "checked_at_monotonic": now,
-    }
-    _STORAGE_PROBE_CACHE[key] = (now, result)
-    return dict(result)
+    with _STORAGE_PROBE_LOCK:
+        now = time.monotonic()
+        cached = _STORAGE_PROBE_CACHE.get(key)
+        if not force and cached and now - cached[0] < _STORAGE_PROBE_TTL_SECONDS:
+            return dict(cached[1])
+        writable, write_error = _writable(directory)
+        atomic_replace = atomic_replace_probe(directory) if writable else {
+            "ok": False,
+            "error": write_error,
+        }
+        result = {
+            "writable": writable,
+            "write_error": write_error,
+            "atomic_replace": atomic_replace,
+            "checked_at_monotonic": now,
+        }
+        _STORAGE_PROBE_CACHE[key] = (now, result)
+        return dict(result)
 
 
 def _cuda_status() -> dict[str, Any]:
