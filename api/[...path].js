@@ -6856,7 +6856,7 @@ function cleanLocalPublication(body = {}) {
   }
   const rawSegments = Array.isArray(body.segments) ? body.segments : [];
   if (!rawSegments.length) throw httpError(400, 'A publicacao nao possui falas.');
-  if (rawSegments.length > 6000) throw httpError(400, 'A publicacao excede 6000 falas.');
+  if (rawSegments.length > 1_000_000) throw httpError(400, 'A publicacao excede 1000000 falas.');
   let totalChars = 0;
   const sourceSegmentIds = new Set();
   const segments = rawSegments.flatMap((item, index) => {
