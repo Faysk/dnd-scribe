@@ -9,10 +9,11 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from .config import AppPaths
 from .catalog import LocalCatalog
+from .config import AppPaths
+from .fs import atomic_replace_probe
+from .runtime import probe_cuda, public_profiles
 from .storage import SessionStore
-from .transcriber import configure_cuda_dlls
 
 
 def _writable(directory: Path) -> tuple[bool, str | None]:
@@ -26,24 +27,7 @@ def _writable(directory: Path) -> tuple[bool, str | None]:
 
 
 def _cuda_status() -> dict[str, Any]:
-    try:
-        configured_dlls = configure_cuda_dlls()
-        import ctranslate2
-
-        count = ctranslate2.get_cuda_device_count()
-        return {
-            "available": count > 0,
-            "device_count": count,
-            "dll_directories": configured_dlls,
-            "error": None,
-        }
-    except Exception as error:
-        return {
-            "available": False,
-            "device_count": 0,
-            "dll_directories": [],
-            "error": f"{type(error).__name__}: {error}",
-        }
+    return probe_cuda()
 
 
 def _installed_models(models: Path) -> list[str]:
@@ -52,6 +36,7 @@ def _installed_models(models: Path) -> list[str]:
         directory.name
         for directory in models.iterdir()
         if directory.is_dir()
+        and not directory.name.startswith(".")
         and all((directory / filename).is_file() for filename in required)
     )
 
@@ -62,6 +47,7 @@ def build_health(
     catalog: LocalCatalog | None = None,
 ) -> dict[str, Any]:
     writable, write_error = _writable(paths.storage)
+    atomic_replace = atomic_replace_probe(paths.sessions)
     disk = shutil.disk_usage(paths.storage)
     sessions = store.list()
     active = [
@@ -74,8 +60,10 @@ def build_health(
     except PackageNotFoundError:
         app_version = "development"
 
+    cuda = _cuda_status()
+    healthy_storage = writable and atomic_replace["ok"]
     return {
-        "status": "ok" if writable else "degraded",
+        "status": "ok" if healthy_storage else "degraded",
         "app": {
             "name": "craig-to-text",
             "version": app_version,
@@ -90,10 +78,12 @@ def build_health(
             "models": str(paths.models),
             "writable": writable,
             "write_error": write_error,
+            "atomic_replace": atomic_replace,
             "free_bytes": disk.free,
             "total_bytes": disk.total,
         },
-        "cuda": _cuda_status(),
+        "cuda": cuda,
+        "profiles": public_profiles(),
         "models": {
             "installed": _installed_models(paths.models),
         },
