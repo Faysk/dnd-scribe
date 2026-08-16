@@ -89,6 +89,7 @@ def test_central_local_api_flow(tmp_path, monkeypatch):
         jobs = client.get("/api/jobs")
 
     assert health.status_code == 200
+    assert health.json()["companion"]["version"] == "0.4.0"
     assert metadata.json()["title"] == "A memória como preço"
     assert review.json()["segment"]["text"] == "Baróvia"
     assert review.json()["segment"]["original_text"] == "Barovia"
@@ -126,7 +127,7 @@ def test_hosted_origin_can_access_local_companion(tmp_path, monkeypatch):
     assert response.headers["access-control-allow-private-network"] == "true"
 
 
-def test_native_picker_copies_imports_and_queues_five_minute_sample(tmp_path, monkeypatch):
+def test_native_picker_copies_imports_and_queues_five_minute_fast_sample(tmp_path, monkeypatch):
     storage = tmp_path / "managed"
     downloads = tmp_path / "downloads"
     downloads.mkdir()
@@ -141,14 +142,16 @@ def test_native_picker_copies_imports_and_queues_five_minute_sample(tmp_path, mo
     monkeypatch.setattr(main.executor, "submit", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         main,
-        "build_health",
-        lambda paths, session_store, catalog: {
-            "cuda": {"available": True},
+        "_preflight",
+        lambda profile, cpu: {
+            "ready": True,
+            "plan": {"profile": profile, "device": "cpu" if cpu else "cuda"},
         },
     )
 
     with TestClient(main.app) as client:
         response = client.post("/api/import/select")
+        jobs = client.get("/api/jobs").json()["jobs"]
 
     payload = response.json()
     managed = storage / "inbox" / source.name
@@ -159,11 +162,57 @@ def test_native_picker_copies_imports_and_queues_five_minute_sample(tmp_path, mo
     assert payload["archive"]["original_preserved"] is True
     assert payload["session"]["recording_id"] == "PICKER123"
     assert payload["session"]["status"] == "queued"
+    assert jobs[0]["payload"]["profile"] == "fast"
+    assert jobs[0]["payload"]["cpu"] is False
+    assert jobs[0]["payload"]["sample_minutes"] == 5
     assert source.is_file()
     assert managed.is_file()
     assert source.read_bytes() == managed.read_bytes()
     assert not list((storage / "inbox").glob("*.partial"))
     assert len(list((storage / "sessions" / "PICKER123" / "tracks").glob("*.flac"))) == 2
+
+
+def test_transcribe_api_uses_detailed_profile_and_keeps_cpu_explicit(tmp_path, monkeypatch):
+    storage = tmp_path / "profiles"
+    store = SessionStore(storage / "sessions")
+    store.write(
+        "ABC123",
+        {
+            "recording_id": "ABC123",
+            "start_time": "2026-07-25T18:24:15.184Z",
+            "source": "",
+            "format": "flac",
+            "tracks": [],
+            "speakers": ["alice"],
+            "status": "ready",
+            "progress": None,
+            "transcript": [],
+            "error": None,
+        },
+    )
+    monkeypatch.setenv("CRAIG_TO_TEXT_ROOT", str(storage))
+
+    import app.main
+
+    main = importlib.reload(app.main)
+    monkeypatch.setattr(main.executor, "submit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main, "_preflight", lambda profile, cpu: {"ready": True})
+
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/api/sessions/ABC123/transcribe",
+            json={"profile": "detailed", "cpu": False, "glossary": "Dandelion"},
+        )
+        jobs = client.get("/api/jobs?recording_id=ABC123").json()["jobs"]
+
+    assert response.status_code == 200
+    assert response.json()["profile"] == "detailed"
+    assert jobs[0]["payload"] == {
+        "profile": "detailed",
+        "cpu": False,
+        "glossary": "Dandelion",
+        "sample_minutes": None,
+    }
 
 
 def test_native_picker_cancel_does_not_change_archive(tmp_path, monkeypatch):

@@ -1,13 +1,14 @@
 import json
-from pathlib import Path
 
 from app.artifacts import write_session_manifest
 from app.catalog import LocalCatalog
 from app.config import load_paths
 from app.craig import parse_info
+from app.fs import atomic_write_json
 from app.health import build_health
 from app.publication import build_publication_bundle, write_publication_bundle
 from app.reviews import apply_reviews, read_reviews, write_review
+from app.runtime import resolve_plan
 from app.storage import SessionStore
 from app.transcriber import merge_segments
 
@@ -62,6 +63,71 @@ def test_configured_root_creates_portable_layout(tmp_path):
     assert paths.sessions == storage / "sessions"
     assert paths.models == storage / "models"
     assert all(path.is_dir() for path in (paths.inbox, paths.sessions, paths.models))
+
+
+def test_atomic_write_retries_transient_windows_permission_error(tmp_path, monkeypatch):
+    import app.fs as fs
+
+    destination = tmp_path / "session.json"
+    real_replace = fs.os.replace
+    attempts = {"count": 0}
+
+    def flaky_replace(source, target):
+        attempts["count"] += 1
+        if attempts["count"] <= 2:
+            error = PermissionError("temporariamente bloqueado")
+            error.winerror = 5
+            raise error
+        return real_replace(source, target)
+
+    monkeypatch.setattr(fs.os, "replace", flaky_replace)
+    monkeypatch.setattr(fs.time, "sleep", lambda _: None)
+
+    atomic_write_json(destination, {"status": "complete"})
+
+    assert attempts["count"] == 3
+    assert json.loads(destination.read_text(encoding="utf-8"))["status"] == "complete"
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_runtime_prefers_gpu_fp16_and_cpu_stays_manual():
+    cuda_status = {
+        "available": True,
+        "supported_compute_types": ["float16", "int8_float16"],
+    }
+    gpu = resolve_plan("detailed", cuda_status=cuda_status)
+    cpu = resolve_plan(
+        "detailed",
+        cpu=True,
+        cuda_status={"available": False, "supported_compute_types": []},
+    )
+
+    assert gpu.model_name == "large-v3"
+    assert gpu.device == "cuda"
+    assert gpu.compute_type == "float16"
+    assert gpu.fallback_compute_type == "int8_float16"
+    assert gpu.cpu_requested is False
+    assert cpu.device == "cpu"
+    assert cpu.compute_type == "int8"
+    assert cpu.fallback_compute_type is None
+    assert cpu.cpu_requested is True
+
+
+def test_runtime_never_falls_back_to_cpu_silently():
+    try:
+        resolve_plan(
+            "fast",
+            cpu=False,
+            cuda_status={
+                "available": False,
+                "supported_compute_types": [],
+                "error": "CUDA indisponível",
+            },
+        )
+    except RuntimeError as error:
+        assert "CPU só será usada" in str(error)
+    else:
+        raise AssertionError("O planner caiu para CPU sem solicitação explícita")
 
 
 def test_manifest_and_publication_exclude_heavy_content(tmp_path):
@@ -153,18 +219,23 @@ def test_health_reports_storage_without_exposing_session_content(tmp_path, monke
     monkeypatch.setattr(
         "app.health._cuda_status",
         lambda: {
-            "available": False,
-            "device_count": 0,
+            "available": True,
+            "device_count": 1,
+            "supported_compute_types": ["float16", "int8_float16"],
+            "devices": [{"index": 0, "name": "Test RTX", "memory_total_mib": 8192, "memory_free_mib": 7000}],
             "dll_directories": [],
+            "ctranslate2_version": "test",
             "error": None,
         },
     )
 
-    result = build_health(paths, store)
+    result = build_health(paths, store, force_storage_probe=True)
     serialized = json.dumps(result, ensure_ascii=False)
 
     assert result["status"] == "ok"
+    assert result["readiness"]["default_processing"] is True
     assert result["storage"]["mode"] == "configured"
+    assert result["storage"]["atomic_replace"]["ok"] is True
     assert result["sessions"]["total"] == 1
     assert "segredo" not in serialized
 
@@ -181,9 +252,11 @@ def test_catalog_persists_metadata_and_enforces_one_active_job(tmp_path):
         notes="Revisar nome do mestre.",
     )
     job = catalog.create_job("ABC123", "transcribe", {"device": "cuda"})
+    catalog.update_job_progress(job["id"], {"stage": "transcribing", "percent": 42})
 
     assert LocalCatalog(database).get_session("ABC123")["title"] == "A memória como preço"
     assert catalog.get_job(job["id"])["payload"]["device"] == "cuda"
+    assert catalog.get_job(job["id"])["progress"]["percent"] == 42
     try:
         catalog.create_job("ABC123", "transcribe", {"device": "cpu"})
     except ValueError as error:
@@ -197,6 +270,7 @@ def test_catalog_persists_metadata_and_enforces_one_active_job(tmp_path):
     assert catalog.get_job(job["id"])["status"] == "failed"
     catalog.retry_job(job["id"])
     assert catalog.get_job(job["id"])["status"] == "queued"
+    assert catalog.get_job(job["id"])["progress"]["percent"] == 0
 
 
 def test_review_overlay_preserves_raw_transcript(tmp_path):

@@ -5,14 +5,22 @@ import platform
 import shutil
 import sys
 import tempfile
+import time
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
-from .config import AppPaths
 from .catalog import LocalCatalog
+from .config import AppPaths
+from .fs import atomic_replace_probe
+from .runtime import probe_cuda, public_profiles
 from .storage import SessionStore
-from .transcriber import configure_cuda_dlls
+
+
+_STORAGE_PROBE_TTL_SECONDS = 60.0
+_STORAGE_PROBE_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_STORAGE_PROBE_LOCK = Lock()
 
 
 def _writable(directory: Path) -> tuple[bool, str | None]:
@@ -25,25 +33,30 @@ def _writable(directory: Path) -> tuple[bool, str | None]:
         return False, f"{type(error).__name__}: {error}"
 
 
-def _cuda_status() -> dict[str, Any]:
-    try:
-        configured_dlls = configure_cuda_dlls()
-        import ctranslate2
+def _storage_probe(directory: Path, *, force: bool = False) -> dict[str, Any]:
+    key = str(directory.resolve())
+    with _STORAGE_PROBE_LOCK:
+        now = time.monotonic()
+        cached = _STORAGE_PROBE_CACHE.get(key)
+        if not force and cached and now - cached[0] < _STORAGE_PROBE_TTL_SECONDS:
+            return dict(cached[1])
+        writable, write_error = _writable(directory)
+        atomic_replace = atomic_replace_probe(directory) if writable else {
+            "ok": False,
+            "error": write_error,
+        }
+        result = {
+            "writable": writable,
+            "write_error": write_error,
+            "atomic_replace": atomic_replace,
+            "checked_at_monotonic": now,
+        }
+        _STORAGE_PROBE_CACHE[key] = (now, result)
+        return dict(result)
 
-        count = ctranslate2.get_cuda_device_count()
-        return {
-            "available": count > 0,
-            "device_count": count,
-            "dll_directories": configured_dlls,
-            "error": None,
-        }
-    except Exception as error:
-        return {
-            "available": False,
-            "device_count": 0,
-            "dll_directories": [],
-            "error": f"{type(error).__name__}: {error}",
-        }
+
+def _cuda_status() -> dict[str, Any]:
+    return probe_cuda()
 
 
 def _installed_models(models: Path) -> list[str]:
@@ -52,6 +65,7 @@ def _installed_models(models: Path) -> list[str]:
         directory.name
         for directory in models.iterdir()
         if directory.is_dir()
+        and not directory.name.startswith(".")
         and all((directory / filename).is_file() for filename in required)
     )
 
@@ -60,8 +74,10 @@ def build_health(
     paths: AppPaths,
     store: SessionStore,
     catalog: LocalCatalog | None = None,
+    *,
+    force_storage_probe: bool = False,
 ) -> dict[str, Any]:
-    writable, write_error = _writable(paths.storage)
+    storage_probe = _storage_probe(paths.sessions, force=force_storage_probe)
     disk = shutil.disk_usage(paths.storage)
     sessions = store.list()
     active = [
@@ -74,8 +90,18 @@ def build_health(
     except PackageNotFoundError:
         app_version = "development"
 
+    cuda = _cuda_status()
+    healthy_storage = storage_probe["writable"] and storage_probe["atomic_replace"]["ok"]
+    gpu_ready = bool(cuda.get("available")) and bool(cuda.get("supported_compute_types"))
+    ready_for_default_processing = healthy_storage and gpu_ready
     return {
-        "status": "ok" if writable else "degraded",
+        "status": "ok" if ready_for_default_processing else "degraded",
+        "readiness": {
+            "storage": healthy_storage,
+            "gpu": gpu_ready,
+            "default_processing": ready_for_default_processing,
+            "cpu_manual_available": True,
+        },
         "app": {
             "name": "craig-to-text",
             "version": app_version,
@@ -88,12 +114,14 @@ def build_health(
             "inbox": str(paths.inbox),
             "sessions": str(paths.sessions),
             "models": str(paths.models),
-            "writable": writable,
-            "write_error": write_error,
+            "writable": storage_probe["writable"],
+            "write_error": storage_probe["write_error"],
+            "atomic_replace": storage_probe["atomic_replace"],
             "free_bytes": disk.free,
             "total_bytes": disk.total,
         },
-        "cuda": _cuda_status(),
+        "cuda": cuda,
+        "profiles": public_profiles(),
         "models": {
             "installed": _installed_models(paths.models),
         },

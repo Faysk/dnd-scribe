@@ -19,7 +19,7 @@ namespace DnDScribe.CompanionSetup
 
     internal sealed class SetupForm : Form
     {
-        private const string Version = "0.3.0";
+        private const string Version = "0.4.0";
         private const string PayloadResource = "DnDScribe.CompanionPayload.zip";
         private const string TrayResource = "DnDScribe.CompanionTray.exe";
         private readonly TextBox dataRoot = new TextBox();
@@ -63,7 +63,7 @@ namespace DnDScribe.CompanionSetup
             installButton.Click += Install;
 
             Label note = LabelAt(
-                "Reserve cerca de 8 GB no disco do Windows e espaço para os ZIPs na pasta escolhida. " +
+                "Reserve cerca de 12 GB no disco do Windows e espaço para os ZIPs na pasta escolhida. " +
                 "O serviço escuta apenas em 127.0.0.1.",
                 312, 304, 374, 48, 9F, FontStyle.Regular, Color.FromArgb(174, 183, 196));
 
@@ -160,10 +160,11 @@ namespace DnDScribe.CompanionSetup
             string versionsDir = Path.Combine(baseDir, "Companion", "versions");
             string versionDir = Path.Combine(versionsDir, Version);
             string stagingDir = versionDir + ".installing";
-            string runtimeDir = Path.Combine(baseDir, "Runtime");
-            string venvDir = Path.Combine(runtimeDir, ".venv");
+            string runtimeVersionsDir = Path.Combine(baseDir, "Runtime", "versions");
+            string runtimeVersionDir = Path.Combine(runtimeVersionsDir, Version);
+            string venvDir = Path.Combine(runtimeVersionDir, ".venv");
             Directory.CreateDirectory(versionsDir);
-            Directory.CreateDirectory(runtimeDir);
+            Directory.CreateDirectory(runtimeVersionsDir);
 
             Append("Encerrando a versão anterior, se estiver aberta…");
             StopExistingCompanion(baseDir, selectedRoot);
@@ -197,15 +198,48 @@ namespace DnDScribe.CompanionSetup
             if (python == null) throw new InvalidOperationException("Python 3.11 ou 3.12 não foi encontrado. Instale o Python e execute este instalador novamente.");
 
             string venvPython = Path.Combine(venvDir, "Scripts", "python.exe");
-            if (!File.Exists(venvPython))
+            bool runtimeHealthy = false;
+            if (File.Exists(venvPython))
             {
-                Append("Criando o ambiente isolado…");
-                Run(python.FileName, JoinArgs(python.Prefix, "-m venv " + Quote(venvDir)), null, 300000);
+                Append("Validando o ambiente Python já instalado para esta versão…");
+                try
+                {
+                    Run(venvPython, "-m pip check", versionDir, 120000);
+                    Run(
+                        venvPython,
+                        "-c \"import ctranslate2, faster_whisper, fastapi; print('runtime-ok', ctranslate2.__version__)\"",
+                        versionDir,
+                        120000);
+                    runtimeHealthy = true;
+                }
+                catch
+                {
+                    Append("O ambiente desta versão está incompleto; ele será recriado.");
+                }
             }
 
-            Append("Instalando o motor de transcrição e as bibliotecas CUDA. Isso pode levar alguns minutos…");
-            Run(venvPython, "-m pip install --upgrade pip==26.1.2 setuptools==83.0.0", null, 600000);
-            Run(venvPython, "-m pip install --upgrade " + Quote(versionDir), null, 1800000);
+            if (!runtimeHealthy)
+            {
+                Append("Criando o ambiente Python isolado desta versão…");
+                SafeDelete(runtimeVersionDir, baseDir);
+                Directory.CreateDirectory(runtimeVersionDir);
+                Run(python.FileName, JoinArgs(python.Prefix, "-m venv " + Quote(venvDir)), null, 300000);
+                venvPython = Path.Combine(venvDir, "Scripts", "python.exe");
+
+                Append("Instalando o motor de transcrição e as bibliotecas CUDA. Isso pode levar alguns minutos…");
+                Run(venvPython, "-m pip install --upgrade pip==26.1.2 setuptools==83.0.0", null, 600000);
+                Run(venvPython, "-m pip install " + Quote(versionDir), null, 1800000);
+
+                Append("Validando o ambiente isolado antes de ativar a versão…");
+                Run(venvPython, "-m pip check", versionDir, 120000);
+                Run(
+                    venvPython,
+                    "-c \"import ctranslate2, faster_whisper, fastapi; print('runtime-ok', ctranslate2.__version__)\"",
+                    versionDir,
+                    120000);
+            }
+
+            if (!File.Exists(venvPython)) throw new InvalidOperationException("O ambiente Python isolado não foi preparado corretamente.");
 
             string trayPath = InstallTray(baseDir);
             File.WriteAllText(Path.Combine(baseDir, "data-root.txt"), selectedRoot);
