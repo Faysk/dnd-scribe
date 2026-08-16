@@ -19,7 +19,7 @@ namespace DnDScribe.CompanionSetup
 
     internal sealed class SetupForm : Form
     {
-        private const string Version = "0.4.0";
+        private const string Version = "0.4.1";
         private const string PayloadResource = "DnDScribe.CompanionPayload.zip";
         private const string TrayResource = "DnDScribe.CompanionTray.exe";
         private readonly TextBox dataRoot = new TextBox();

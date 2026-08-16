@@ -89,7 +89,7 @@ def test_central_local_api_flow(tmp_path, monkeypatch):
         jobs = client.get("/api/jobs")
 
     assert health.status_code == 200
-    assert health.json()["companion"]["version"] == "0.4.0"
+    assert health.json()["companion"]["version"] == "0.4.1"
     assert metadata.json()["title"] == "A memória como preço"
     assert review.json()["segment"]["text"] == "Baróvia"
     assert review.json()["segment"]["original_text"] == "Barovia"

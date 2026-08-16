@@ -96,7 +96,7 @@ namespace DnDScribe.CompanionTray
 
     internal sealed class TrayContext : ApplicationContext
     {
-        private const string Version = "0.4.0";
+        private const string Version = "0.4.1";
         private const string EditUrl = "https://dnd.faysk.dev/edit/";
         private const string ServiceUrl = "http://127.0.0.1:8765";
         private readonly string baseDir;
@@ -107,7 +107,7 @@ namespace DnDScribe.CompanionTray
         private readonly ToolStripMenuItem statusItem = new ToolStripMenuItem("Verificando…");
         private readonly ToolStripMenuItem progressItem = new ToolStripMenuItem();
         private readonly ToolStripMenuItem toggleItem = new ToolStripMenuItem("Iniciar serviço");
-        private readonly ToolStripMenuItem updateItem = new ToolStripMenuItem("Atualizar componentes");
+        private readonly ToolStripMenuItem updateItem = new ToolStripMenuItem("Reparar componentes");
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         private readonly System.Windows.Forms.Timer qaTimer = new System.Windows.Forms.Timer();
         private bool polling;
@@ -261,12 +261,12 @@ namespace DnDScribe.CompanionTray
         {
             if (updating)
             {
-                statusItem.Text = "● Atualizando componentes";
+                statusItem.Text = "● Reparando componentes";
                 progressItem.Text = "Aguarde…";
                 progressItem.Visible = true;
                 toggleItem.Enabled = false;
                 updateItem.Enabled = false;
-                tray.Text = "DnD Scribe · atualizando";
+                tray.Text = "DnD Scribe · reparando";
                 SetIcon(Color.FromArgb(220, 172, 89));
                 return;
             }
