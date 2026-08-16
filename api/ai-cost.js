@@ -4,6 +4,7 @@ const {
   verifyDiscordSignature
 } = require('../lib/discord-interactions');
 const { handlePipelineRecovery } = require('../lib/pipeline-recovery');
+const { handleCompanionRelease } = require('../lib/companion-release');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
@@ -245,6 +246,15 @@ from ledger_rows;`,
 
 module.exports = async function handler(req, res) {
   const url = new URL(req.url, `https://${req.headers.host || 'localhost'}`);
+  if (url.searchParams.get('companionRelease') === '1') {
+    if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    try {
+      return sendJson(res, 200, await handleCompanionRelease(req));
+    } catch (error) {
+      console.error('companion-release failed', error);
+      return sendJson(res, error.statusCode || 500, { ok: false, error: error.message || String(error) });
+    }
+  }
   if (url.searchParams.get('discordInteractions') === '1' || url.pathname === '/api/discord/interactions') {
     try {
       return await handleDiscordEndpoint(req, res);
