@@ -49,12 +49,15 @@ const migration = fs.readFileSync(
   path.join(root, 'supabase', 'migrations', '20260816195300_summary_api_v1.sql'),
   'utf8'
 );
-for (const table of ['external_api_clients', 'external_api_keys', 'external_api_usage_windows']) {
+for (const table of ['external_api_clients', 'external_api_keys']) {
   assert.match(migration, new RegExp(`create table if not exists public\\.${table}`));
   assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
   assert.match(migration, new RegExp(`revoke all privileges on public\\.${table}`));
 }
 assert.match(migration, /key_hash char\(64\) not null unique/);
+assert.match(migration, /rate_window_start timestamptz/);
+assert.match(migration, /rate_window_count integer not null default 0/);
+assert.doesNotMatch(migration, /external_api_usage_windows/);
 assert.doesNotMatch(migration, /key_secret|secret_key|plaintext/i);
 
 const docs = fs.readFileSync(path.join(root, 'docs', 'API_RESUMOS_V1.md'), 'utf8');
