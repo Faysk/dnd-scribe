@@ -1,5 +1,8 @@
 const CAMPAIGN_SLUG = 'yuhara-main';
 const PAGE_SIZE = 120;
+const TRANSCRIPT_PREFETCH_MARGIN = '1200px 0px';
+
+let transcriptAutoLoadObserver = null;
 
 const state = {
   auth: {
@@ -266,6 +269,7 @@ function sessionCard(session) {
 }
 
 function renderHome() {
+  disconnectTranscriptAutoLoad();
   showAuthenticatedHeader();
   const segmentTotal = state.sessions.reduce((total, session) => total + Number(session.segments || 0), 0);
   app.innerHTML = `
@@ -329,6 +333,7 @@ function transcriptRow(segment) {
 }
 
 function renderSummary() {
+  disconnectTranscriptAutoLoad();
   const session = state.reader.session;
   if (!session) return renderLoading('Abrindo o resumo…');
   app.innerHTML = `
@@ -361,15 +366,94 @@ function renderMarkdown(markdown) {
   });
 }
 
+function transcriptLoadedLabel(reader = state.reader) {
+  return reader.query || reader.speaker
+    ? `${reader.segments.length.toLocaleString('pt-BR')} resultado${reader.segments.length === 1 ? '' : 's'}`
+    : `${reader.segments.length.toLocaleString('pt-BR')} de ${reader.total.toLocaleString('pt-BR')} falas`;
+}
+
+function disconnectTranscriptAutoLoad() {
+  if (!transcriptAutoLoadObserver) return;
+  transcriptAutoLoadObserver.disconnect();
+  transcriptAutoLoadObserver = null;
+}
+
+function transcriptLoadMoreMarkup(reader = state.reader) {
+  if (reader.loadError) {
+    return `<button class="secondary-button" type="button" data-load-more>Tentar carregar novamente</button>`;
+  }
+  return `<span class="load-more-status">${reader.loading ? 'Carregando mais falas…' : ''}</span>`;
+}
+
+function updateTranscriptLoadMore() {
+  const reader = state.reader;
+  const count = document.querySelector('[data-transcript-status-count]');
+  if (count) count.textContent = transcriptLoadedLabel(reader);
+
+  let sentinel = document.querySelector('[data-transcript-sentinel]');
+  if (!reader.cursor) {
+    disconnectTranscriptAutoLoad();
+    sentinel?.remove();
+    return;
+  }
+
+  if (!sentinel) {
+    const list = document.querySelector('#transcriptList');
+    if (!list) return;
+    list.insertAdjacentHTML(
+      'afterend',
+      `<div class="load-more" data-transcript-sentinel aria-live="polite" aria-busy="${reader.loading ? 'true' : 'false'}"></div>`
+    );
+    sentinel = document.querySelector('[data-transcript-sentinel]');
+  }
+
+  sentinel.setAttribute('aria-busy', reader.loading ? 'true' : 'false');
+  sentinel.innerHTML = transcriptLoadMoreMarkup(reader);
+}
+
+function setupTranscriptAutoLoad() {
+  disconnectTranscriptAutoLoad();
+  const reader = state.reader;
+  const sentinel = document.querySelector('[data-transcript-sentinel]');
+  if (!sentinel || !reader.cursor || reader.loading || reader.loadError) return;
+
+  if (!('IntersectionObserver' in window)) {
+    sentinel.innerHTML = '<button class="secondary-button" type="button" data-load-more>Carregar mais falas</button>';
+    return;
+  }
+
+  transcriptAutoLoadObserver = new IntersectionObserver(entries => {
+    if (!entries.some(entry => entry.isIntersecting) || reader.loading || !reader.cursor) return;
+    disconnectTranscriptAutoLoad();
+    loadTranscript({ append: true }).catch(error => {
+      reader.loadError = error?.message || String(error);
+      updateTranscriptLoadMore();
+      showToast(reader.loadError);
+    });
+  }, { rootMargin: TRANSCRIPT_PREFETCH_MARGIN });
+  transcriptAutoLoadObserver.observe(sentinel);
+}
+
+function appendTranscriptRows(segments = []) {
+  const list = document.querySelector('#transcriptList');
+  if (!list) {
+    renderReader();
+    return;
+  }
+  if (segments.length) {
+    list.insertAdjacentHTML('beforeend', segments.map(transcriptRow).join(''));
+  }
+  updateTranscriptLoadMore();
+  setupTranscriptAutoLoad();
+}
+
 function renderReader() {
   const reader = state.reader;
   if (!reader.session) {
     renderLoading('Preparando a sessão…');
     return;
   }
-  const loadedLabel = reader.query || reader.speaker
-    ? `${reader.segments.length.toLocaleString('pt-BR')} resultado${reader.segments.length === 1 ? '' : 's'}`
-    : `${reader.segments.length.toLocaleString('pt-BR')} de ${reader.total.toLocaleString('pt-BR')} falas`;
+  const loadedLabel = transcriptLoadedLabel(reader);
   app.innerHTML = `
     <article class="reader">
       ${readerHeader(reader.session)}
@@ -388,23 +472,23 @@ function renderReader() {
         </label>
       </div>
       <div class="transcript-status">
-        <span>${escapeHtml(loadedLabel)}</span>
+        <span data-transcript-status-count>${escapeHtml(loadedLabel)}</span>
         ${(reader.query || reader.speaker) ? '<button class="text-button" type="button" data-clear-filters>Limpar filtros</button>' : ''}
       </div>
       <ol class="transcript-list" id="transcriptList">${reader.segments.map(transcriptRow).join('')}</ol>
       ${reader.cursor ? `
-        <div class="load-more">
-          <button class="secondary-button" type="button" data-load-more ${reader.loading ? 'disabled' : ''}>
-            ${reader.loading ? 'Carregando…' : 'Carregar mais falas'}
-          </button>
+        <div class="load-more" data-transcript-sentinel aria-live="polite" aria-busy="${reader.loading ? 'true' : 'false'}">
+          ${transcriptLoadMoreMarkup(reader)}
         </div>
       ` : ''}
       ${!reader.segments.length ? '<section class="empty-state"><h2>Nenhuma fala encontrada</h2><p>Tente outro termo ou remova o filtro de personagem.</p></section>' : ''}
     </article>
   `;
+  setupTranscriptAutoLoad();
 }
 
 function renderError(error, retry = 'route') {
+  disconnectTranscriptAutoLoad();
   app.innerHTML = `
     <section class="error-state">
       <span class="eyebrow">Algo interrompeu a leitura</span>
@@ -437,13 +521,18 @@ async function loadSessions(force = false) {
 
 async function loadTranscript({ append = false } = {}) {
   const reader = state.reader;
-  if (reader.loading) return;
+  if (reader.loading || (append && !reader.cursor)) return;
   reader.loading = true;
+  reader.loadError = '';
   if (!append) {
     reader.segments = [];
     reader.cursor = null;
+    renderReader();
+  } else {
+    disconnectTranscriptAutoLoad();
+    updateTranscriptLoadMore();
   }
-  renderReader();
+
   const params = new URLSearchParams({
     campaignSlug: CAMPAIGN_SLUG,
     sourceSessionId: reader.sourceSessionId,
@@ -452,19 +541,34 @@ async function loadTranscript({ append = false } = {}) {
   if (append && reader.cursor) params.set('cursor', reader.cursor);
   if (reader.query) params.set('q', reader.query);
   if (reader.speaker) params.set('speaker', reader.speaker);
+
+  let pageSegments = [];
   try {
     const payload = await api(`/api/library-transcript?${params}`);
     reader.session = payload.session;
     reader.speakers = payload.speakers || [];
     reader.total = Number(payload.total || 0);
-    reader.segments = append
-      ? [...reader.segments, ...(payload.segments || [])]
-      : (payload.segments || []);
+
+    const incoming = payload.segments || [];
+    if (append) {
+      const existingIds = new Set(reader.segments.map(segment => String(segment.id)));
+      pageSegments = incoming.filter(segment => !existingIds.has(String(segment.id)));
+      reader.segments = [...reader.segments, ...pageSegments];
+    } else {
+      pageSegments = incoming;
+      reader.segments = incoming;
+    }
     reader.cursor = payload.nextCursor || null;
+  } catch (error) {
+    if (append) reader.loadError = error?.message || String(error);
+    throw error;
   } finally {
     reader.loading = false;
+    if (append) updateTranscriptLoadMore();
   }
-  renderReader();
+
+  if (append) appendTranscriptRows(pageSegments);
+  else renderReader();
 }
 
 async function loadSummary() {
