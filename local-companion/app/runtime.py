@@ -11,6 +11,7 @@ from typing import Any
 
 
 _DLL_HANDLES: list[Any] = []
+_DLL_PATHS: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -81,17 +82,19 @@ def configure_cuda_dlls() -> list[str]:
         site_packages / "cuda_nvrtc" / "bin",
     ]
     configured: list[str] = []
-    known = {str(item) for item in _DLL_HANDLES}
     for directory in candidates:
         if not directory.is_dir():
             continue
-        resolved = str(directory)
-        if resolved not in known:
+        resolved = str(directory.resolve())
+        key = resolved.lower()
+        if key not in _DLL_PATHS:
             _DLL_HANDLES.append(os.add_dll_directory(resolved))
+            _DLL_PATHS.add(key)
         configured.append(resolved)
     if configured:
         current = os.environ.get("PATH", "")
-        missing = [item for item in configured if item.lower() not in current.lower()]
+        current_lower = current.lower()
+        missing = [item for item in configured if item.lower() not in current_lower]
         if missing:
             os.environ["PATH"] = os.pathsep.join(missing + [current])
     return configured
