@@ -56,7 +56,7 @@
     const selected = document.querySelector('input[name="transcriptionProfile"]:checked')?.value || "detailed";
     const profile = sampleMinutes ? "fast" : selected;
     if (!profileSupported(profile)) {
-      alert("Atualize o DnD Scribe Companion para a versão 0.4.0 ou mais recente antes de iniciar uma nova transcrição.");
+      alert("Atualize o DnD Scribe Companion para a versão 0.4.1 ou mais recente antes de iniciar uma nova transcrição.");
       return;
     }
     try {
