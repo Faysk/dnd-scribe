@@ -695,7 +695,7 @@ textarea:focus, input:focus { border-color: var(--purple); }
   gap: 8px;
   min-height: 90px;
   padding: 18px;
-  background: var(--panel);
+  background: var(--paper-2);
 }
 .api-integration-overview span,
 .api-scope-readonly > span {
@@ -710,7 +710,7 @@ textarea:focus, input:focus { border-color: var(--purple); }
 .api-secret-value {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
-.api-integration-overview code { color: var(--gold-bright); overflow-wrap: anywhere; }
+.api-integration-overview code { color: var(--acid); overflow-wrap: anywhere; }
 .api-key-list { display: grid; gap: 12px; }
 .api-key-empty {
   display: grid;
@@ -720,14 +720,14 @@ textarea:focus, input:focus { border-color: var(--purple); }
   color: var(--muted);
   border-radius: 12px;
 }
-.api-key-empty strong { color: var(--paper); }
+.api-key-empty strong { color: var(--ink); }
 .api-key-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 20px;
   padding: 20px;
   border: 1px solid var(--line);
-  background: var(--panel);
+  background: var(--paper-2);
   border-radius: 12px;
 }
 .api-key-card.revoked,
@@ -741,7 +741,7 @@ textarea:focus, input:focus { border-color: var(--purple); }
   max-width: 100%;
   margin-top: 10px;
   overflow: hidden;
-  color: var(--gold-bright);
+  color: var(--acid);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -766,7 +766,7 @@ textarea:focus, input:focus { border-color: var(--purple); }
   font-size: 11px;
 }
 .api-key-meta span { display: inline-flex; gap: 5px; }
-.api-key-meta strong { color: var(--paper-soft); font-weight: 650; }
+.api-key-meta strong { color: var(--ink); font-weight: 650; }
 .api-key-actions { display: flex; flex-wrap: wrap; align-content: start; justify-content: flex-end; gap: 8px; }
 .danger-action { color: #e59383 !important; }
 .api-key-dialog,
@@ -782,8 +782,8 @@ textarea:focus, input:focus { border-color: var(--purple); }
   width: 100%;
   padding: 11px 12px;
   border: 1px solid var(--line);
-  color: var(--paper);
-  background: var(--ink-soft);
+  color: var(--ink);
+  background: var(--paper-2);
   border-radius: 8px;
 }
 .api-key-dialog textarea { min-height: 105px; resize: vertical; }
@@ -793,7 +793,7 @@ textarea:focus, input:focus { border-color: var(--purple); }
   gap: 6px 14px;
   padding: 14px;
   border: 1px solid var(--line);
-  background: var(--ink-soft);
+  background: var(--paper-2);
   border-radius: 9px;
 }
 .api-scope-readonly small { grid-column: 1 / -1; color: var(--muted); }
@@ -806,8 +806,8 @@ textarea:focus, input:focus { border-color: var(--purple); }
   background: rgba(229,147,131,.08);
   border-radius: 0 8px 8px 0;
 }
-.api-secret-warning strong { color: var(--paper); }
-.api-secret-value { min-height: 84px; resize: none; color: var(--gold-bright) !important; overflow-wrap: anywhere; }
+.api-secret-warning strong { color: var(--ink); }
+.api-secret-value { min-height: 84px; resize: none; color: var(--acid) !important; overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .api-integration-overview { grid-template-columns: 1fr; }
   .api-key-card { grid-template-columns: 1fr; }
