@@ -79,8 +79,9 @@ class LocalCatalog:
         value = dict(row)
         if "payload_json" in value:
             value["payload"] = json.loads(value.pop("payload_json"))
-        progress_json = value.pop("progress_json", None)
-        value["progress"] = json.loads(progress_json) if progress_json else None
+        if "progress_json" in value:
+            progress_json = value.pop("progress_json")
+            value["progress"] = json.loads(progress_json) if progress_json else None
         return value
 
     def ensure_session(
