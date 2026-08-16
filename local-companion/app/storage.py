@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from pathlib import Path
 from threading import Lock
 from typing import Any
+
+from .fs import atomic_write_json
 
 
 class SessionStore:
@@ -31,14 +31,7 @@ class SessionStore:
         session_dir.mkdir(parents=True, exist_ok=True)
         path = session_dir / "session.json"
         with self._lock:
-            fd, temporary = tempfile.mkstemp(dir=session_dir, suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                    json.dump(data, handle, ensure_ascii=False, indent=2)
-                os.replace(temporary, path)
-            finally:
-                if os.path.exists(temporary):
-                    os.unlink(temporary)
+            atomic_write_json(path, data)
 
     def list(self) -> list[dict[str, Any]]:
         sessions = []
