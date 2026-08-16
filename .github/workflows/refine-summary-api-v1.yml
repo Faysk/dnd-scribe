@@ -1,0 +1,29 @@
+name: Refine summary API v1
+
+on:
+  push:
+    branches:
+      - feat/summary-api-v1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python tools/_refine_summary_api_rate_limit.py
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - name: Commit refinement
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/summary-api.js
+          git commit -m "refactor(api): use bounded per-key rate window"
+          git push origin HEAD:feat/summary-api-v1
