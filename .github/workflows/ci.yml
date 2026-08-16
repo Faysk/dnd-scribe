@@ -62,4 +62,33 @@ jobs:
           python-version: '3.12'
 
       - name: Compile Python tools
-        run: python -m compileall -q tools
+        run: python -m compileall -q tools local-companion/app local-companion/tests
+
+  companion-tests:
+    name: Companion regression tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install lightweight test dependencies
+        run: python -m pip install 'fastapi==0.140.0' 'httpx>=0.28,<1' 'pytest>=8.4,<9' 'python-multipart==0.0.32'
+
+      - name: Run companion tests
+        env:
+          PYTHONPATH: local-companion
+        run: pytest -q local-companion/tests
+
+      - name: Check local UI JavaScript syntax
+        run: |
+          node --check local-companion/static/app.js
+          node --check local-companion/static/processing-v04.js
+          node --check web/central-local/app.js
+          node --check web/central-local/processing-v04.js
