@@ -182,7 +182,12 @@ def ensure_manifest(session: dict) -> dict:
 
 
 def _preflight(profile: str, cpu: bool) -> dict:
-    health_payload = build_health(PATHS, store, catalog)
+    health_payload = build_health(
+        PATHS,
+        store,
+        catalog,
+        force_storage_probe=True,
+    )
     atomic_replace = health_payload["storage"].get("atomic_replace") or {}
     if not health_payload["storage"].get("writable") or not atomic_replace.get("ok"):
         detail = atomic_replace.get("error") or health_payload["storage"].get("write_error")
@@ -395,7 +400,6 @@ def select_and_import_archive() -> dict:
         )
         if ready_for_sample:
             try:
-                _preflight("fast", False)
                 session_value = transcribe(
                     session_value["recording_id"],
                     TranscribeRequest(profile="fast", sample_minutes=5),
