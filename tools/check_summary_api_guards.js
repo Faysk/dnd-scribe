@@ -67,6 +67,13 @@ assert.match(docs, /updatedAfter/);
 assert.match(docs, /If-None-Match/);
 assert.match(docs, /300 requests \/ minuto/);
 
+const vercel = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8'));
+const rewriteMap = new Map((vercel.rewrites || []).map(item => [item.source, item.destination]));
+assert.equal(rewriteMap.get('/api/v1/health'), '/api/summary-api-v1?summaryApiRoute=health');
+assert.equal(rewriteMap.get('/api/v1/summaries'), '/api/summary-api-v1?summaryApiRoute=summaries');
+assert.equal(rewriteMap.get('/api/v1/summaries/:id'), '/api/summary-api-v1?summaryApiRoute=detail&summaryId=:id');
+assert.equal(rewriteMap.get('/api/integrations/api-keys'), '/api/integration-api-keys');
+
 const openapi = fs.readFileSync(path.join(root, 'web', 'openapi-summary-v1.yaml'), 'utf8');
 assert.match(openapi, /openapi: 3\.1\.0/);
 assert.match(openapi, /\/api\/v1\/summaries:/);

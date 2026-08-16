@@ -15,6 +15,30 @@
   ],
   "rewrites": [
     {
+      "source": "/api/v1/health",
+      "destination": "/api/summary-api-v1?summaryApiRoute=health"
+    },
+    {
+      "source": "/api/v1/summaries",
+      "destination": "/api/summary-api-v1?summaryApiRoute=summaries"
+    },
+    {
+      "source": "/api/v1/summaries/:id",
+      "destination": "/api/summary-api-v1?summaryApiRoute=detail&summaryId=:id"
+    },
+    {
+      "source": "/api/integrations/api-keys",
+      "destination": "/api/integration-api-keys"
+    },
+    {
+      "source": "/api/integrations/api-keys/revoke",
+      "destination": "/api/integration-api-key-revoke"
+    },
+    {
+      "source": "/api/integrations/api-keys/rotate",
+      "destination": "/api/integration-api-key-rotate"
+    },
+    {
       "source": "/central-local",
       "destination": "/central-local/index.html"
     },
