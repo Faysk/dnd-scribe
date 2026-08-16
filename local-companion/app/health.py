@@ -5,6 +5,7 @@ import platform
 import shutil
 import sys
 import tempfile
+import time
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,10 @@ from .runtime import probe_cuda, public_profiles
 from .storage import SessionStore
 
 
+_STORAGE_PROBE_TTL_SECONDS = 60.0
+_STORAGE_PROBE_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
 def _writable(directory: Path) -> tuple[bool, str | None]:
     try:
         descriptor, temporary = tempfile.mkstemp(dir=directory, prefix=".health-", suffix=".tmp")
@@ -24,6 +29,27 @@ def _writable(directory: Path) -> tuple[bool, str | None]:
         return True, None
     except OSError as error:
         return False, f"{type(error).__name__}: {error}"
+
+
+def _storage_probe(directory: Path, *, force: bool = False) -> dict[str, Any]:
+    key = str(directory.resolve())
+    now = time.monotonic()
+    cached = _STORAGE_PROBE_CACHE.get(key)
+    if not force and cached and now - cached[0] < _STORAGE_PROBE_TTL_SECONDS:
+        return dict(cached[1])
+    writable, write_error = _writable(directory)
+    atomic_replace = atomic_replace_probe(directory) if writable else {
+        "ok": False,
+        "error": write_error,
+    }
+    result = {
+        "writable": writable,
+        "write_error": write_error,
+        "atomic_replace": atomic_replace,
+        "checked_at_monotonic": now,
+    }
+    _STORAGE_PROBE_CACHE[key] = (now, result)
+    return dict(result)
 
 
 def _cuda_status() -> dict[str, Any]:
@@ -45,9 +71,10 @@ def build_health(
     paths: AppPaths,
     store: SessionStore,
     catalog: LocalCatalog | None = None,
+    *,
+    force_storage_probe: bool = False,
 ) -> dict[str, Any]:
-    writable, write_error = _writable(paths.storage)
-    atomic_replace = atomic_replace_probe(paths.sessions)
+    storage_probe = _storage_probe(paths.sessions, force=force_storage_probe)
     disk = shutil.disk_usage(paths.storage)
     sessions = store.list()
     active = [
@@ -61,7 +88,7 @@ def build_health(
         app_version = "development"
 
     cuda = _cuda_status()
-    healthy_storage = writable and atomic_replace["ok"]
+    healthy_storage = storage_probe["writable"] and storage_probe["atomic_replace"]["ok"]
     return {
         "status": "ok" if healthy_storage else "degraded",
         "app": {
@@ -76,9 +103,9 @@ def build_health(
             "inbox": str(paths.inbox),
             "sessions": str(paths.sessions),
             "models": str(paths.models),
-            "writable": writable,
-            "write_error": write_error,
-            "atomic_replace": atomic_replace,
+            "writable": storage_probe["writable"],
+            "write_error": storage_probe["write_error"],
+            "atomic_replace": storage_probe["atomic_replace"],
             "free_bytes": disk.free,
             "total_bytes": disk.total,
         },
