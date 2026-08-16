@@ -48,6 +48,7 @@ class LocalCatalog:
                     status text not null
                         check (status in ('queued', 'running', 'succeeded', 'failed', 'cancelled')),
                     payload_json text not null,
+                    progress_json text,
                     attempts integer not null default 0,
                     error text,
                     created_at text not null,
@@ -64,6 +65,12 @@ class LocalCatalog:
                     where status in ('queued', 'running');
                 """
             )
+            columns = {
+                row["name"]
+                for row in connection.execute("pragma table_info(jobs)").fetchall()
+            }
+            if "progress_json" not in columns:
+                connection.execute("alter table jobs add column progress_json text")
 
     @staticmethod
     def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -72,6 +79,8 @@ class LocalCatalog:
         value = dict(row)
         if "payload_json" in value:
             value["payload"] = json.loads(value.pop("payload_json"))
+        progress_json = value.pop("progress_json", None)
+        value["progress"] = json.loads(progress_json) if progress_json else None
         return value
 
     def ensure_session(
@@ -135,14 +144,15 @@ class LocalCatalog:
                 connection.execute(
                     """
                     insert into jobs (
-                        id, recording_id, job_type, status, payload_json, created_at
-                    ) values (?, ?, ?, 'queued', ?, ?)
+                        id, recording_id, job_type, status, payload_json, progress_json, created_at
+                    ) values (?, ?, ?, 'queued', ?, ?, ?)
                     """,
                     (
                         job_id,
                         recording_id,
                         job_type,
                         json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                        json.dumps({"stage": "queued", "percent": 0}, separators=(",", ":")),
                         utc_now(),
                     ),
                 )
@@ -155,6 +165,19 @@ class LocalCatalog:
             row = connection.execute(
                 "select * from jobs where id = ?",
                 (job_id,),
+            ).fetchone()
+        return self._row(row)
+
+    def latest_job(self, recording_id: str) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                select * from jobs
+                where recording_id = ? and job_type = 'transcribe'
+                order by created_at desc
+                limit 1
+                """,
+                (recording_id,),
             ).fetchone()
         return self._row(row)
 
@@ -205,6 +228,14 @@ class LocalCatalog:
                 (utc_now(), job_id),
             )
 
+    def update_job_progress(self, job_id: str, progress: dict[str, Any]) -> None:
+        encoded = json.dumps(progress, ensure_ascii=False, separators=(",", ":"))
+        with self.connect() as connection:
+            connection.execute(
+                "update jobs set progress_json = ? where id = ?",
+                (encoded, job_id),
+            )
+
     def finish_job(self, job_id: str, *, status: str, error: str | None = None) -> None:
         if status not in FINAL_JOB_STATUSES:
             raise ValueError("Status final inválido")
@@ -248,11 +279,15 @@ class LocalCatalog:
                     update jobs
                     set status = 'queued',
                         error = null,
+                        progress_json = ?,
                         started_at = null,
                         finished_at = null
                     where id = ?
                     """,
-                    (job_id,),
+                    (
+                        json.dumps({"stage": "queued", "percent": 0}, separators=(",", ":")),
+                        job_id,
+                    ),
                 )
             except sqlite3.IntegrityError as error:
                 raise ValueError("Já existe outro job ativo para a sessão") from error
