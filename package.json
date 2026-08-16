@@ -20,7 +20,7 @@
     "smoke:routes": "node scripts/smoke-production-routes.js",
     "check:session-images": "node tools/check_session_image_storage.js",
     "release:companion": "node tools/publish_companion_release.js",
-    "check:summary-api": "node --check lib/summary-api.js && node tools/check_summary_api_guards.js"
+    "check:summary-api": "node --check lib/summary-api.js && node --check tools/test_summary_api_contract.js && node tools/check_summary_api_guards.js && node tools/test_summary_api_contract.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.111.0",
