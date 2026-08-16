@@ -1,0 +1,61 @@
+name: Temporary API key dialog contrast fix
+
+on:
+  push:
+    branches:
+      - fix/api-key-dialog-contrast
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/api-key-dialog-contrast
+          fetch-depth: 0
+      - name: Patch dialog form contrast
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('web/central-local/styles.css')
+          text = path.read_text(encoding='utf-8')
+          marker = '.review-dialog textarea { min-height: 180px; }'
+          addition = '''.review-dialog textarea { min-height: 180px; }
+.review-dialog input,
+.review-dialog textarea,
+.review-dialog select {
+  color: var(--ink);
+  caret-color: var(--ink);
+}
+.review-dialog input::placeholder,
+.review-dialog textarea::placeholder {
+  color: var(--muted);
+  opacity: .78;
+}
+.review-dialog select option {
+  color: var(--ink);
+  background: var(--paper);
+}'''
+          if addition in text:
+              raise SystemExit(0)
+          if marker not in text:
+              raise SystemExit('dialog textarea marker not found')
+          path.write_text(text.replace(marker, addition, 1), encoding='utf-8')
+          PY
+      - name: Commit fix
+        shell: bash
+        run: |
+          if git diff --quiet -- web/central-local/styles.css; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/central-local/styles.css
+          git commit -m "fix(ui): keep API key dialog fields readable in dark theme"
+          git push origin HEAD:fix/api-key-dialog-contrast
