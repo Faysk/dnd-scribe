@@ -66,9 +66,10 @@ Cada release usa um runtime próprio:
 
 O Python global é usado somente para criar o ambiente isolado. Depois disso o
 tray inicia o serviço diretamente pelo `python.exe` do runtime daquela versão.
-O instalador prepara o novo venv em staging, instala as dependências, executa
-`pip check` e um smoke test de `ctranslate2`, `faster_whisper` e FastAPI antes
-de ativar o runtime. Um runtime antigo não é reutilizado pela release nova.
+O instalador cria o venv diretamente no diretório versionado, instala as
+dependências, executa `pip check` e um smoke test de `ctranslate2`,
+`faster_whisper` e FastAPI e só então grava a versão como ativa. Um runtime de
+outra release não é reutilizado pela release nova.
 
 O motor de inferência crítico é versionado no pacote (`faster-whisper` e
 `ctranslate2`), assim como cuBLAS e cuDNN instalados via Python no Windows. O
