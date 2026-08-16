@@ -113,6 +113,23 @@ def test_runtime_prefers_gpu_fp16_and_cpu_stays_manual():
     assert cpu.cpu_requested is True
 
 
+def test_runtime_never_falls_back_to_cpu_silently():
+    try:
+        resolve_plan(
+            "fast",
+            cpu=False,
+            cuda_status={
+                "available": False,
+                "supported_compute_types": [],
+                "error": "CUDA indisponível",
+            },
+        )
+    except RuntimeError as error:
+        assert "CPU só será usada" in str(error)
+    else:
+        raise AssertionError("O planner caiu para CPU sem solicitação explícita")
+
+
 def test_manifest_and_publication_exclude_heavy_content(tmp_path):
     paths = load_paths(
         {"CRAIG_TO_TEXT_ROOT": str(tmp_path / "archive")},
@@ -202,10 +219,10 @@ def test_health_reports_storage_without_exposing_session_content(tmp_path, monke
     monkeypatch.setattr(
         "app.health._cuda_status",
         lambda: {
-            "available": False,
-            "device_count": 0,
-            "supported_compute_types": [],
-            "devices": [],
+            "available": True,
+            "device_count": 1,
+            "supported_compute_types": ["float16", "int8_float16"],
+            "devices": [{"index": 0, "name": "Test RTX", "memory_total_mib": 8192, "memory_free_mib": 7000}],
             "dll_directories": [],
             "ctranslate2_version": "test",
             "error": None,
@@ -216,6 +233,7 @@ def test_health_reports_storage_without_exposing_session_content(tmp_path, monke
     serialized = json.dumps(result, ensure_ascii=False)
 
     assert result["status"] == "ok"
+    assert result["readiness"]["default_processing"] is True
     assert result["storage"]["mode"] == "configured"
     assert result["storage"]["atomic_replace"]["ok"] is True
     assert result["sessions"]["total"] == 1
