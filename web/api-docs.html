@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="Documentação da API de Resumos v1 do DnD Scribe." />
+  <title>API de Resumos v1 — DnD Scribe</title>
+  <link rel="stylesheet" href="/api-docs.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">20</span><strong>DnD Scribe · API</strong></a>
+    <nav><a href="/">Sessões</a><a href="/edit/">Edit</a><a href="/docs/api/openapi.yaml">OpenAPI</a></nav>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Navegação da documentação">
+      <strong>API v1</strong>
+      <a href="#quickstart">Quickstart</a>
+      <a href="#auth">Autenticação</a>
+      <a href="#endpoints">Endpoints</a>
+      <a href="#pagination">Paginação</a>
+      <a href="#sync">Sincronização</a>
+      <a href="#cache">ETag e cache</a>
+      <a href="#limits">Rate limit</a>
+      <a href="#errors">Erros</a>
+      <a href="#examples">Exemplos</a>
+      <a href="#security">Segurança</a>
+      <a href="#versioning">Versionamento</a>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <span class="eyebrow">API DE RESUMOS · V1</span>
+        <h1>Resumos publicados, prontos para integração.</h1>
+        <p class="lede">Uma API somente leitura para bots, automações, RAG, LLMs e serviços externos consumirem os resumos que já foram publicados no DnD Scribe — sem liberar áudio, transcrição completa ou material em revisão.</p>
+        <div class="badges">
+          <span class="badge good">READ ONLY</span>
+          <span class="badge">JSON + Markdown</span>
+          <span class="badge">API Key</span>
+          <span class="badge">300 req/min</span>
+          <span class="badge">OpenAPI 3.1</span>
+        </div>
+      </header>
+
+      <section id="quickstart">
+        <span class="eyebrow">COMECE AQUI</span>
+        <h2>Quickstart</h2>
+        <div class="steps">
+          <div class="step"><strong>Receba uma API Key.</strong><br />Ela é criada no <code>Edit → Integrações</code> e começa com <code>dnd_live_</code>.</div>
+          <div class="step"><strong>Guarde a chave como segredo.</strong><br />Use variável de ambiente ou secret manager. Não coloque a chave no frontend.</div>
+          <div class="step"><strong>Liste os resumos.</strong><br />Faça um <code>GET /api/v1/summaries</code> com o header Authorization.</div>
+          <div class="step"><strong>Busque o conteúdo completo.</strong><br />Use <code>GET /api/v1/summaries/{id}</code> e, se quiser, peça <code>text/markdown</code>.</div>
+        </div>
+        <pre><code>curl \
+  -H "Authorization: Bearer $DND_SCRIBE_API_KEY" \
+  https://dnd.faysk.dev/api/v1/summaries</code></pre>
+      </section>
+
+      <section id="auth">
+        <span class="eyebrow">ACESSO</span>
+        <h2>Autenticação</h2>
+        <p>Cada chave pertence a uma única campanha. A API não recebe <code>campaignSlug</code> na rota externa: o escopo da campanha é resolvido pela própria credencial.</p>
+        <div class="callout"><strong>Escopo disponível na v1:</strong> <code>summaries:read</code>. Ele não dá acesso a áudio, ZIPs, transcrições ou ferramentas administrativas.</div>
+        <pre><code>Authorization: Bearer dnd_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</code></pre>
+        <p>A chave completa é exibida somente na criação ou rotação. O servidor armazena apenas um hash SHA-256 e um prefixo de identificação.</p>
+      </section>
+
+      <section id="endpoints">
+        <span class="eyebrow">CONTRATO</span>
+        <h2>Endpoints</h2>
+
+        <div class="endpoint"><span class="method">GET</span><code>/api/v1/health</code><p>Health check público. Não valida uma API Key específica.</p></div>
+        <pre><code>{
+  "status": "ok",
+  "apiVersion": "v1",
+  "service": "DnD Scribe Summary API",
+  "documentation": "https://dnd.faysk.dev/docs/api"
+}</code></pre>
+
+        <div class="endpoint"><span class="method">GET</span><code>/api/v1/summaries</code><p>Lista resumos publicados. A listagem é leve: retorna a descrição curta e metadados, sem o Markdown completo.</p></div>
+        <table><thead><tr><th>Parâmetro</th><th>Uso</th></tr></thead><tbody>
+          <tr><td><code>limit</code></td><td>1–100, padrão 50.</td></tr>
+          <tr><td><code>cursor</code></td><td>Cursor opaco retornado por <code>pagination.nextCursor</code>.</td></tr>
+          <tr><td><code>updatedAfter</code></td><td>ISO 8601; útil para sincronização incremental.</td></tr>
+          <tr><td><code>from</code></td><td>Data mínima da sessão, inclusiva, em YYYY-MM-DD.</td></tr>
+          <tr><td><code>to</code></td><td>Data máxima da sessão, inclusiva, em YYYY-MM-DD.</td></tr>
+          <tr><td><code>arc</code></td><td>Nome exato do arco, sem diferenciar maiúsculas/minúsculas.</td></tr>
+        </tbody></table>
+        <pre><code>{
+  "object": "list",
+  "apiVersion": "v1",
+  "data": [
+    {
+      "id": "Svz6mvN0cBUk",
+      "title": "Sessão de 15 de agosto de 2026",
+      "sessionDate": "2026-08-15",
+      "arc": "Castelo em outro plano",
+      "summary": "O grupo atravessou o portal...",
+      "updatedAt": "2026-08-16T19:30:00.000Z",
+      "webUrl": "https://dnd.faysk.dev/#/sessao/Svz6mvN0cBUk/resumo"
+    }
+  ],
+  "pagination": { "limit": 50, "hasMore": false, "nextCursor": null }
+}</code></pre>
+
+        <div class="endpoint"><span class="method">GET</span><code>/api/v1/summaries/{id}</code><p>Retorna o resumo completo de uma sessão publicada.</p></div>
+        <pre><code>{
+  "object": "session_summary",
+  "apiVersion": "v1",
+  "data": {
+    "id": "Svz6mvN0cBUk",
+    "title": "Sessão de 15 de agosto de 2026",
+    "sessionDate": "2026-08-15",
+    "arc": "Castelo em outro plano",
+    "summary": "Descrição curta do card.",
+    "summaryMarkdown": "# Sessão...\n\n## O portal\n\n...",
+    "updatedAt": "2026-08-16T19:30:00.000Z",
+    "webUrl": "https://dnd.faysk.dev/#/sessao/Svz6mvN0cBUk/resumo",
+    "coverImageUrl": "https://...",
+    "heroImageUrl": "https://..."
+  }
+}</code></pre>
+
+        <h3>Markdown puro</h3>
+        <p>No endpoint de detalhe, envie <code>Accept: text/markdown</code> para receber somente o Markdown publicado.</p>
+        <pre><code>curl \
+  -H "Authorization: Bearer $DND_SCRIBE_API_KEY" \
+  -H "Accept: text/markdown" \
+  https://dnd.faysk.dev/api/v1/summaries/Svz6mvN0cBUk</code></pre>
+      </section>
+
+      <section id="pagination">
+        <span class="eyebrow">LISTAGENS LONGAS</span>
+        <h2>Paginação por cursor</h2>
+        <p>Quando <code>pagination.hasMore</code> for <code>true</code>, envie exatamente o valor de <code>pagination.nextCursor</code> na próxima chamada. O cursor é opaco: não dependa do conteúdo interno.</p>
+        <pre><code>GET /api/v1/summaries?limit=50
+GET /api/v1/summaries?limit=50&amp;cursor=&lt;nextCursor&gt;</code></pre>
+        <p>A ordenação é por <code>updatedAt DESC</code> e depois <code>id DESC</code>.</p>
+      </section>
+
+      <section id="sync">
+        <span class="eyebrow">POLLING EFICIENTE</span>
+        <h2>Sincronização incremental</h2>
+        <p>Guarde o instante da última sincronização concluída e use <code>updatedAfter</code> para pedir somente registros alterados desde então.</p>
+        <pre><code>GET /api/v1/summaries?updatedAfter=2026-08-16T19:30:00.000Z</code></pre>
+        <div class="callout">Só avance seu checkpoint depois de percorrer todas as páginas com sucesso. Assim uma falha no meio da sincronização não faz você perder alterações.</div>
+      </section>
+
+      <section id="cache">
+        <span class="eyebrow">MENOS TRÁFEGO</span>
+        <h2>ETag e cache condicional</h2>
+        <p>Listagens e detalhes enviam <code>ETag</code>. Reenvie o valor em <code>If-None-Match</code>. Se a representação não mudou, a resposta será <code>304 Not Modified</code>, sem corpo.</p>
+        <pre><code>If-None-Match: "sum-fAbC123..."</code></pre>
+        <p>O detalhe também envia <code>Last-Modified</code>.</p>
+      </section>
+
+      <section id="limits">
+        <span class="eyebrow">PROTEÇÃO</span>
+        <h2>Rate limit</h2>
+        <p>O limite atual é <strong>300 requisições por minuto por API Key</strong>.</p>
+        <pre><code>X-RateLimit-Limit: 300
+X-RateLimit-Remaining: 294
+X-RateLimit-Reset: 1786914000</code></pre>
+        <p>Ao exceder o limite, a API responde <code>429</code> e inclui <code>Retry-After</code>. Respeite esse header e use backoff.</p>
+      </section>
+
+      <section id="errors">
+        <span class="eyebrow">FALHAS PREVISÍVEIS</span>
+        <h2>Formato de erros</h2>
+        <pre><code>{
+  "error": {
+    "code": "invalid_api_key",
+    "message": "API key invalida, expirada ou revogada."
+  }
+}</code></pre>
+        <table><thead><tr><th>HTTP</th><th>Código típico</th><th>Significado</th></tr></thead><tbody>
+          <tr><td>400</td><td><code>invalid_cursor</code></td><td>Parâmetro inválido.</td></tr>
+          <tr><td>401</td><td><code>invalid_api_key</code></td><td>Chave ausente, inválida, expirada ou revogada.</td></tr>
+          <tr><td>403</td><td><code>insufficient_scope</code></td><td>Escopo necessário não está na chave.</td></tr>
+          <tr><td>404</td><td><code>summary_not_found</code></td><td>Resumo publicado não encontrado.</td></tr>
+          <tr><td>406</td><td><code>not_acceptable</code></td><td>Formato solicitado não é aceito naquele endpoint.</td></tr>
+          <tr><td>429</td><td><code>rate_limit_exceeded</code></td><td>Limite por minuto excedido.</td></tr>
+          <tr><td>500</td><td><code>internal_error</code></td><td>Falha inesperada.</td></tr>
+        </tbody></table>
+        <p>Use o status HTTP e <code>error.code</code> para lógica. O texto de <code>message</code> pode evoluir.</p>
+      </section>
+
+      <section id="examples">
+        <span class="eyebrow">CÓDIGO</span>
+        <h2>Exemplos de consumo</h2>
+        <h3>Node.js</h3>
+        <pre><code>const apiKey = process.env.DND_SCRIBE_API_KEY;
+const response = await fetch('https://dnd.faysk.dev/api/v1/summaries?limit=20', {
+  headers: { Authorization: `Bearer ${apiKey}` }
+});
+if (!response.ok) throw new Error(`HTTP ${response.status}`);
+const payload = await response.json();
+console.log(payload.data);</code></pre>
+        <h3>Python</h3>
+        <pre><code>import os, requests
+
+response = requests.get(
+    "https://dnd.faysk.dev/api/v1/summaries",
+    headers={"Authorization": f"Bearer {os.environ['DND_SCRIBE_API_KEY']}"},
+    params={"limit": 50},
+    timeout=30,
+)
+response.raise_for_status()
+print(response.json()["data"])</code></pre>
+        <h3>RAG / LLM</h3>
+        <p>Use a listagem para descobrir documentos e o detalhe com <code>Accept: text/markdown</code> para obter o corpo a ser indexado. Armazene <code>id</code>, <code>updatedAt</code>, <code>sessionDate</code>, <code>arc</code> e <code>webUrl</code> como metadados.</p>
+      </section>
+
+      <section id="security">
+        <span class="eyebrow">SEGURANÇA</span>
+        <h2>O que é e o que não é exposto</h2>
+        <p>A API só devolve sessões com status <code>published</code> e resumo completo não vazio, dentro da campanha da chave.</p>
+        <div class="callout"><strong>Não são expostos:</strong> áudio, ZIPs, arquivos locais, transcrição completa, falas individuais, drafts, sessões em processamento, material de revisão ou dados de outra campanha.</div>
+        <p>Chaves podem ser revogadas ou rotacionadas em <strong>Edit → Integrações</strong>. A chave antiga é invalidada imediatamente na rotação.</p>
+      </section>
+
+      <section id="versioning">
+        <span class="eyebrow">COMPATIBILIDADE</span>
+        <h2>Versionamento</h2>
+        <p>O contrato externo vive em <code>/api/v1/...</code>. Dentro da v1 podemos adicionar campos sem remover os existentes. Consumidores devem ignorar propriedades desconhecidas e nunca interpretar o cursor.</p>
+        <p>Uma mudança incompatível será publicada em uma nova versão, por exemplo <code>/api/v2/...</code>.</p>
+        <p>A especificação OpenAPI 3.1 está em <a href="/docs/api/openapi.yaml"><code>/docs/api/openapi.yaml</code></a>.</p>
+      </section>
+
+      <footer class="footer">DnD Scribe Summary API v1 · documentação para consumidores externos.</footer>
+    </main>
+  </div>
+</body>
+</html>

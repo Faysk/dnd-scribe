@@ -14,6 +14,8 @@ const state = {
     role: null,
     capabilities: {},
     rbac: null,
+    apiKeys: null,
+    apiDocumentationUrl: "/docs/api",
     workspace: "content",
     localLoaded: false,
     ready: false,
@@ -171,6 +173,7 @@ function configureWorkspaces() {
     || state.cloud.capabilities.canDownloadCompanion;
   $("#localWorkspaceTab").classList.toggle("hidden", !canUseLocal);
   $("#permissionsWorkspaceTab").classList.toggle("hidden", !state.cloud.capabilities.canManagePermissions);
+  $("#integrationsWorkspaceTab").classList.toggle("hidden", !state.cloud.capabilities.canManagePermissions);
   $("#companionDownloadSection").classList.toggle("hidden", !state.cloud.capabilities.canDownloadCompanion);
   ["#localHealthSection", "#localCandidateSection", "#localJobsSection"].forEach((selector) => {
     $(selector).classList.toggle("hidden", !state.cloud.capabilities.canUseLocalProcessing);
@@ -205,9 +208,11 @@ async function selectWorkspace(name) {
     && !state.cloud.capabilities.canReadAudio
     && !state.cloud.capabilities.canDownloadCompanion) return;
   if (name === "permissions" && !state.cloud.capabilities.canManagePermissions) return;
+  if (name === "integrations" && !state.cloud.capabilities.canManagePermissions) return;
   state.cloud.workspace = name;
   $("#cloudWorkspace").classList.toggle("hidden", name !== "content");
   $("#localWorkspace").classList.toggle("hidden", name !== "local");
+  $("#integrationsWorkspace").classList.toggle("hidden", name !== "integrations");
   $("#permissionsWorkspace").classList.toggle("hidden", name !== "permissions");
   $("#bridgeBadge").classList.toggle("hidden", name !== "local");
   document.querySelectorAll(".workspace-tab").forEach((tab) => {
@@ -225,6 +230,11 @@ async function selectWorkspace(name) {
   if (name === "permissions" && !state.cloud.rbac) {
     await loadPermissions().catch((error) => {
       $("#permissionsList").innerHTML = `<div class="error-panel">${escapeHtml(error.message)}</div>`;
+    });
+  }
+  if (name === "integrations" && !state.cloud.apiKeys) {
+    await loadApiKeys().catch((error) => {
+      $("#apiKeyList").innerHTML = `<div class="error-panel">${escapeHtml(error.message)}</div>`;
     });
   }
 }
@@ -247,6 +257,159 @@ const featureRoles = {
     description: "Ouve as faixas guardadas localmente.",
   },
 };
+
+
+function formatApiKeyDate(value, fallback = "Nunca") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return date.toLocaleString("pt-BR", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function apiKeyStatusLabel(status) {
+  return ({ active: "ATIVA", revoked: "REVOGADA", expired: "EXPIRADA" }[status] || String(status || "").toUpperCase());
+}
+
+async function loadApiKeys() {
+  if (!state.cloud.capabilities.canManagePermissions) return;
+  $("#apiKeyList").innerHTML = '<p class="empty">Carregando API Keys…</p>';
+  const payload = await cloudApi("/api/integrations/api-keys?campaignSlug=yuhara-main");
+  state.cloud.apiKeys = payload.keys || [];
+  state.cloud.apiDocumentationUrl = payload.documentationUrl || "/docs/api";
+  renderApiKeys();
+}
+
+function renderApiKeys() {
+  const target = $("#apiKeyList");
+  const keys = state.cloud.apiKeys || [];
+  if (!keys.length) {
+    target.innerHTML = '<div class="api-key-empty"><strong>Nenhuma API Key criada.</strong><span>Crie uma credencial separada para cada bot ou serviço que for consumir os resumos.</span></div>';
+    return;
+  }
+  target.innerHTML = keys.map((key) => `<article class="api-key-card ${escapeHtml(key.status)}">
+    <div class="api-key-main">
+      <div class="api-key-title-row">
+        <strong>${escapeHtml(key.name || "Integração")}</strong>
+        <span class="api-key-status ${escapeHtml(key.status)}">${escapeHtml(apiKeyStatusLabel(key.status))}</span>
+      </div>
+      ${key.description ? `<p>${escapeHtml(key.description)}</p>` : ""}
+      <code>${escapeHtml(key.prefix || "dnd_live_")}••••••••••••••••</code>
+      <div class="api-key-meta">
+        <span>Escopo <strong>${escapeHtml((key.scopes || []).join(", "))}</strong></span>
+        <span>Criada <strong>${escapeHtml(formatApiKeyDate(key.createdAt, "—"))}</strong></span>
+        <span>Expira <strong>${escapeHtml(formatApiKeyDate(key.expiresAt))}</strong></span>
+        <span>Último uso <strong>${escapeHtml(formatApiKeyDate(key.lastUsedAt, "Ainda não usada"))}</strong></span>
+        <span>Requests <strong>${Number(key.requestCount || 0).toLocaleString("pt-BR")}</strong></span>
+      </div>
+    </div>
+    <div class="api-key-actions">
+      ${key.status === "active" ? `<button class="ghost api-key-rotate" type="button" data-key-id="${escapeHtml(key.id)}">Rotacionar</button>
+      <button class="ghost danger-action api-key-revoke" type="button" data-key-id="${escapeHtml(key.id)}">Revogar</button>` : ""}
+    </div>
+  </article>`).join("");
+  target.querySelectorAll(".api-key-rotate").forEach((button) => {
+    button.addEventListener("click", () => rotateApiKey(button.dataset.keyId));
+  });
+  target.querySelectorAll(".api-key-revoke").forEach((button) => {
+    button.addEventListener("click", () => revokeApiKey(button.dataset.keyId));
+  });
+}
+
+function openApiKeyDialog() {
+  $("#apiKeyName").value = "";
+  $("#apiKeyDescription").value = "";
+  $("#apiKeyExpiry").value = "";
+  $("#apiKeyDialog").showModal();
+  window.setTimeout(() => $("#apiKeyName").focus(), 0);
+}
+
+function showApiKeySecret(secret, title = "Copie sua API Key") {
+  $("#apiKeySecretTitle").textContent = title;
+  $("#apiKeySecretValue").value = secret || "";
+  $("#apiKeySecretDialog").showModal();
+  $("#apiKeySecretValue").select();
+}
+
+async function createApiKey() {
+  const button = $("#createApiKeyButton");
+  const name = $("#apiKeyName").value.trim();
+  if (name.length < 2) {
+    alert("Informe um nome para identificar esta integração.");
+    $("#apiKeyName").focus();
+    return;
+  }
+  const expiry = $("#apiKeyExpiry").value;
+  button.disabled = true;
+  button.textContent = "Criando…";
+  try {
+    const payload = await cloudApi("/api/integrations/api-keys", {
+      method: "POST",
+      body: JSON.stringify({
+        campaignSlug: "yuhara-main",
+        name,
+        description: $("#apiKeyDescription").value.trim(),
+        expiresInDays: expiry ? Number(expiry) : null,
+        scopes: ["summaries:read"],
+      }),
+    });
+    state.cloud.apiKeys = payload.keys || [];
+    $("#apiKeyDialog").close();
+    renderApiKeys();
+    showApiKeySecret(payload.created?.secret, `API Key criada · ${name}`);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Criar chave";
+  }
+}
+
+async function revokeApiKey(keyId) {
+  const key = (state.cloud.apiKeys || []).find((item) => item.id === keyId);
+  const label = key?.name || key?.prefix || "esta API Key";
+  if (!window.confirm(`Revogar ${label}?\n\nO consumidor começará a receber 401 imediatamente.`)) return;
+  try {
+    const payload = await cloudApi("/api/integrations/api-keys/revoke", {
+      method: "POST",
+      body: JSON.stringify({ campaignSlug: "yuhara-main", keyId }),
+    });
+    state.cloud.apiKeys = payload.keys || [];
+    renderApiKeys();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function rotateApiKey(keyId) {
+  const key = (state.cloud.apiKeys || []).find((item) => item.id === keyId);
+  const label = key?.name || key?.prefix || "esta API Key";
+  if (!window.confirm(`Rotacionar ${label}?\n\nA chave atual será revogada imediatamente. Só continue se puder atualizar o consumidor agora.`)) return;
+  try {
+    const payload = await cloudApi("/api/integrations/api-keys/rotate", {
+      method: "POST",
+      body: JSON.stringify({ campaignSlug: "yuhara-main", keyId }),
+    });
+    state.cloud.apiKeys = payload.keys || [];
+    renderApiKeys();
+    showApiKeySecret(payload.rotated?.secret, `Nova API Key · ${label}`);
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function copyApiKeySecret() {
+  const value = $("#apiKeySecretValue").value;
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    $("#copyApiKeyButton").textContent = "Copiada ✓";
+    window.setTimeout(() => { $("#copyApiKeyButton").textContent = "Copiar chave"; }, 1600);
+  } catch (_error) {
+    $("#apiKeySecretValue").focus();
+    $("#apiKeySecretValue").select();
+    document.execCommand("copy");
+  }
+}
 
 async function downloadCompanion() {
   const button = $("#downloadCompanionButton");
@@ -1293,4 +1456,7 @@ document.querySelectorAll(".workspace-tab").forEach((tab) => {
 $("#refreshPermissionsButton").addEventListener("click", () => {
   loadPermissions().catch((error) => alert(error.message));
 });
+$("#newApiKeyButton").addEventListener("click", openApiKeyDialog);
+$("#createApiKeyButton").addEventListener("click", createApiKey);
+$("#copyApiKeyButton").addEventListener("click", copyApiKeySecret);
 initCloudAuth();

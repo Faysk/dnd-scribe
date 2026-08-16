@@ -656,3 +656,146 @@ textarea:focus, input:focus { border-color: var(--purple); }
   .permission-toggles { grid-template-columns: 1fr; }
   .cloud-session-actions { grid-template-columns: 1fr; }
 }
+
+
+/* summary-api-v1-integrations */
+.api-integrations-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.api-integration-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 28px 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--line);
+  border-radius: 12px;
+}
+.api-integration-overview > div {
+  display: grid;
+  gap: 8px;
+  min-height: 90px;
+  padding: 18px;
+  background: var(--panel);
+}
+.api-integration-overview span,
+.api-scope-readonly > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .13em;
+}
+.api-integration-overview code,
+.api-scope-readonly code,
+.api-key-card code,
+.api-secret-value {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+.api-integration-overview code { color: var(--gold-bright); overflow-wrap: anywhere; }
+.api-key-list { display: grid; gap: 12px; }
+.api-key-empty {
+  display: grid;
+  gap: 6px;
+  padding: 24px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  border-radius: 12px;
+}
+.api-key-empty strong { color: var(--paper); }
+.api-key-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 12px;
+}
+.api-key-card.revoked,
+.api-key-card.expired { opacity: .7; }
+.api-key-main { min-width: 0; }
+.api-key-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.api-key-title-row > strong { font-size: 17px; }
+.api-key-card p { max-width: 720px; margin: 8px 0; color: var(--muted); }
+.api-key-card > .api-key-main > code {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 10px;
+  overflow: hidden;
+  color: var(--gold-bright);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.api-key-status {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+.api-key-status.active { color: #8fc49b; border-color: rgba(143,196,155,.35); }
+.api-key-status.revoked,
+.api-key-status.expired { color: #e59383; border-color: rgba(229,147,131,.32); }
+.api-key-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 15px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.api-key-meta span { display: inline-flex; gap: 5px; }
+.api-key-meta strong { color: var(--paper-soft); font-weight: 650; }
+.api-key-actions { display: flex; flex-wrap: wrap; align-content: start; justify-content: flex-end; gap: 8px; }
+.danger-action { color: #e59383 !important; }
+.api-key-dialog,
+.api-key-secret-dialog { width: min(600px, calc(100vw - 32px)); }
+.api-key-dialog form,
+.api-key-secret-dialog form { display: grid; gap: 16px; }
+.api-key-dialog label,
+.api-key-secret-dialog label { display: grid; gap: 7px; }
+.api-key-dialog input,
+.api-key-dialog textarea,
+.api-key-dialog select,
+.api-key-secret-dialog textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  color: var(--paper);
+  background: var(--ink-soft);
+  border-radius: 8px;
+}
+.api-key-dialog textarea { min-height: 105px; resize: vertical; }
+.api-scope-readonly {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: var(--ink-soft);
+  border-radius: 9px;
+}
+.api-scope-readonly small { grid-column: 1 / -1; color: var(--muted); }
+.api-secret-warning {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-left: 3px solid #e59383;
+  color: var(--muted);
+  background: rgba(229,147,131,.08);
+  border-radius: 0 8px 8px 0;
+}
+.api-secret-warning strong { color: var(--paper); }
+.api-secret-value { min-height: 84px; resize: none; color: var(--gold-bright) !important; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .api-integration-overview { grid-template-columns: 1fr; }
+  .api-key-card { grid-template-columns: 1fr; }
+  .api-key-actions { justify-content: flex-start; }
+  .api-integrations-heading-actions { justify-content: flex-start; }
+}
