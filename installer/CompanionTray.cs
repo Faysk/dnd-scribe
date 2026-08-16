@@ -96,7 +96,7 @@ namespace DnDScribe.CompanionTray
 
     internal sealed class TrayContext : ApplicationContext
     {
-        private const string Version = "0.3.0";
+        private const string Version = "0.4.0";
         private const string EditUrl = "https://dnd.faysk.dev/edit/";
         private const string ServiceUrl = "http://127.0.0.1:8765";
         private readonly string baseDir;
@@ -124,7 +124,7 @@ namespace DnDScribe.CompanionTray
             dataRoot = ReadRequired(Path.Combine(baseDir, "data-root.txt"), "A pasta de dados não foi configurada. Execute o instalador novamente.");
             string installedVersion = ReadRequired(Path.Combine(baseDir, "current-version.txt"), "A versão instalada não foi encontrada. Execute o instalador novamente.");
             versionDir = Path.Combine(baseDir, "Companion", "versions", installedVersion);
-            pythonPath = Path.Combine(baseDir, "Runtime", ".venv", "Scripts", "python.exe");
+            pythonPath = Path.Combine(baseDir, "Runtime", "versions", installedVersion, ".venv", "Scripts", "python.exe");
 
             ContextMenuStrip menu = new ContextMenuStrip();
             statusItem.Enabled = false;
@@ -250,6 +250,9 @@ namespace DnDScribe.CompanionTray
             if (stage == "downloading_model") return "Baixando modelo";
             if (stage == "checking_model") return "Verificando modelo";
             if (stage == "loading_cuda") return "Carregando GPU";
+            if (stage == "loading_cuda_fallback") return "Ajustando memória da GPU";
+            if (stage == "loading_cpu") return "Carregando CPU";
+            if (stage == "resuming") return "Reaproveitando faixa pronta";
             if (!String.IsNullOrWhiteSpace(speaker)) return "Transcrevendo " + speaker;
             return "Processando transcrição";
         }
@@ -338,7 +341,7 @@ namespace DnDScribe.CompanionTray
 
         private async Task UpdateComponents()
         {
-            if (MessageBox.Show("O serviço será reiniciado e as dependências locais serão reparadas/atualizadas. Continuar?", "Atualizar componentes", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            if (MessageBox.Show("O serviço será reiniciado e as dependências locais desta versão serão reparadas. Continuar?", "Reparar componentes", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             updating = true;
             Render();
             try
@@ -346,14 +349,15 @@ namespace DnDScribe.CompanionTray
                 await StopService();
                 await Task.Run(delegate {
                     Run(pythonPath, "-m pip install --upgrade pip==26.1.2 setuptools==83.0.0", 600000);
-                    Run(pythonPath, "-m pip install --upgrade " + Quote(versionDir), 1800000);
+                    Run(pythonPath, "-m pip install --force-reinstall " + Quote(versionDir), 1800000);
+                    Run(pythonPath, "-m pip check", 120000);
                 });
                 StartService();
-                tray.ShowBalloonTip(4000, "DnD Scribe", "Componentes atualizados e serviço reiniciado.", ToolTipIcon.Info);
+                tray.ShowBalloonTip(4000, "DnD Scribe", "Componentes reparados e serviço reiniciado.", ToolTipIcon.Info);
             }
             catch (Exception error)
             {
-                MessageBox.Show("Não foi possível atualizar os componentes.\n\n" + error.Message, "Atualização incompleta", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Não foi possível reparar os componentes.\n\n" + error.Message, "Reparo incompleto", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
