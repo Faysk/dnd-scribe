@@ -85,6 +85,18 @@
     {
       "source": "/linked-role",
       "destination": "/linked-role.html"
+    },
+    {
+      "source": "/docs/api",
+      "destination": "/api-docs.html"
+    },
+    {
+      "source": "/docs/api/",
+      "destination": "/api-docs.html"
+    },
+    {
+      "source": "/docs/api/openapi.yaml",
+      "destination": "/openapi-summary-v1.yaml"
     }
   ],
   "headers": [

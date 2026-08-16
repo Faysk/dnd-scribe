@@ -13,6 +13,7 @@ const { buildMonitoringPayload } = require('../lib/monitoring');
 const { notifyDiscord } = require('../lib/discord');
 const { markJobStep } = require('../lib/job-steps');
 const { recoverStaleJobs } = require('../lib/pipeline-recovery');
+const { handleSummaryApiGet, handleSummaryApiPost } = require('../lib/summary-api');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const DEFAULT_SOURCE_SESSION = 'craig-AdabEqbzngmT-stage1-full';
@@ -8362,6 +8363,12 @@ async function handleGet(req, res, path, query) {
   const campaign = query.get('campaignSlug') || DEFAULT_CAMPAIGN;
   const sourceSessionId = query.get('sourceSessionId') || DEFAULT_SOURCE_SESSION;
   const runId = query.get('runId') || DEFAULT_RUN;
+  if (await handleSummaryApiGet(req, res, path, query, {
+    getPool,
+    requirePermission,
+    sendJson,
+    defaultCampaign: DEFAULT_CAMPAIGN
+  })) return;
   if (path === '/api/auth-config') {
     const config = authPublicConfig();
     return sendJson(res, 200, {
@@ -8591,6 +8598,12 @@ async function handlePost(req, res, path) {
   const sourceSessionId = body.sourceSessionId || decisions.sourceSessionId || DEFAULT_SOURCE_SESSION;
   const runId = body.runId || decisions.aiRunId || DEFAULT_RUN;
   const dryRun = Boolean(body.dryRun);
+  if (await handleSummaryApiPost(req, res, path, body, {
+    getPool,
+    requirePermission,
+    sendJson,
+    defaultCampaign: DEFAULT_CAMPAIGN
+  })) return;
   if (path === '/api/library-import-local') {
     await requirePermission(req, campaign, {
       action: 'campaign.local.process',
