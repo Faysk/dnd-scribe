@@ -24,15 +24,10 @@ create table if not exists public.external_api_keys (
   revoked_at timestamptz,
   last_used_at timestamptz,
   request_count bigint not null default 0 check (request_count >= 0),
+  rate_window_start timestamptz,
+  rate_window_count integer not null default 0 check (rate_window_count >= 0),
   metadata jsonb not null default '{}'::jsonb,
   check (cardinality(scopes) > 0)
-);
-
-create table if not exists public.external_api_usage_windows (
-  api_key_id uuid not null references public.external_api_keys(id) on delete cascade,
-  window_start timestamptz not null,
-  request_count integer not null default 0 check (request_count >= 0),
-  primary key (api_key_id, window_start)
 );
 
 create index if not exists external_api_clients_campaign_idx
@@ -45,17 +40,12 @@ create index if not exists external_api_keys_active_idx
   on public.external_api_keys(client_id, expires_at)
   where revoked_at is null;
 
-create index if not exists external_api_usage_windows_start_idx
-  on public.external_api_usage_windows(window_start);
-
 alter table public.external_api_clients enable row level security;
 alter table public.external_api_keys enable row level security;
-alter table public.external_api_usage_windows enable row level security;
 
 -- Browser clients never query these tables through PostgREST. Management and
 -- API authentication are performed by the server-side Postgres connection.
 revoke all privileges on public.external_api_clients from public, anon, authenticated;
 revoke all privileges on public.external_api_keys from public, anon, authenticated;
-revoke all privileges on public.external_api_usage_windows from public, anon, authenticated;
 
 notify pgrst, 'reload schema';
