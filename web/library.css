@@ -904,12 +904,37 @@ main {
 
 .load-more {
   display: flex;
+  min-height: 42px;
+  align-items: center;
   justify-content: center;
   margin-top: 28px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.load-more-status {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 9px;
+}
+
+.load-more-status:not(:empty)::before {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--line);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  content: "";
+  animation: transcript-load-spin 0.8s linear infinite;
 }
 
 .load-more button {
   min-width: 180px;
+}
+
+@keyframes transcript-load-spin {
+  to { transform: rotate(360deg); }
 }
 
 .toast {
