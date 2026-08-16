@@ -448,6 +448,21 @@ textarea:focus, input:focus { border-color: var(--purple); }
 .review-dialog form { display: grid; gap: 18px; }
 .review-dialog h2 { margin: 0; font-size: 30px; letter-spacing: -.04em; }
 .review-dialog textarea { min-height: 180px; }
+.review-dialog input,
+.review-dialog textarea,
+.review-dialog select {
+  color: var(--ink);
+  caret-color: var(--ink);
+}
+.review-dialog input::placeholder,
+.review-dialog textarea::placeholder {
+  color: var(--muted);
+  opacity: .78;
+}
+.review-dialog select option {
+  color: var(--ink);
+  background: var(--paper);
+}
 .dialog-actions { display: flex; justify-content: end; gap: 8px; }
 .utterance:hover { background: rgba(255,255,255,.035); }
 .time-button, .time-label { border: 0; background: none; padding: 0; color: var(--purple); font: 500 12px "DM Mono"; text-align: left; }
