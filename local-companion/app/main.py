@@ -31,10 +31,11 @@ from .reviews import apply_reviews, read_reviews, write_review
 from .runtime import friendly_runtime_error, resolve_plan
 from .storage import SessionStore
 from .transcriber import markdown_export, transcribe_session
+from .updater import prepare_update
 
 
 PATHS = load_paths()
-COMPANION_VERSION = "0.4.0"
+COMPANION_VERSION = "0.4.1"
 store = SessionStore(PATHS.sessions)
 catalog = LocalCatalog(PATHS.storage / "craig-to-text.sqlite3")
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="transcription")
@@ -136,6 +137,12 @@ class TranscribeRequest(BaseModel):
     sample_minutes: int | None = None
 
 
+class UpdateRequest(BaseModel):
+    version: str = Field(min_length=5, max_length=32)
+    url: str = Field(min_length=20, max_length=4096)
+    sha256: str | None = Field(default=None, max_length=64)
+
+
 class SessionMetadataRequest(BaseModel):
     title: str | None = Field(default=None, max_length=160)
     played_at: str | None = Field(default=None, max_length=10)
@@ -216,6 +223,32 @@ def health() -> dict:
         "log": str(PATHS.storage / "logs" / "companion.log"),
     }
     return payload
+
+
+@app.post("/api/update")
+def update_companion(request: UpdateRequest) -> dict:
+    try:
+        result = prepare_update(
+            current_version=COMPANION_VERSION,
+            target_version=request.version,
+            url=request.url,
+            storage_root=PATHS.storage,
+            expected_sha256=request.sha256,
+        )
+        logger.info(
+            "companion_update status=%s current=%s target=%s sha256=%s",
+            result.get("status"),
+            COMPANION_VERSION,
+            request.version,
+            result.get("sha256") or "-",
+        )
+        return result
+    except ValueError as error:
+        logger.warning("companion_update_rejected target=%s error=%s", request.version, error)
+        raise HTTPException(400, str(error)) from error
+    except (OSError, RuntimeError) as error:
+        logger.exception("companion_update_failed target=%s", request.version)
+        raise HTTPException(409, str(error)) from error
 
 
 @app.get("/api/preflight")
