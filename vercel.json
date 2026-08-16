@@ -31,6 +31,10 @@
       "destination": "/central-local/:path*"
     },
     {
+      "source": "/api/companion-release",
+      "destination": "/api/ai-cost?companionRelease=1"
+    },
+    {
       "source": "/api/roll20-bridge/config",
       "destination": "/api/roll20-bridge?roll20BridgeConfig=1"
     },
