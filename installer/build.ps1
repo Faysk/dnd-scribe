@@ -62,7 +62,7 @@ try {
         path = $file.FullName
         bytes = $file.Length
         sha256 = $hash.Hash.ToLowerInvariant()
-        version = '0.3.0'
+        version = '0.4.0'
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputRoot 'release.json') -Encoding utf8
     Get-Content -Raw -LiteralPath (Join-Path $outputRoot 'release.json')
 }
