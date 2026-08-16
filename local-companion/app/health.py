@@ -92,8 +92,16 @@ def build_health(
 
     cuda = _cuda_status()
     healthy_storage = storage_probe["writable"] and storage_probe["atomic_replace"]["ok"]
+    gpu_ready = bool(cuda.get("available")) and bool(cuda.get("supported_compute_types"))
+    ready_for_default_processing = healthy_storage and gpu_ready
     return {
-        "status": "ok" if healthy_storage else "degraded",
+        "status": "ok" if ready_for_default_processing else "degraded",
+        "readiness": {
+            "storage": healthy_storage,
+            "gpu": gpu_ready,
+            "default_processing": ready_for_default_processing,
+            "cpu_manual_available": True,
+        },
         "app": {
             "name": "craig-to-text",
             "version": app_version,
