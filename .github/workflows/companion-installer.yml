@@ -6,14 +6,18 @@ on:
     paths:
       - "installer/**"
       - "local-companion/**"
-      - "api/companion-release.js"
+      - "lib/companion-release.js"
+      - "api/ai-cost.js"
+      - "vercel.json"
       - ".github/workflows/companion-installer.yml"
   push:
     branches: [main]
     paths:
       - "installer/**"
       - "local-companion/**"
-      - "api/companion-release.js"
+      - "lib/companion-release.js"
+      - "api/ai-cost.js"
+      - "vercel.json"
       - ".github/workflows/companion-installer.yml"
 
 permissions:
