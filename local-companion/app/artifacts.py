@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from .fs import atomic_write_json
 
 
 def utc_now() -> str:
@@ -29,19 +29,6 @@ def sha256_json(value: Any) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
-
-def atomic_write_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            json.dump(value, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
 
 
 def _file_record(path: Path, *, known_sha256: str | None = None) -> dict[str, Any]:
@@ -93,6 +80,7 @@ def build_session_manifest(
         "format": session.get("format"),
         "status": session.get("status"),
         "mode": session.get("mode"),
+        "processing": session.get("processing"),
         "source": source_record,
         "tracks": tracks,
         "transcript": {
