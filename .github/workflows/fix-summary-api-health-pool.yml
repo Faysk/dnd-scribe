@@ -1,0 +1,28 @@
+name: Fix summary API health pool
+
+on:
+  push:
+    branches:
+      - feat/summary-api-v1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python tools/_fix_summary_api_health_pool.py
+      - run: npm ci
+      - run: npm run check:summary-api
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/summary-api.js
+          git commit -m "fix(api): keep health check independent from database"
+          git push origin HEAD:feat/summary-api-v1
