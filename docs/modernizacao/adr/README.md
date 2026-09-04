@@ -21,6 +21,7 @@ Architecture Decision Records usados para registrar decisões que não devem dep
 | [006](006-server-components-default.md) | Server Components por padrão | Accepted |
 | [007](007-feature-freeze.md) | Nenhuma expansão de domínio durante a modernização | Accepted |
 | [008](008-api-legada-como-fronteira-durante-migracao.md) | API existente permanece como fronteira canônica de dados do player durante a migração | Accepted |
+| [009](009-preview-next-em-projeto-vercel-separado.md) | Novo app Next usa projeto Vercel separado durante bootstrap e homologação | Accepted |
 
 ## Formato
 
