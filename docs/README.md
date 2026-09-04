@@ -4,7 +4,30 @@ Este índice aponta para o que deve ser lido agora. Documentos antigos continuam
 no repositório como histórico, mas não definem automaticamente a arquitetura
 atual.
 
-## Agora
+## Roadmap ativo — modernização do app público
+
+| Documento | Status | Uso |
+| --- | --- | --- |
+| [Modernização — Roadmap mestre](modernizacao/README.md) | planejamento aprovado | escopo, fases, gates e Definition of Done |
+| [00 — Escopo e princípios](modernizacao/00-escopo-e-principios.md) | aprovado | feature freeze e limites da modernização |
+| [01 — Baseline atual](modernizacao/01-baseline-atual.md) | baseline | comportamento que não pode regredir |
+| [02 — Arquitetura alvo](modernizacao/02-arquitetura-alvo.md) | proposta para execução | stack e organização do novo app |
+| [03 — Roadmap por fases](modernizacao/03-roadmap-fases.md) | execução | sequência, entregas e gates |
+| [04 — Design system e UX](modernizacao/04-design-system-e-ux.md) | direção aprovada | identidade dark/light e hierarquia das telas |
+| [05 — Plano de migração](modernizacao/05-plano-de-migracao.md) | execução | migração incremental e coexistência com legado |
+| [06 — Matriz de paridade](modernizacao/06-matriz-de-paridade.md) | template | checklist legado x novo |
+| [07 — Qualidade, segurança e a11y](modernizacao/07-qualidade-seguranca-a11y.md) | requisito transversal | testes, auth, RLS, validação e acessibilidade |
+| [08 — Cutover e estabilização](modernizacao/08-cutover-estabilizacao.md) | fase final | deploy reversível e período de estabilidade |
+| [09 — Relatório final](modernizacao/09-relatorio-final-template.md) | template | encerramento formal da modernização |
+| [ADRs da modernização](modernizacao/adr/README.md) | accepted | decisões arquiteturais formais |
+
+### Feature freeze
+
+Enquanto este roadmap estiver ativo, não entram personagens, NPCs, lore
+editável, galerias, coleções, timeline, relações ou grafo. A expansão funcional
+terá roadmap próprio somente após a modernização ser marcada como concluída.
+
+## Fundação atual preservada
 
 | Documento | Status | Uso |
 | --- | --- | --- |
@@ -46,7 +69,7 @@ Cada etapa nova deve registrar apenas:
 - decisão;
 - arquivos alterados;
 - validação com dado real;
-- medidas de tempo, bytes e custo;
+- medidas de tempo, bytes e custo quando aplicável;
 - riscos restantes;
 - próximo passo.
 
