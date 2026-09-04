@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { Brand } from '@/components/shell/brand'
@@ -20,8 +21,20 @@ export function CampaignShell({ access, children, identity }: CampaignShellProps
           <Brand />
           <div className="flex items-center gap-3">
             <nav aria-label="Navegação principal" className="hidden items-center gap-1 md:flex">
-              <a className="rounded-sm px-3 py-2 text-sm text-foreground no-underline hover:bg-accent-muted" href="/" aria-current="page">Início</a>
-              <span aria-disabled="true" className="cursor-not-allowed rounded-sm px-3 py-2 text-sm text-foreground-muted opacity-60" title="Arquivo de sessões entra na Fase 6">Sessões</span>
+              <Link
+                aria-current="page"
+                className="rounded-sm px-3 py-2 text-sm text-foreground no-underline hover:bg-accent-muted"
+                href="/"
+              >
+                Início
+              </Link>
+              <span
+                aria-disabled="true"
+                className="cursor-not-allowed rounded-sm px-3 py-2 text-sm text-foreground-muted opacity-60"
+                title="Arquivo de sessões entra na Fase 6"
+              >
+                Sessões
+              </span>
             </nav>
             <ThemeToggle />
             <UserMenu access={access} identity={identity} />
