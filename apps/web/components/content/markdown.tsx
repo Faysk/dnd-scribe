@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { marked } from 'marked'
 
+import { normalizeArtworkUrl } from '@/lib/artwork'
+
 type MarkdownToken = Readonly<{
   type?: string
   raw?: string
@@ -22,32 +24,35 @@ type MarkdownCell = Readonly<{
   text?: string
 }>
 
+const MARKDOWN_BASE_URL = 'https://dnd-scribe.invalid'
+
 function cleanMarkdown(value: string) {
   return value.replace(/^[\uFEFF\u200B-\u200D\u2060]+/, '').trim()
 }
 
 function safeLinkHref(value: string | undefined) {
   const href = String(value || '').trim()
-  if (!href) return null
-  if (href.startsWith('/') || href.startsWith('#')) return href
+  if (!href || href.includes('\\')) return null
+  if (href.startsWith('#')) return href
 
   try {
+    if (href.startsWith('/')) {
+      const parsed = new URL(href, MARKDOWN_BASE_URL)
+      if (parsed.origin !== MARKDOWN_BASE_URL) return null
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`
+    }
+
     const parsed = new URL(href)
-    return ['https:', 'http:', 'mailto:'].includes(parsed.protocol) ? parsed.toString() : null
+    if (!['https:', 'http:', 'mailto:'].includes(parsed.protocol)) return null
+    if ((parsed.protocol === 'https:' || parsed.protocol === 'http:') && (parsed.username || parsed.password)) return null
+    return parsed.toString()
   } catch {
     return null
   }
 }
 
 function safeImageHref(value: string | undefined) {
-  const href = String(value || '').trim()
-  if (!href) return null
-  try {
-    const parsed = new URL(href)
-    return parsed.protocol === 'https:' ? parsed.toString() : null
-  } catch {
-    return null
-  }
+  return normalizeArtworkUrl(String(value || '').trim())
 }
 
 function renderHeading(depth: number, children: ReactNode, key: string) {
@@ -105,9 +110,9 @@ function renderToken(token: MarkdownToken, key: string): ReactNode {
       const src = safeImageHref(token.href)
       if (!src) return token.text ? <span key={key}>[{token.text}]</span> : null
       return (
-        // The archive accepts arbitrary HTTPS image origins supplied by the authenticated legacy API.
+        // Summary images use the same audited allowlist as session artwork.
         // eslint-disable-next-line @next/next/no-img-element
-        <img alt={token.text || 'Imagem do resumo da sessão'} className="my-8 h-auto max-h-[720px] w-full rounded-lg border border-border-subtle object-contain" loading="lazy" src={src} title={token.title || undefined} key={key} />
+        <img alt={token.text || 'Imagem do resumo da sessão'} className="my-8 h-auto max-h-[720px] w-full rounded-lg border border-border-subtle object-contain" loading="lazy" referrerPolicy="no-referrer" src={src} title={token.title || undefined} key={key} />
       )
     }
     case 'list': {
