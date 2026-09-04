@@ -53,7 +53,7 @@ describe('transcript contract', () => {
 
   it('rejects an unsuccessful or missing upstream envelope', () => {
     expect(() => parseTranscriptPayload({ ...payload(), ok: false })).toThrow('Resposta inválida')
-    const { ok: _ok, ...withoutOk } = payload()
+    const withoutOk = Object.fromEntries(Object.entries(payload()).filter(([key]) => key !== 'ok'))
     expect(() => parseTranscriptPayload(withoutOk)).toThrow('Resposta inválida')
   })
 })
