@@ -5,6 +5,9 @@ export const TRANSCRIPT_SOURCE_SESSION_ID_MAX_LENGTH = 220
 export const TRANSCRIPT_CURSOR_MAX_LENGTH = 1200
 export const TRANSCRIPT_QUERY_MAX_LENGTH = 120
 export const TRANSCRIPT_SPEAKER_MAX_LENGTH = 120
+const TRANSCRIPT_SEGMENT_TEXT_MAX_LENGTH = 20_000
+const TRANSCRIPT_SEGMENT_ID_MAX_LENGTH = 220
+const TRANSCRIPT_SPEAKER_LIST_MAX_LENGTH = 300
 
 export type TranscriptSession = Readonly<{
   sourceSessionId: string
@@ -46,6 +49,12 @@ function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function bounded(value: unknown, maxLength: number, field: string) {
+  const normalized = text(value)
+  if (normalized.length > maxLength) throw new Error(`Resposta da transcrição excede o limite de ${field}.`)
+  return normalized
+}
+
 function nullableNumber(value: unknown) {
   if (value === null || value === undefined || value === '') return null
   const parsed = typeof value === 'number' ? value : Number(value)
@@ -60,37 +69,37 @@ function count(value: unknown) {
 function parseSession(value: unknown): TranscriptSession {
   const item = record(value)
   if (!item) throw new Error('Transcrição sem dados da sessão.')
-  const sourceSessionId = text(item.sourceSessionId)
-  const title = text(item.title)
+  const sourceSessionId = bounded(item.sourceSessionId, TRANSCRIPT_SOURCE_SESSION_ID_MAX_LENGTH, 'identificador')
+  const title = bounded(item.title, 500, 'título')
   if (!sourceSessionId || !title) throw new Error('Transcrição sem identificador ou título da sessão.')
 
   return {
     sourceSessionId,
     title,
-    sessionDate: text(item.sessionDate),
-    arc: text(item.arc),
-    status: text(item.status),
+    sessionDate: bounded(item.sessionDate, 80, 'data'),
+    arc: bounded(item.arc, 300, 'arco'),
+    status: bounded(item.status, 80, 'status'),
     durationMs: nullableNumber(item.durationMs),
-    summary: text(item.summary),
+    summary: bounded(item.summary, 10_000, 'resumo'),
     hasSummary: item.hasSummary === true,
     coverImageUrl: normalizeArtworkUrl(item.coverImageUrl),
     heroImageUrl: normalizeArtworkUrl(item.heroImageUrl),
-    updatedAt: text(item.updatedAt),
+    updatedAt: bounded(item.updatedAt, 80, 'updatedAt'),
   }
 }
 
 function parseSegment(value: unknown): TranscriptSegment {
   const item = record(value)
   if (!item) throw new Error('Fala inválida na transcrição.')
-  const id = text(item.id)
-  const segmentText = text(item.text)
+  const id = bounded(item.id, TRANSCRIPT_SEGMENT_ID_MAX_LENGTH, 'id da fala')
+  const segmentText = bounded(item.text, TRANSCRIPT_SEGMENT_TEXT_MAX_LENGTH, 'texto da fala')
   if (!id || !segmentText) throw new Error('Fala sem identificador ou texto.')
 
   return {
     id,
     startMs: nullableNumber(item.startMs),
     endMs: nullableNumber(item.endMs),
-    speaker: text(item.speaker) || 'Mesa',
+    speaker: bounded(item.speaker, TRANSCRIPT_SPEAKER_MAX_LENGTH, 'speaker') || 'Mesa',
     text: segmentText,
   }
 }
@@ -100,12 +109,20 @@ export function parseTranscriptPayload(value: unknown): TranscriptPayload {
   if (!payload || !Array.isArray(payload.segments) || !Array.isArray(payload.speakers)) {
     throw new Error('Resposta inválida da transcrição.')
   }
+  if (payload.segments.length > TRANSCRIPT_PAGE_SIZE) {
+    throw new Error('Resposta da transcrição excede o tamanho máximo de página.')
+  }
+  if (payload.speakers.length > TRANSCRIPT_SPEAKER_LIST_MAX_LENGTH) {
+    throw new Error('Resposta da transcrição excede o limite de speakers.')
+  }
+
+  const nextCursor = bounded(payload.nextCursor, TRANSCRIPT_CURSOR_MAX_LENGTH, 'cursor') || null
 
   return {
     session: parseSession(payload.session),
     segments: payload.segments.map(parseSegment),
-    speakers: payload.speakers.map(text).filter(Boolean),
+    speakers: payload.speakers.map((value) => bounded(value, TRANSCRIPT_SPEAKER_MAX_LENGTH, 'speaker')).filter(Boolean),
     total: count(payload.total),
-    nextCursor: text(payload.nextCursor) || null,
+    nextCursor,
   }
 }
