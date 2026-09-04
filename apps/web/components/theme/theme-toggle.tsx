@@ -31,8 +31,9 @@ export function ThemeToggle() {
 
   useEffect(() => {
     const stored = readPreference()
-    setPreference(stored)
     applyPreference(stored)
+    const frame = window.requestAnimationFrame(() => setPreference(stored))
+    return () => window.cancelAnimationFrame(frame)
   }, [])
 
   function cycleTheme() {
