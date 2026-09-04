@@ -5,7 +5,7 @@ import { LoginButtons } from '@/components/auth/login-buttons'
 import { Brand } from '@/components/shell/brand'
 import { Surface } from '@/components/ui/surface'
 import { BodyCopy, DisplayTitle, Eyebrow, MetaText } from '@/components/ui/typography'
-import { readPublicSupabaseConfig } from '@/lib/config'
+import { canRenderUnconfiguredPreview, readPublicSupabaseConfig } from '@/lib/config'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 export const metadata: Metadata = {
@@ -46,7 +46,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           {callbackError ? <p className="mt-5 text-sm text-danger" role="alert">{callbackError}</p> : null}
           {!config ? (
             <MetaText className="mt-5 rounded-md border border-accent/30 bg-accent-muted p-3">
-              Auth ainda não está configurado neste Preview. O shell técnico continua disponível para os gates anteriores.
+              {canRenderUnconfiguredPreview()
+                ? 'Auth ainda não está configurado neste Preview. O shell técnico continua disponível para os gates anteriores.'
+                : 'O login está temporariamente indisponível. Tente novamente mais tarde.'}
             </MetaText>
           ) : null}
           <LoginButtons configured={Boolean(config)} />
