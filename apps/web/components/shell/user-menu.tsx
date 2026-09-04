@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 import { campaignRoleLabel, type AuthIdentity } from '@/lib/auth/state'
 import type { CampaignAccessPayload } from '@/lib/api/contracts/auth'
 import { getLegacyEditUrl } from '@/lib/config'
@@ -45,7 +47,7 @@ export function UserMenu({ access, identity }: UserMenuProps) {
           <strong className="block max-w-48 truncate text-sm text-foreground">{identity.displayName}</strong>
           <span className="mt-1 block text-[11px] text-foreground-muted">{campaignRoleLabel(access.campaignRole)}</span>
         </div>
-        <a className="mt-1 rounded-sm px-3 py-2 text-sm text-foreground-soft no-underline hover:bg-surface hover:text-foreground" href="/">Início</a>
+        <Link className="mt-1 rounded-sm px-3 py-2 text-sm text-foreground-soft no-underline hover:bg-surface hover:text-foreground" href="/">Início</Link>
         {editUrl ? (
           <a className="rounded-sm px-3 py-2 text-sm text-foreground-soft no-underline hover:bg-surface hover:text-foreground" href={editUrl}>Editar <span className="sr-only">no app legado</span></a>
         ) : null}
