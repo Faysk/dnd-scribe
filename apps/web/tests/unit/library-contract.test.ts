@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseLibrarySessionsPayload } from '@/lib/api/contracts/library'
+import { parseLibrarySessionsPayload } from '../../lib/api/contracts/library'
 
 describe('parseLibrarySessionsPayload', () => {
   it('normaliza o contrato real usado pelo catálogo', () => {
