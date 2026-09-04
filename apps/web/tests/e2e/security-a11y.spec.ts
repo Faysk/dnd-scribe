@@ -20,12 +20,20 @@ test('preserva Permissions-Policy de rede local em Edit/Central Local', async ({
   expect(central.headers()['permissions-policy']).toContain('loopback-network=(self)')
 })
 
-test('namespace /api/web permanece local no Next', async ({ request }) => {
+test('namespace /api/web permanece integralmente local no Next', async ({ request }) => {
+  const health = await request.get('/api/web/health')
+  const healthPayload = await health.json()
   const transcript = await request.get('/api/web/library/transcript')
   const download = await request.get('/api/web/library/download')
+  const unknown = await request.get('/api/web/endpoint-que-nao-existe')
 
+  expect(health.status()).toBe(200)
+  expect(healthPayload).toEqual({ ok: true, surface: 'dnd-scribe-web-next' })
+  expect(health.headers()['cache-control']).toContain('no-store')
   expect(transcript.status()).toBe(400)
   expect(download.status()).toBe(400)
+  expect(unknown.status()).toBe(404)
+  await expect(unknown.json()).resolves.toMatchObject({ ok: false })
 })
 
 test('logout rejeita POST cross-origin e aceita a própria origem', async ({ request }) => {
