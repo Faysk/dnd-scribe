@@ -33,9 +33,9 @@ Em paralelo, as Fases 1 e 2 foram encerradas documentalmente. Arquitetura, front
 
 O bloqueio atual da Fase 3 é exclusivamente o gate restante da Fase 0, controlado pelo issue **#21 — golden baseline visual + performance**.
 
-Já existe agora um manifesto das capturas desktop fornecidas durante o planejamento, com dimensões e SHA-256, além de um protocolo reproduzível para medição de performance. Isso reduz o trabalho restante a persistir as evidências e executar as medições em um navegador autenticado real.
+Já existe um manifesto das capturas desktop fornecidas durante o planejamento, com dimensões e SHA-256, além de um protocolo reproduzível para medição de performance. Isso reduz o trabalho restante a persistir as evidências e executar as medições em um navegador autenticado real.
 
-A Fase 3 também já possui plano de execução detalhado, mas continua formalmente bloqueada. O plano existe para evitar decisões improvisadas quando o gate for liberado; ele não conta como início do bootstrap.
+As Fases 3 a 8 já possuem planos de execução detalhados. Isso é preparação documental: **nenhuma dessas fases é considerada iniciada antes de seus gates anteriores**. O objetivo é chegar à implementação com decisões de escopo, testes, segurança e paridade previamente explícitas.
 
 Documentos de controle dessa etapa:
 
@@ -48,6 +48,11 @@ Documentos de controle dessa etapa:
 - [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
 - [16 — Fase 0: runbook de captura](16-fase-0-runbook-de-captura.md)
 - [17 — Fase 3: plano de execução do bootstrap](17-fase-3-bootstrap-plano-de-execucao.md)
+- [18 — Fase 4: plano de execução do Design System](18-fase-4-design-system-plano-de-execucao.md)
+- [19 — Fase 5: plano de execução de Auth e Shell](19-fase-5-auth-shell-plano-de-execucao.md)
+- [20 — Fase 6: plano de execução da Home e Arquivo](20-fase-6-home-arquivo-plano-de-execucao.md)
+- [21 — Fase 7: plano de execução da Página de Sessão](21-fase-7-pagina-sessao-plano-de-execucao.md)
+- [22 — Fase 8: plano de execução da Transcrição](22-fase-8-transcricao-plano-de-execucao.md)
 - [Baseline visual](baseline/visual/README.md)
 - [Baseline de performance](baseline/performance/README.md)
 
@@ -131,11 +136,11 @@ A política é usar a **versão estável/LTS mais recente suportada no momento d
 | 1 | Arquitetura alvo | **concluída** | stack, limites, dados e organização definidos |
 | 2 | ADRs e contratos | **concluída** | decisões técnicas formalizadas |
 | 3 | Bootstrap | **bloqueada pela Fase 0; plano pronto** | novo app Next rodando em paralelo |
-| 4 | Design system | não iniciada | identidade atual transformada em sistema |
-| 5 | Auth e shell | não iniciada | login, tema, header, sessão e permissões migrados |
-| 6 | Home e arquivo | não iniciada | Home moderna + `/sessoes` |
-| 7 | Página de sessão | não iniciada | resumo como default |
-| 8 | Transcrição | não iniciada | paridade funcional da transcrição |
+| 4 | Design system | **não iniciada; plano pronto** | identidade atual transformada em sistema |
+| 5 | Auth e shell | **não iniciada; plano pronto** | login, tema, header, sessão e permissões migrados |
+| 6 | Home e arquivo | **não iniciada; plano pronto** | Home moderna + `/sessoes` |
+| 7 | Página de sessão | **não iniciada; plano pronto** | resumo como default |
+| 8 | Transcrição | **não iniciada; plano pronto** | paridade funcional da transcrição |
 | 9 | Qualidade e segurança | não iniciada | strict, a11y, validação e revisão de acesso |
 | 10 | Performance | não iniciada | métricas e otimizações medidas |
 | 11 | Paridade | não iniciada | matriz antiga x nova em 100% |
@@ -144,7 +149,7 @@ A política é usar a **versão estável/LTS mais recente suportada no momento d
 | 14 | Estabilização | não iniciada | regressões corrigidas e métricas observadas |
 | 15 | Encerramento | não iniciada | relatório final e liberação do próximo roadmap |
 
-A conclusão das Fases 1 e 2 em paralelo é permitida pela regra do roadmap porque não altera produção e não compromete o gate da Fase 0. Ela **não autoriza** iniciar Fase 3 antes do baseline mínimo restante.
+A preparação documental antecipada é permitida porque não altera produção e não compromete gates. Ela **não autoriza** iniciar a implementação da Fase 3 antes do baseline mínimo restante.
 
 ## Fronteira arquitetural já aprovada
 
@@ -159,6 +164,34 @@ Browser
 ```
 
 O novo app roda em projeto Vercel separado com Root Directory `apps/web`. `dnd.faysk.dev` permanece no projeto atual até a Fase 13.
+
+## Auth moderno já direcionado
+
+Para a Fase 5, a documentação atual considera a convenção moderna do ecossistema escolhido:
+
+- `@supabase/ssr` para sessão em cookies;
+- Server/Browser clients separados;
+- Next.js 16+ usando `proxy.ts` no lugar da convenção antiga `middleware.ts` quando Proxy for necessário para refresh de sessão;
+- identidade/autorização verificada server-side;
+- API legada consumida pelo BFF com token do usuário resolvido no servidor.
+
+A implementação deve revalidar a documentação oficial vigente na data de execução.
+
+## Compatibilidade com URLs históricas
+
+O ADR 011 formaliza a preservação dos links hash antigos.
+
+Como fragmentos não chegam ao servidor, o cutover usará bridge client-side mínima:
+
+```txt
+#/sessao/:id
+→ /sessoes/:id/transcricao
+
+#/sessao/:id/resumo
+→ /sessoes/:id
+```
+
+Isso preserva links antigos sem manter o hash router como arquitetura do novo app.
 
 ## ADRs aceitos
 
@@ -175,7 +208,8 @@ Até aqui estão aceitos ADRs para:
 - feature freeze;
 - API legada como fronteira de dados;
 - projeto Vercel separado;
-- BFF Next para API legada.
+- BFF Next para API legada;
+- compatibilidade de URLs hash legadas.
 
 ## Gate entre fases
 
@@ -238,6 +272,11 @@ O roadmap de features só pode começar quando todos os itens abaixo estiverem c
 - [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
 - [16 — Fase 0: runbook de captura](16-fase-0-runbook-de-captura.md)
 - [17 — Fase 3: plano de execução do bootstrap](17-fase-3-bootstrap-plano-de-execucao.md)
+- [18 — Fase 4: plano de execução do Design System](18-fase-4-design-system-plano-de-execucao.md)
+- [19 — Fase 5: plano de execução de Auth e Shell](19-fase-5-auth-shell-plano-de-execucao.md)
+- [20 — Fase 6: plano de execução da Home e Arquivo](20-fase-6-home-arquivo-plano-de-execucao.md)
+- [21 — Fase 7: plano de execução da Página de Sessão](21-fase-7-pagina-sessao-plano-de-execucao.md)
+- [22 — Fase 8: plano de execução da Transcrição](22-fase-8-transcricao-plano-de-execucao.md)
 - [Baseline visual](baseline/visual/README.md)
 - [Baseline de performance](baseline/performance/README.md)
 - [ADRs](adr/README.md)
