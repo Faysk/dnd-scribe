@@ -1,6 +1,6 @@
 # Modernização do DnD Scribe — Roadmap mestre
 
-Status: **Fase 0 em execução**  
+Status: **Fase 0 em execução; Fases 1 e 2 concluídas; Fase 3 bloqueada pelo baseline**  
 Escopo: **modernização tecnológica e de UX sem novas features de domínio**
 
 ## Objetivo
@@ -23,9 +23,15 @@ A auditoria de código do legado da Fase 0 está concluída em nível suficiente
 - temas dark/light/system;
 - build estático atual;
 - dependências;
-- limites do deploy compartilhado com API/Central Local.
+- limites do deploy compartilhado com API/Central Local;
+- schema real do Supabase relevante à modernização;
+- topologia atual da Vercel.
 
-A Fase 0 ainda **não está encerrada** porque o baseline visual oficial precisa ser congelado/versionado, principalmente em mobile e nos estados de login, acesso pendente, resumo e erro.
+A Fase 0 ainda **não está encerrada** porque o baseline visual oficial e o baseline técnico de performance precisam ser congelados de forma reproduzível, principalmente em mobile e nos estados de login, acesso pendente, resumo e erro.
+
+Em paralelo, as Fases 1 e 2 foram encerradas documentalmente. Arquitetura, fronteira de dados e coexistência não são mais bloqueadores do bootstrap.
+
+O bloqueio atual da Fase 3 é exclusivamente o gate restante da Fase 0.
 
 Documentos de controle dessa etapa:
 
@@ -33,6 +39,9 @@ Documentos de controle dessa etapa:
 - [10 — Contratos do app público legado](10-contratos-legado-app-publico.md)
 - [11 — Fase 0: evidências e checklist](11-fase-0-evidencias-e-checklist.md)
 - [12 — Inventário de deploy e dependências do legado](12-inventario-deploy-e-dependencias-legado.md)
+- [13 — Inventário Supabase e fronteira de dados](13-inventario-supabase-e-fronteira-de-dados.md)
+- [14 — Topologia Preview e coexistência Vercel](14-topologia-preview-e-coexistencia-vercel.md)
+- [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
 
 ## Escopo congelado
 
@@ -98,21 +107,22 @@ A política é usar a **versão estável/LTS mais recente suportada no momento d
 | CSS | Tailwind CSS + design tokens do DnD Scribe |
 | Banco | PostgreSQL / Supabase |
 | Auth | Supabase Auth + SSR/cookies |
+| Dados durante migração | BFF Next → API legada → Supabase |
 | Validação | Zod |
 | Testes unitários | Vitest |
 | Testes E2E/visuais | Playwright |
 | Package manager | pnpm |
-| Deploy | Vercel |
+| Deploy | Vercel; projeto separado para `apps/web` durante Preview/Homologação |
 | Processamento pesado | local companion atual |
 
 ## Fases
 
 | Fase | Nome | Estado atual | Saída principal |
 | --- | --- | --- | --- |
-| 0 | Baseline e congelamento | **em execução** | estado atual documentado e screenshots de referência |
-| 1 | Arquitetura alvo | documentação inicial pronta | stack, limites e organização definidos |
-| 2 | ADRs e contratos | documentação inicial pronta | decisões técnicas formalizadas |
-| 3 | Bootstrap | bloqueada | novo app Next rodando em paralelo |
+| 0 | Baseline e congelamento | **em execução** | estado atual documentado e screenshots/performance de referência |
+| 1 | Arquitetura alvo | **concluída** | stack, limites, dados e organização definidos |
+| 2 | ADRs e contratos | **concluída** | decisões técnicas formalizadas |
+| 3 | Bootstrap | **bloqueada pela Fase 0** | novo app Next rodando em paralelo |
 | 4 | Design system | não iniciada | identidade atual transformada em sistema |
 | 5 | Auth e shell | não iniciada | login, tema, header, sessão e permissões migrados |
 | 6 | Home e arquivo | não iniciada | Home moderna + `/sessoes` |
@@ -121,12 +131,43 @@ A política é usar a **versão estável/LTS mais recente suportada no momento d
 | 9 | Qualidade e segurança | não iniciada | strict, a11y, validação e revisão de acesso |
 | 10 | Performance | não iniciada | métricas e otimizações medidas |
 | 11 | Paridade | não iniciada | matriz antiga x nova em 100% |
-| 12 | Homologação | não iniciada | mesa valida preview |
+| 12 | Homologação | não iniciada | mesa valida Preview |
 | 13 | Cutover | não iniciada | nova aplicação em produção com rollback |
 | 14 | Estabilização | não iniciada | regressões corrigidas e métricas observadas |
 | 15 | Encerramento | não iniciada | relatório final e liberação do próximo roadmap |
 
-`Fase 1` e `Fase 2` podem continuar sendo refinadas documentalmente em paralelo. Isso não significa autorização para iniciar o bootstrap da Fase 3 antes do gate mínimo da Fase 0 e das decisões de coexistência necessárias.
+A conclusão das Fases 1 e 2 em paralelo é permitida pela regra do roadmap porque não altera produção e não compromete o gate da Fase 0. Ela **não autoriza** iniciar Fase 3 antes do baseline mínimo restante.
+
+## Fronteira arquitetural já aprovada
+
+Durante coexistência:
+
+```txt
+Browser
+→ novo app Next
+→ BFF/adapter server-side
+→ API legada em produção
+→ Supabase/PostgreSQL
+```
+
+O novo app roda em projeto Vercel separado com Root Directory `apps/web`. `dnd.faysk.dev` permanece no projeto atual até a Fase 13.
+
+## ADRs aceitos
+
+A lista completa vive em [adr/README.md](adr/README.md).
+
+Até aqui estão aceitos ADRs para:
+
+- App Router;
+- TypeScript strict;
+- Supabase;
+- local-first;
+- design system próprio;
+- Server Components;
+- feature freeze;
+- API legada como fronteira de dados;
+- projeto Vercel separado;
+- BFF Next para API legada.
 
 ## Gate entre fases
 
@@ -184,6 +225,9 @@ O roadmap de features só pode começar quando todos os itens abaixo estiverem c
 - [10 — Contratos do app público legado](10-contratos-legado-app-publico.md)
 - [11 — Fase 0: evidências e checklist](11-fase-0-evidencias-e-checklist.md)
 - [12 — Inventário de deploy e dependências do legado](12-inventario-deploy-e-dependencias-legado.md)
+- [13 — Inventário Supabase e fronteira de dados](13-inventario-supabase-e-fronteira-de-dados.md)
+- [14 — Topologia Preview e coexistência Vercel](14-topologia-preview-e-coexistencia-vercel.md)
+- [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
 - [ADRs](adr/README.md)
 
 ## Estado do produto ao final deste roadmap

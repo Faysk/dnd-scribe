@@ -6,6 +6,19 @@ Status: **roadmap de execução**
 
 O roadmap é sequencial por risco, não por empolgação visual. Uma fase pode começar em paralelo com outra somente quando isso não comprometer seu gate de saída.
 
+## Estado de execução em 2026-09-04
+
+```txt
+Fase 0 — em execução
+Fase 1 — concluída
+Fase 2 — concluída
+Fase 3 — bloqueada pelo gate restante da Fase 0
+```
+
+As Fases 1 e 2 foram encerradas documentalmente em paralelo porque não alteram produção e não dependem dos screenshots finais para definir arquitetura. O bootstrap continua proibido até o baseline visual/performance mínimo da Fase 0 ser congelado.
+
+O resultado detalhado dos gates está em `15-fases-1-2-gates.md`.
+
 ---
 
 ## Fase 0 — Baseline e congelamento
@@ -28,8 +41,26 @@ Registrar o estado atual do produto e impedir expansão funcional durante a migr
 
 - baseline visual congelado;
 - baseline funcional congelado;
+- baseline técnico de performance reproduzível;
 - escopo aprovado;
 - backlog futuro separado.
+
+### Estado atual
+
+Concluído:
+
+- auditoria de código;
+- contratos funcionais;
+- inventário de deploy;
+- inventário Supabase;
+- topologia Vercel;
+- feature freeze.
+
+Pendente:
+
+- screenshots essenciais desktop/mobile;
+- estados visuais de auth/erro;
+- baseline técnico de performance.
 
 ---
 
@@ -53,6 +84,17 @@ Definir a fundação da nova aplicação antes de criar UI real.
 
 Arquitetura aprovada e sem decisões críticas pendentes que bloqueiem bootstrap.
 
+### Estado atual
+
+**Concluída.**
+
+Decisões adicionais fechadas durante a execução:
+
+- API legada permanece como fronteira canônica de dados do player;
+- BFF server-side no Next evita chamadas cross-origin do browser;
+- projeto Vercel separado hospeda `apps/web` durante Preview/Homologação;
+- produção atual permanece no projeto legado até cutover.
+
 ---
 
 ## Fase 2 — ADRs e contratos
@@ -71,9 +113,22 @@ Registrar decisões arquiteturais que não devem depender de memória de convers
 - Server Components por padrão;
 - feature freeze.
 
+### Entregas adicionais concluídas
+
+- API legada como fronteira durante migração;
+- topologia Vercel separada para o Next;
+- BFF Next para consumo da API legada;
+- contratos reais do app público legado congelados.
+
 ### Gate de saída
 
 ADRs com status `Accepted` ou pendências explicitamente bloqueadas.
+
+### Estado atual
+
+**Concluída.**
+
+Pendências como bridge final de URLs antigas e eventual substituição da API legada estão explicitamente adiadas para fases em que os destinos novos e testes de paridade já existam.
 
 ---
 
@@ -95,6 +150,20 @@ Criar o novo app web sem substituir produção.
 - scripts de typecheck/build/test;
 - Vercel Preview;
 - CI mínimo.
+
+### Pré-condição adicional
+
+A Fase 3 só pode começar quando o gate mínimo restante da Fase 0 estiver encerrado.
+
+Topologia aprovada:
+
+```txt
+apps/web
+→ projeto Vercel separado
+→ Preview/Homologação
+→ BFF server-side
+→ API legada
+```
 
 ### Gate de saída
 
@@ -214,11 +283,12 @@ Corrigir a hierarquia atual: sessão é a memória; transcrição é um recurso 
 - metadata;
 - resumo curto/completo;
 - navegação para transcrição;
-- download quando aplicável.
+- download quando aplicável;
+- estratégia final de compatibilidade/redirect para links antigos.
 
 ### Gate de saída
 
-Abrir qualquer sessão publicada leva ao resumo sem exigir rota adicional.
+Abrir qualquer sessão publicada leva ao resumo sem exigir rota adicional, e a estratégia para links antigos está testada antes do cutover.
 
 ---
 
@@ -289,7 +359,8 @@ Garantir que a modernização não gere uma aplicação mais pesada sem benefíc
 - imagens;
 - primeira renderização;
 - navegação entre sessões;
-- transcrição longa.
+- transcrição longa;
+- custo do hop BFF → API legada durante coexistência.
 
 ### Gate de saída
 
