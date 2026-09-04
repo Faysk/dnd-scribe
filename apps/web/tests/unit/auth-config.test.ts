@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseLegacyOrigin, readPublicSupabaseConfig } from '../../lib/config'
+import { canRenderUnconfiguredPreview, parseLegacyOrigin, readPublicSupabaseConfig } from '../../lib/config'
 
 describe('auth configuration', () => {
   it('rejects the movable public domain as BFF upstream', () => {
@@ -13,5 +13,11 @@ describe('auth configuration', () => {
 
   it('returns null when public Supabase settings are incomplete', () => {
     expect(readPublicSupabaseConfig('', '')).toBeNull()
+  })
+
+  it('allows unconfigured technical preview only outside production', () => {
+    expect(canRenderUnconfiguredPreview('development')).toBe(true)
+    expect(canRenderUnconfiguredPreview('test')).toBe(true)
+    expect(canRenderUnconfiguredPreview('production')).toBe(false)
   })
 })
