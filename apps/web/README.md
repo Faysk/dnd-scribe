@@ -13,13 +13,15 @@ Este diretório ainda não contém a Home final, autenticação real, arquivo de
 - Node.js 24 LTS;
 - Next.js 16.3.3;
 - React 19.2.7;
-- TypeScript 7.0.2 em `strict`;
+- TypeScript 6.0.3 em `strict`;
 - Tailwind CSS 4.3.0;
 - Vitest 5;
 - Playwright 1.62;
 - pnpm 11.25.
 
-As versões acima são as versões efetivamente tentadas no bootstrap e só são consideradas aceitas depois de `typecheck`, `lint`, `test`, `build` e E2E verdes no CI.
+TypeScript 7.0.2 foi tentado primeiro e passou no `tsc`, mas o `typescript-eslint` usado pelo `eslint-config-next@16.3.3` ainda não suporta sua API. O ADR 013 registra a decisão de usar TypeScript 6.0.3 como bridge temporária sem desativar lint ou typecheck.
+
+As versões só são consideradas aceitas depois de `typecheck`, `lint`, `test`, `build` e E2E verdes no CI.
 
 ## Rodar localmente
 
