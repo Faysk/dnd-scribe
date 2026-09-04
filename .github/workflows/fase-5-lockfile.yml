@@ -33,8 +33,10 @@ jobs:
         with:
           node-version: 24
 
-      - name: Generate lockfile
-        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Rebuild lockfile from trusted resolution
+        run: |
+          pnpm clean --lockfile
+          pnpm install --lockfile-only --no-frozen-lockfile
 
       - name: Commit lockfile
         run: |
@@ -45,5 +47,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pnpm-lock.yaml
-          git commit -m "chore(web-next): update auth lockfile"
+          git commit -m "chore(web-next): rebuild auth lockfile"
           git push origin HEAD:modernizacao/fase-5-auth-shell
