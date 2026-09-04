@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildLegacyFallbackRewrites, parseLegacyGatewayOrigin } from '@/lib/gateway'
+import { buildLegacyFallbackRewrites, parseLegacyGatewayOrigin } from '../../lib/gateway'
 
 describe('legacy gateway', () => {
   it('aceita somente origem HTTPS estável e sem path', () => {
