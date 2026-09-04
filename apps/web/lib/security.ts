@@ -9,7 +9,15 @@ export function isSameOriginMutation(request: Request) {
   if (!origin) return false
 
   try {
-    return new URL(origin).origin === new URL(request.url).origin
+    const parsedOrigin = new URL(origin).origin
+    const requestUrl = new URL(request.url)
+    const allowedOrigins = new Set([requestUrl.origin])
+    const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host')
+    if (forwardedHost) {
+      const forwardedProto = request.headers.get('x-forwarded-proto') || requestUrl.protocol.replace(':', '')
+      allowedOrigins.add(`${forwardedProto}://${forwardedHost}`)
+    }
+    return allowedOrigins.has(parsedOrigin)
   } catch {
     return false
   }
