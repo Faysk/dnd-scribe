@@ -1,6 +1,6 @@
 # Modernização do DnD Scribe — Roadmap mestre
 
-Status: **planejamento aprovado**  
+Status: **Fase 0 em execução**  
 Escopo: **modernização tecnológica e de UX sem novas features de domínio**
 
 ## Objetivo
@@ -10,6 +10,29 @@ Modernizar o app público do DnD Scribe preservando o que já funciona hoje, sem
 A modernização deve deixar a aplicação pronta para crescer depois, mas sem misturar a migração de tecnologia com o roadmap de novas funcionalidades.
 
 > Regra principal: primeiro modernizar a casa; depois ampliar a casa.
+
+## Estado atual
+
+A auditoria de código do legado da Fase 0 está concluída em nível suficiente para documentar:
+
+- shell e rotas atuais;
+- auth e estados de acesso;
+- APIs consumidas pelo player;
+- resumo e Markdown;
+- transcrição, busca, speaker filter e paginação;
+- temas dark/light/system;
+- build estático atual;
+- dependências;
+- limites do deploy compartilhado com API/Central Local.
+
+A Fase 0 ainda **não está encerrada** porque o baseline visual oficial precisa ser congelado/versionado, principalmente em mobile e nos estados de login, acesso pendente, resumo e erro.
+
+Documentos de controle dessa etapa:
+
+- [01 — Baseline atual](01-baseline-atual.md)
+- [10 — Contratos do app público legado](10-contratos-legado-app-publico.md)
+- [11 — Fase 0: evidências e checklist](11-fase-0-evidencias-e-checklist.md)
+- [12 — Inventário de deploy e dependências do legado](12-inventario-deploy-e-dependencias-legado.md)
 
 ## Escopo congelado
 
@@ -84,24 +107,26 @@ A política é usar a **versão estável/LTS mais recente suportada no momento d
 
 ## Fases
 
-| Fase | Nome | Saída principal |
-| --- | --- | --- |
-| 0 | Baseline e congelamento | estado atual documentado e screenshots de referência |
-| 1 | Arquitetura alvo | stack, limites e organização definidos |
-| 2 | ADRs e contratos | decisões técnicas formalizadas |
-| 3 | Bootstrap | novo app Next rodando em paralelo |
-| 4 | Design system | identidade atual transformada em sistema |
-| 5 | Auth e shell | login, tema, header, sessão e permissões migrados |
-| 6 | Home e arquivo | Home moderna + `/sessoes` |
-| 7 | Página de sessão | resumo como default |
-| 8 | Transcrição | paridade funcional da transcrição |
-| 9 | Qualidade e segurança | strict, a11y, validação e revisão de acesso |
-| 10 | Performance | métricas e otimizações medidas |
-| 11 | Paridade | matriz antiga x nova em 100% |
-| 12 | Homologação | mesa valida preview |
-| 13 | Cutover | nova aplicação em produção com rollback |
-| 14 | Estabilização | regressões corrigidas e métricas observadas |
-| 15 | Encerramento | relatório final e liberação do próximo roadmap |
+| Fase | Nome | Estado atual | Saída principal |
+| --- | --- | --- | --- |
+| 0 | Baseline e congelamento | **em execução** | estado atual documentado e screenshots de referência |
+| 1 | Arquitetura alvo | documentação inicial pronta | stack, limites e organização definidos |
+| 2 | ADRs e contratos | documentação inicial pronta | decisões técnicas formalizadas |
+| 3 | Bootstrap | bloqueada | novo app Next rodando em paralelo |
+| 4 | Design system | não iniciada | identidade atual transformada em sistema |
+| 5 | Auth e shell | não iniciada | login, tema, header, sessão e permissões migrados |
+| 6 | Home e arquivo | não iniciada | Home moderna + `/sessoes` |
+| 7 | Página de sessão | não iniciada | resumo como default |
+| 8 | Transcrição | não iniciada | paridade funcional da transcrição |
+| 9 | Qualidade e segurança | não iniciada | strict, a11y, validação e revisão de acesso |
+| 10 | Performance | não iniciada | métricas e otimizações medidas |
+| 11 | Paridade | não iniciada | matriz antiga x nova em 100% |
+| 12 | Homologação | não iniciada | mesa valida preview |
+| 13 | Cutover | não iniciada | nova aplicação em produção com rollback |
+| 14 | Estabilização | não iniciada | regressões corrigidas e métricas observadas |
+| 15 | Encerramento | não iniciada | relatório final e liberação do próximo roadmap |
+
+`Fase 1` e `Fase 2` podem continuar sendo refinadas documentalmente em paralelo. Isso não significa autorização para iniciar o bootstrap da Fase 3 antes do gate mínimo da Fase 0 e das decisões de coexistência necessárias.
 
 ## Gate entre fases
 
@@ -156,6 +181,9 @@ O roadmap de features só pode começar quando todos os itens abaixo estiverem c
 - [07 — Qualidade, segurança e acessibilidade](07-qualidade-seguranca-a11y.md)
 - [08 — Cutover e estabilização](08-cutover-estabilizacao.md)
 - [09 — Template do relatório final](09-relatorio-final-template.md)
+- [10 — Contratos do app público legado](10-contratos-legado-app-publico.md)
+- [11 — Fase 0: evidências e checklist](11-fase-0-evidencias-e-checklist.md)
+- [12 — Inventário de deploy e dependências do legado](12-inventario-deploy-e-dependencias-legado.md)
 - [ADRs](adr/README.md)
 
 ## Estado do produto ao final deste roadmap
