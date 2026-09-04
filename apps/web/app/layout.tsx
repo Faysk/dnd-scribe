@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { LegacyHashBridge } from '@/components/shell/legacy-hash-bridge'
+import { SkipLink } from '@/components/shell/skip-link'
 import { THEME_STORAGE_KEY } from '@/lib/config'
 
 import './globals.css'
@@ -28,7 +29,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
       </head>
       <body>
         <LegacyHashBridge />
-        <a className="fixed left-3 top-3 z-50 -translate-y-24 rounded-sm bg-accent-strong px-3 py-2 text-sm font-semibold text-accent-contrast transition-transform focus:translate-y-0" href="#content">Pular para o conteúdo</a>
+        <SkipLink />
         {children}
       </body>
     </html>

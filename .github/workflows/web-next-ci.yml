@@ -25,16 +25,16 @@ concurrency:
 
 jobs:
   quality:
-    name: Next bootstrap checks
+    name: Next quality and parity checks
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.25.0
           run_install: false
@@ -65,8 +65,17 @@ jobs:
       - name: Measure client bundle
         run: pnpm --filter @dnd-scribe/web measure:client-bundle
 
-      - name: Install Playwright Chromium
-        run: pnpm --filter @dnd-scribe/web exec playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: pnpm --filter @dnd-scribe/web exec playwright install --with-deps chromium firefox webkit
 
-      - name: E2E smoke
+      - name: E2E parity smoke
         run: pnpm --filter @dnd-scribe/web test:e2e
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-failure-${{ github.run_attempt }}
+          path: apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 7

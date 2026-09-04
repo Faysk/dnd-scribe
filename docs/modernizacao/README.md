@@ -1,46 +1,135 @@
 # Modernização do DnD Scribe — Roadmap mestre
 
-Status: **Fases 0, 1 e 2 concluídas; Fase 3 em execução**  
+Status: **Fase 11 em execução — bloco automatizado verde; homologação autenticada pendente**  
+Data de referência: **2026-09-04**  
 Escopo: **modernização tecnológica e de UX sem novas features de domínio**
 
 ## Objetivo
 
-Modernizar o app público do DnD Scribe preservando o que já funciona hoje, sem iniciar ainda a expansão para personagens, NPCs, lore editável, galerias, timeline, relações ou grafo.
+Modernizar o app público do DnD Scribe preservando o que já funciona, sem iniciar ainda a expansão para personagens, NPCs, lore editável, galerias, timeline, relações ou grafo.
 
 > Regra principal: primeiro modernizar a casa; depois ampliar a casa.
 
 ## Estado atual
 
-A Fase 0 foi encerrada em 2026-09-04 após autorização explícita do owner para avançar ao bootstrap. O fechamento está registrado em [30 — Encerramento da Fase 0](30-fase-0-encerramento.md).
+A modernização já ultrapassou o bootstrap descrito nas primeiras versões deste roadmap.
 
-O baseline estrutural do legado está congelado: shell, rotas, auth, APIs do player, resumo, transcrição, temas, build, deploy, Supabase, local-first, feature freeze e topologia de coexistência.
-
-As evidências visuais ainda não coletadas não foram descartadas: login/pending/menu entram na Fase 5 e a paridade visual completa desktop/mobile dark/light continua obrigatória na Fase 11. O baseline quantitativo de performance continua obrigatório na Fase 10 antes do cutover.
-
-A Fase 3 está sendo executada na branch `modernizacao/fase-3-bootstrap` e no PR #25. O novo `apps/web` já existe como shell técnico em Next e possui CI próprio. A produção legada continua intacta.
-
-### Resultado técnico parcial da Fase 3
-
-O bootstrap já provou em CI:
+O estado operacional atual é:
 
 ```txt
-pnpm install       ✅
-TypeScript strict  ✅
-ESLint             ✅
-Vitest             ✅
-Next build         ✅
-Playwright smoke   ✅
-CI legado          ✅
+Fases 0–2  → fundação, arquitetura e contratos concluídos
+Fases 3–8  → app Next funcional implementado
+Fase 9     → implementação de qualidade/segurança/a11y concluída
+Fase 10    → bloco técnico de performance concluído; benchmark autenticado pendente
+Fase 11    → em execução; matriz automatizada multi-browser verde
+Fases 12–15→ aguardam o fechamento real da paridade/homologação
 ```
 
-A primeira tentativa usou TypeScript 7.0.2. O `tsc` passou, mas `typescript-eslint@8.69.0`, usado pela integração estável do Next 16.3.3, ainda não suporta a API do TS7. O ADR 013 formaliza TypeScript 6.0.3 como bridge temporária, mantendo `strict`, lint e build reais.
+A branch ativa da Fase 11 é:
 
-Pendências para encerrar a Fase 3:
+```txt
+modernizacao/fase-11-paridade-base
+PR #36 — test: iniciar matriz de paridade multi-browser
+```
 
-- persistir o `pnpm-lock.yaml` reproduzível e trocar o CI para frozen lockfile;
-- publicar/validar o Next em **projeto Vercel separado** com Root Directory `apps/web`;
-- registrar o deployment Preview técnico;
-- manter planejada/saudável a origem técnica legada do ADR 012 antes do primeiro BFF real.
+A produção continua deliberadamente no app legado:
+
+```txt
+https://dnd.faysk.dev
+```
+
+Nenhum cutover foi realizado.
+
+## Infra isolada do Next
+
+O segundo projeto Vercel foi criado e um Preview técnico real chegou a `READY`:
+
+```txt
+Project: dnd-scribe-web-next
+Project ID: prj_RVVEAucDhhftHY3UlE8PtoNxn6yl
+Deployment: dpl_Ha9etK6sk3e96qmqVxJTCmz6fLoQ
+Source commit: bf7ce242d083825cc65ee03354b3c638c95e87f0
+State: READY
+```
+
+Esse Preview confirmou build e isolamento de infraestrutura, mas **não é o release candidate final** porque a branch avançou depois do SHA publicado.
+
+O próximo deployment deve ser criado somente como candidato formal pinado no SHA verde mais recente.
+
+### Limitação temporária da Vercel
+
+A API de deploy do plano Hobby atingiu o limite diário durante a validação:
+
+```txt
+resource: api-deployments-free-per-day
+remaining: 0
+reset: 2026-09-05T21:12:30.716Z
+```
+
+Enquanto esse limite existir, a execução continua em CI, testes, documentação, contratos, segurança, acessibilidade e preparação da homologação. A produção não é afetada.
+
+## Resultado automatizado mais recente
+
+A matriz da Fase 11 roda em:
+
+```txt
+Desktop Chromium
+Desktop Firefox
+Desktop WebKit
+Mobile Chromium — Pixel 5
+Mobile WebKit — iPhone 13
+```
+
+Último gate que fechou o bloco automatizado:
+
+```txt
+Web Next CI #69
+run 33923147976
+
+TypeScript              ✅
+ESLint                  ✅
+Vitest                  ✅ — 12 arquivos / 25 testes
+Next production build   ✅
+Client bundle audit     ✅ — 18 arquivos / 0 marcadores server-only
+Bundle inventory        ✅
+Playwright              ✅ — 71 passed / 4 skipped / 0 failed
+```
+
+Os quatro skips são intencionais e restritos a checks de foco/Tab em WebKit que dependem da preferência Full Keyboard Access do Safari/OS. A semântica e ativação do skip link continuam verificadas em todas as engines.
+
+O legado permaneceu verde no mesmo ciclo:
+
+```txt
+CI #388
+Companion regression tests ✅
+App checks                ✅
+Python syntax             ✅
+```
+
+## O que ainda impede fechar a Fase 11
+
+A automação sem credenciais não substitui homologação real. Permanecem pendentes:
+
+```txt
+Google OAuth real
+Discord OAuth real
+membership aprovada e pendente
+refresh de sessão
+perfil/avatar/capabilities reais
+Home com acervo real
+/sessoes com catálogo real
+resumo real
+transcrição longa real
+busca e speaker filter reais
+cursor/infinite load reais
+download real
+visual dark/light autenticado
+zoom 200% autenticado
+cookies HTTPS
+benchmark legado x Next
+```
+
+Esses itens serão executados no próximo release candidate autenticável, usando o corpus fixo de `39-fase-11-corpus-homologacao.md`.
 
 ---
 
@@ -77,14 +166,14 @@ Pendências para encerrar a Fase 3:
 - modernização da Central Local/pipeline/Whisper;
 - migração completa do backend legado.
 
-Esses temas pertencem a um roadmap novo somente depois da modernização ser formalmente encerrada.
+Esses temas pertencem a outro roadmap, criado somente depois da modernização ser formalmente encerrada.
 
 ---
 
 ## Princípios
 
 1. **Paridade antes de expansão** — feature nova não entra durante a migração.
-2. **Preservar a identidade** — o visual atual é a base oficial.
+2. **Preservar a identidade** — o visual editorial atual é a base oficial.
 3. **Dark e light são primeira classe** — nenhum é fallback.
 4. **Local-first permanece** — áudio/processamento pesado continuam locais.
 5. **Supabase permanece** — banco/auth não são trocados sem motivo.
@@ -96,7 +185,7 @@ Esses temas pertencem a um roadmap novo somente depois da modernização ser for
 
 ---
 
-## Stack operacional da Fase 3
+## Stack operacional atual
 
 | Camada | Versão/direção atual |
 | --- | --- |
@@ -107,11 +196,11 @@ Esses temas pertencem a um roadmap novo somente depois da modernização ser for
 | CSS | Tailwind CSS 4.3.0 + tokens próprios |
 | Unit tests | Vitest 5.0.0 |
 | E2E | Playwright 1.62.1 |
-| Package manager | pnpm 11.25.0 no novo workspace |
+| Package manager | pnpm 11.25.0 |
 | Banco | PostgreSQL / Supabase preservado |
-| Auth futuro | Supabase Auth + SSR/cookies |
+| Auth | Supabase Auth + SSR/cookies |
 | Dados durante migração | BFF Next → origem legada → API → Supabase |
-| Deploy | segundo projeto Vercel para `apps/web` durante Preview/Homologação |
+| Deploy | segundo projeto Vercel isolado durante Preview/Homologação |
 | Processamento pesado | local companion atual |
 
 A política continua sendo usar versões estáveis/LTS recentes. Exceções de compatibilidade precisam de ADR e não podem ser resolvidas desativando checks.
@@ -133,13 +222,7 @@ Browser
 
 `dnd.faysk.dev` continua no projeto legado até a Fase 13.
 
-ADR 012 define uma origem técnica estável recomendada como:
-
-```txt
-legacy.dnd.faysk.dev
-```
-
-O BFF moderno não deve usar `dnd.faysk.dev` como upstream interno, evitando self-loop depois do cutover.
+ADR 012 define uma origem técnica estável para o legado, evitando que o novo app use o próprio domínio de produção como upstream depois do cutover.
 
 ### Após o cutover
 
@@ -148,9 +231,9 @@ dnd.faysk.dev
 → novo projeto Next
 │
 ├── páginas modernas
-├── /api/web/* BFF moderno
+├── BFF moderno
 └── gateway de contratos ainda legados
-    → legacy.dnd.faysk.dev
+    → origem técnica legada
     → projeto legado
 ```
 
@@ -167,37 +250,57 @@ API antiga, Central Local/Edit, jobs, integrações e crons podem permanecer no 
 /sessoes/[id]/transcricao → transcrição
 ```
 
-ADR 011 preserva links históricos:
+Links históricos permanecem compatíveis:
 
 ```txt
 #/sessao/:id        → /sessoes/:id/transcricao
 #/sessao/:id/resumo → /sessoes/:id
 ```
 
+A bridge já possui cobertura unitária e E2E no browser.
+
 ---
 
 ## Fases
 
-| Fase | Nome | Estado atual | Plano |
+| Fase | Nome | Estado atual | Evidência principal |
 | --- | --- | --- | --- |
 | 0 | Baseline e congelamento | **concluída** | docs 01, 10, 11, 16 e 30 |
 | 1 | Arquitetura alvo | **concluída** | doc 02 + ADRs |
 | 2 | ADRs e contratos | **concluída** | ADRs 001+ |
-| 3 | Bootstrap | **em execução** | doc 17 + PR #25 |
-| 4 | Design system | **não iniciada; plano pronto** | doc 18 |
-| 5 | Auth e shell | **não iniciada; plano pronto** | doc 19 |
-| 6 | Home e arquivo | **não iniciada; plano pronto** | doc 20 |
-| 7 | Página de sessão | **não iniciada; plano pronto** | doc 21 |
-| 8 | Transcrição | **não iniciada; plano pronto** | doc 22 |
-| 9 | Qualidade, segurança e a11y | **não iniciada; plano pronto** | doc 23 |
-| 10 | Performance | **não iniciada; plano pronto** | doc 24 |
-| 11 | Paridade total | **não iniciada; plano pronto** | doc 25 |
-| 12 | Homologação | **não iniciada; plano pronto** | doc 26 |
-| 13 | Cutover | **não iniciada; plano pronto** | doc 27 |
-| 14 | Estabilização | **não iniciada; plano pronto** | doc 28 |
-| 15 | Encerramento | **não iniciada; plano pronto** | doc 29 |
+| 3 | Bootstrap | **implementada e validada** | app Next + CI + Vercel isolada |
+| 4 | Design system | **implementada** | tokens/componentes/temas |
+| 5 | Auth e shell | **implementada; homologação real pendente** | SSR auth/shell |
+| 6 | Home e arquivo | **implementada; paridade real pendente** | `/` + `/sessoes` |
+| 7 | Página de sessão | **implementada; paridade real pendente** | `/sessoes/[id]` |
+| 8 | Transcrição | **implementada; paridade real pendente** | rota/BFF/reader |
+| 9 | Qualidade, segurança e a11y | **bloco técnico concluído** | doc de execução Fase 9 |
+| 10 | Performance | **bloco técnico concluído; benchmark pendente** | doc 38 |
+| 11 | Paridade total | **em execução** | docs 25, 37 e 39 |
+| 12 | Homologação | **aguardando Fase 11** | doc 26 |
+| 13 | Cutover | **não iniciado** | docs 08 e 27 |
+| 14 | Estabilização | **não iniciada** | docs 08 e 28 |
+| 15 | Encerramento | **não iniciado** | docs 09 e 29 |
 
-Nenhuma fase posterior começa antes do gate da anterior.
+A implementação técnica de fases anteriores não autoriza pular os gates de paridade/homologação.
+
+---
+
+## Corpus fixo da paridade
+
+O snapshot real da campanha publicado em 2026-09-04 possui 11 sessões. A Fase 11 fixou casos representativos para evitar homologação por amostragem conveniente.
+
+Casos obrigatórios incluem:
+
+```txt
+rmDsxh640RR4                           → sessão mais recente / recap muito longo
+Svz6mvN0cBUk                           → maior transcrição / busca e filtro
+craig-AdabEqbzngmT-stage1-full         → transcrição mínima/histórica
+craig-BIRq3nIWB4v9                     → duração ausente
+manual-2026-07-05-20260705-sessao-000806 → source_session_id longo
+```
+
+Detalhes e queries fixas estão em [39 — Corpus real de homologação](39-fase-11-corpus-homologacao.md).
 
 ---
 
@@ -214,25 +317,25 @@ O roadmap de features só pode começar quando:
 - [ ] transcrição preserva busca, filtro, paginação e download;
 - [ ] dark e light homologados;
 - [ ] desktop e mobile homologados;
-- [ ] TypeScript strict sem erros;
-- [ ] lint/typecheck/test/build verdes;
-- [ ] E2E crítico verde;
-- [ ] testes visuais aceitos;
+- [x] TypeScript strict sem erros no bloco automatizado atual;
+- [x] lint/typecheck/unit/build verdes no bloco automatizado atual;
+- [x] E2E determinístico multi-browser verde no bloco automatizado atual;
+- [ ] testes visuais autenticados aceitos;
 - [ ] performance medida e sem regressão crítica não justificada;
-- [ ] segurança/RLS revisadas;
-- [ ] acessibilidade validada;
-- [ ] CI e Preview estáveis;
+- [ ] segurança/RLS revisadas no release candidate final;
+- [ ] acessibilidade manual/autenticada validada;
+- [ ] CI e Preview finais estáveis;
 - [ ] legacy origin/gateway estabilizados;
-- [ ] contratos históricos críticos preservados;
+- [x] bridge de contratos históricos críticos coberta por testes;
 - [ ] rollback testado/documentado;
 - [ ] estabilização encerrada;
-- [ ] documentação atualizada;
+- [ ] documentação final atualizada;
 - [ ] relatório final publicado;
 - [ ] README marcado como **MODERNIZAÇÃO: COMPLETA**.
 
 ---
 
-## Documentação
+## Documentação principal
 
 ### Fundação
 
@@ -247,7 +350,7 @@ O roadmap de features só pode começar quando:
 - [08 — Cutover e estabilização](08-cutover-estabilizacao.md)
 - [09 — Template do relatório final](09-relatorio-final-template.md)
 
-### Baseline/auditoria
+### Baseline e arquitetura
 
 - [10 — Contratos do app público legado](10-contratos-legado-app-publico.md)
 - [11 — Fase 0: evidências e checklist](11-fase-0-evidencias-e-checklist.md)
@@ -257,43 +360,24 @@ O roadmap de features só pode começar quando:
 - [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
 - [16 — Fase 0: runbook de captura](16-fase-0-runbook-de-captura.md)
 - [30 — Encerramento da Fase 0](30-fase-0-encerramento.md)
-- [Baseline visual](baseline/visual/README.md)
-- [Baseline de performance](baseline/performance/README.md)
 
-### Planos de execução
+### Execução atual
 
-- [17 — Fase 3: Bootstrap](17-fase-3-bootstrap-plano-de-execucao.md)
-- [18 — Fase 4: Design System](18-fase-4-design-system-plano-de-execucao.md)
-- [19 — Fase 5: Auth e Shell](19-fase-5-auth-shell-plano-de-execucao.md)
-- [20 — Fase 6: Home e Arquivo](20-fase-6-home-arquivo-plano-de-execucao.md)
-- [21 — Fase 7: Página de Sessão](21-fase-7-pagina-sessao-plano-de-execucao.md)
-- [22 — Fase 8: Transcrição](22-fase-8-transcricao-plano-de-execucao.md)
-- [23 — Fase 9: Qualidade, Segurança e A11y](23-fase-9-qualidade-seguranca-a11y-plano-de-execucao.md)
-- [24 — Fase 10: Performance](24-fase-10-performance-plano-de-execucao.md)
-- [25 — Fase 11: Paridade Total](25-fase-11-paridade-total-plano-de-execucao.md)
-- [26 — Fase 12: Homologação](26-fase-12-homologacao-plano-de-execucao.md)
-- [27 — Fase 13: Cutover](27-fase-13-cutover-plano-de-execucao.md)
-- [28 — Fase 14: Estabilização](28-fase-14-estabilizacao-plano-de-execucao.md)
-- [29 — Fase 15: Encerramento](29-fase-15-encerramento-plano-de-execucao.md)
+- [25 — Plano da Fase 11](25-fase-11-paridade-total-plano-de-execucao.md)
+- [26 — Plano da Fase 12](26-fase-12-homologacao-plano-de-execucao.md)
+- [37 — Execução da Fase 11](37-fase-11-paridade-execucao.md)
+- [38 — Execução da Fase 10 / Performance](38-fase-10-performance-execucao.md)
+- [39 — Corpus real de homologação](39-fase-11-corpus-homologacao.md)
+- [Matriz de paridade](06-matriz-de-paridade.md)
 
-### Decisões
+### ADRs
 
-- [ADRs](adr/README.md)
+As decisões arquiteturais aceitas permanecem em [`adr/`](adr/README.md). Mudanças incompatíveis ou exceções relevantes exigem ADR em vez de alteração silenciosa.
 
 ---
 
-## Estado do produto ao final
+## Próximo gate
 
-A aplicação continuará oferecendo essencialmente as mesmas capacidades públicas de consulta, porém com base moderna, modular, tipada, testada e preparada para crescer.
+O próximo passo técnico que depende da Vercel é criar um release candidate do SHA verde mais recente após o reset da quota. Até lá, todo trabalho que não depende de novo deployment deve continuar sendo fechado na branch da Fase 11.
 
-O frontend antigo não será mais necessário para o uso normal dos jogadores.
-
-API/Central Local/jobs/crons legados podem permanecer atrás da origem técnica/gateway porque sua modernização não faz parte deste roadmap.
-
-Somente depois deste documento receber:
-
-```txt
-MODERNIZAÇÃO: COMPLETA
-```
-
-pode ser criado o roadmap das features de Pessoas, Lore, Coleções, Jornada, Mundo e Relações.
+A modernização **não está concluída** até o release candidate passar por paridade real, homologação, cutover, estabilização e relatório final.
