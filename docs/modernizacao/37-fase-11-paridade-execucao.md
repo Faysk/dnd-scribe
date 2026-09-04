@@ -118,6 +118,36 @@ A suíte foi então separada:
 
 Isso mantém a exigência de acessibilidade do produto sem transformar uma preferência da engine em falso negativo de CI.
 
+### 3.1 Segundo achado — actionability de ponteiro em elemento intencionalmente oculto
+
+A execução `Web Next CI #65` encontrou um segundo problema, desta vez no próprio teste e de forma consistente nas cinco engines:
+
+```txt
+56 passed
+5 failed
+4 skipped
+```
+
+Os cinco failures eram o mesmo cenário:
+
+```txt
+skip link aponta para o conteúdo e ativa o destino
+```
+
+O Playwright recusava `locator.click()` porque o skip link fica intencionalmente deslocado acima da viewport com `-translate-y-24` até receber foco.
+
+Isso não representa defeito do produto: o componente é deliberadamente invisível para pointer enquanto não está em uso, mas continua disponível para teclado e tecnologia assistiva.
+
+Correção aplicada no teste:
+
+- a prova comum a todas as engines usa a ativação nativa `HTMLAnchorElement.click()` via DOM;
+- continua verificando `href`, `tabindex=-1`, foco transferido ao `#content` e atualização do hash;
+- o cenário separado Chromium/Firefox continua exercitando foco visível e `Enter`, cobrindo interação real por teclado sem transformar pointer actionability em requisito do skip link.
+
+A correção preserva o comportamento do produto e remove apenas uma premissa incorreta da automação.
+
+A partir dessa falha, os artefatos Playwright passaram a ser preservados automaticamente quando o job falha. A execução #65 comprovou o fluxo de upload de `test-results`/traces.
+
 ## 4. Higiene encontrada durante o gate
 
 A execução de paridade também revelou warnings que não eram regressões funcionais, mas deixavam o gate ruidoso.
@@ -149,9 +179,40 @@ Sem credenciais reais, o conjunto local/CI pode provar:
 - bridge de rotas legadas;
 - ausência de marcadores server-only no client bundle.
 
+Além do teste unitário do mapeamento de hash, a Fase 11 adicionou E2E para a bridge real no browser:
+
+```txt
+/#/sessao/sessao-42/resumo → /sessoes/sessao-42
+/#/sessao/sessao-42        → /sessoes/sessao-42/transcricao
+```
+
+Sem envs de autenticação, os destinos terminam nos estados técnicos seguros das páginas, o que permite provar o redirecionamento sem fabricar uma sessão.
+
 Esses testes são evidência técnica, não aprovação do fluxo autenticado completo.
 
-## 6. O que continua exigindo sessão real
+## 6. Corpus real preparado para a homologação
+
+Enquanto o deploy está limitado, o banco foi inspecionado em modo somente leitura para preparar um corpus fixo de sessões publicadas.
+
+O inventário completo e as consultas fixas estão em:
+
+```txt
+docs/modernizacao/39-fase-11-corpus-homologacao.md
+```
+
+O corpus obrigatório inclui casos reais para:
+
+- sessão mais recente e resumo muito longo;
+- maior transcrição publicada;
+- busca e filtro por falante;
+- transcrição mínima/histórica;
+- duração ausente;
+- `source_session_id` longo/manual;
+- Markdown real com headings, listas e blockquotes.
+
+Também ficou documentado que o snapshot atual não possui sessão publicada sem hero/cover, portanto fallback de arte não será falsamente apresentado como caso real de paridade.
+
+## 7. O que continua exigindo sessão real
 
 Não será falsamente marcado como PASS usando mocks:
 
@@ -177,7 +238,7 @@ benchmark autenticado
 
 Esses itens exigem release candidate acessível e sessão real aprovada.
 
-## 7. Preview Next e proteção Vercel
+## 8. Preview Next e proteção Vercel
 
 O deployment isolado existe e está READY.
 
@@ -188,7 +249,7 @@ Consequência:
 - build/infra = validado;
 - navegação real autenticada = ainda não homologada.
 
-## 8. Limite diário de deploy
+## 9. Limite diário de deploy
 
 A API de deploy do plano Hobby atingiu o limite diário durante a criação/validação do projeto:
 
@@ -211,9 +272,10 @@ Enquanto esse limite estiver ativo, a execução continua em tudo que não depen
 - contratos;
 - segurança;
 - acessibilidade;
+- corpus real de homologação;
 - preparação da homologação real.
 
-## 9. Política para release candidate
+## 10. Política para release candidate
 
 Quando um novo deploy puder ser criado, ele deverá ser tratado como candidato formal, não como preview descartável.
 
@@ -231,7 +293,7 @@ resultado matriz browsers
 
 Se uma correção mudar o SHA, nasce um novo candidato.
 
-## 10. Ordem de execução da Fase 11
+## 11. Ordem de execução da Fase 11
 
 ```txt
 A. matriz multi-browser no CI
@@ -250,7 +312,7 @@ M. incorporar benchmark da Fase 10
 N. identificar release candidate final
 ```
 
-## 11. Feature freeze
+## 12. Feature freeze
 
 Continua proibido usar a Fase 11 para introduzir domínio novo.
 
@@ -269,7 +331,7 @@ coleções
 
 continua fora deste ciclo.
 
-## 12. Gate deste primeiro bloco
+## 13. Gate deste primeiro bloco
 
 ```txt
 Playwright Desktop Chromium configurado ✅
@@ -280,9 +342,12 @@ Playwright Mobile WebKit configurado    ✅
 CI instala as três engines              ✅
 workflow executado                       ✅
 regressão WebKit identificada            ✅
-correção determinística aplicada         ✅
+actionability falsa identificada         ✅
+correções determinísticas aplicadas      ✅
+hash bridge coberto por E2E              ✅
+corpus real de homologação preparado     ✅
 5 projetos Playwright verdes             ⬜
-último workflow do head verde             ⬜
+último workflow do head verde            ⬜
 ```
 
 O documento só marcará os dois últimos itens como concluídos depois da execução real do SHA mais recente da branch.
