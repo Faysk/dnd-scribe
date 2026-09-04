@@ -32,7 +32,10 @@ test('skip link aponta para o conteúdo e ativa o destino', async ({ page }) => 
   await expect(skipLink).toHaveAttribute('href', '#content')
   await expect(page.locator('#content')).toHaveAttribute('tabindex', '-1')
 
-  await skipLink.click()
+  // O link fica intencionalmente fora da viewport até receber foco. Usar a
+  // ativação nativa do DOM testa o handler sem transformar a actionability de
+  // ponteiro do Playwright em requisito de acessibilidade do componente.
+  await skipLink.evaluate((element) => (element as HTMLAnchorElement).click())
   await expect(page.locator('#content')).toBeFocused()
   await expect(page).toHaveURL(/#content$/)
 })
