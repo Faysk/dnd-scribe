@@ -1,4 +1,4 @@
-import { normalizeArtworkUrl } from '@/lib/artwork'
+import { normalizeArtworkUrl } from '../../artwork'
 
 export const TRANSCRIPT_PAGE_SIZE = 120
 export const TRANSCRIPT_SOURCE_SESSION_ID_MAX_LENGTH = 220
