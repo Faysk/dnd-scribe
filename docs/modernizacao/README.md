@@ -13,7 +13,7 @@ A modernização deve deixar a aplicação pronta para crescer depois, mas sem m
 
 ## Estado atual
 
-A auditoria de código do legado da Fase 0 está concluída em nível suficiente para documentar:
+A auditoria do legado da Fase 0 já documenta:
 
 - shell e rotas atuais;
 - auth e estados de acesso;
@@ -24,37 +24,26 @@ A auditoria de código do legado da Fase 0 está concluída em nível suficiente
 - build estático atual;
 - dependências;
 - limites do deploy compartilhado com API/Central Local;
-- schema real do Supabase relevante à modernização;
-- topologia atual da Vercel.
+- schema Supabase relevante;
+- topologia Vercel atual.
 
-A Fase 0 ainda **não está encerrada** porque o baseline visual oficial e o baseline técnico de performance precisam ser congelados de forma reproduzível, principalmente em mobile e nos estados de login, acesso pendente, resumo e erro.
+A Fase 0 ainda **não está encerrada** porque o golden baseline visual e o baseline técnico de performance precisam ser congelados de forma reproduzível, conforme issue **#21**.
 
-Em paralelo, as Fases 1 e 2 foram encerradas documentalmente. Arquitetura, fronteira de dados e coexistência não são mais bloqueadores do bootstrap.
+As Fases 1 e 2 já foram encerradas documentalmente. Arquitetura, fronteira de dados e coexistência não são mais bloqueadores.
 
-O bloqueio atual da Fase 3 é exclusivamente o gate restante da Fase 0, controlado pelo issue **#21 — golden baseline visual + performance**.
+O bloqueio atual da Fase 3 é exclusivamente a Fase 0.
 
-Já existe um manifesto das capturas desktop fornecidas durante o planejamento, com dimensões e SHA-256, além de um protocolo reproduzível para medição de performance. Isso reduz o trabalho restante a persistir as evidências e executar as medições em um navegador autenticado real.
+### Planejamento antecipado
 
-As Fases 3 a 8 já possuem planos de execução detalhados. Isso é preparação documental: **nenhuma dessas fases é considerada iniciada antes de seus gates anteriores**. O objetivo é chegar à implementação com decisões de escopo, testes, segurança e paridade previamente explícitas.
+As Fases **3 a 15** já possuem planos de execução detalhados.
 
-Documentos de controle dessa etapa:
+Isso é preparação documental, não execução antecipada:
 
-- [01 — Baseline atual](01-baseline-atual.md)
-- [10 — Contratos do app público legado](10-contratos-legado-app-publico.md)
-- [11 — Fase 0: evidências e checklist](11-fase-0-evidencias-e-checklist.md)
-- [12 — Inventário de deploy e dependências do legado](12-inventario-deploy-e-dependencias-legado.md)
-- [13 — Inventário Supabase e fronteira de dados](13-inventario-supabase-e-fronteira-de-dados.md)
-- [14 — Topologia Preview e coexistência Vercel](14-topologia-preview-e-coexistencia-vercel.md)
-- [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
-- [16 — Fase 0: runbook de captura](16-fase-0-runbook-de-captura.md)
-- [17 — Fase 3: plano de execução do bootstrap](17-fase-3-bootstrap-plano-de-execucao.md)
-- [18 — Fase 4: plano de execução do Design System](18-fase-4-design-system-plano-de-execucao.md)
-- [19 — Fase 5: plano de execução de Auth e Shell](19-fase-5-auth-shell-plano-de-execucao.md)
-- [20 — Fase 6: plano de execução da Home e Arquivo](20-fase-6-home-arquivo-plano-de-execucao.md)
-- [21 — Fase 7: plano de execução da Página de Sessão](21-fase-7-pagina-sessao-plano-de-execucao.md)
-- [22 — Fase 8: plano de execução da Transcrição](22-fase-8-transcricao-plano-de-execucao.md)
-- [Baseline visual](baseline/visual/README.md)
-- [Baseline de performance](baseline/performance/README.md)
+> nenhuma fase começa antes do gate da fase anterior.
+
+O objetivo é chegar ao código sem improvisar arquitetura, auth, paridade, cutover ou rollback no meio da implementação.
+
+---
 
 ## Escopo congelado
 
@@ -65,47 +54,57 @@ Documentos de controle dessa etapa:
 - App Router;
 - Server Components por padrão;
 - design system formalizado;
-- dark e light mode preservados e refinados;
-- autenticação moderna com Supabase;
-- Home reorganizada como entrada da campanha, ainda usando apenas dados existentes;
-- arquivo de sessões separado da Home;
-- resumo como página principal da sessão;
-- transcrição como recurso secundário da sessão;
-- preservação da busca, filtro, paginação e download da transcrição;
+- dark e light preservados/refinados;
+- Supabase Auth com SSR/cookies;
+- Home reorganizada usando apenas dados existentes;
+- `/sessoes` como arquivo completo;
+- resumo como página padrão da sessão;
+- transcrição como recurso secundário;
+- busca, speaker filter, paginação e download preservados;
 - testes automatizados;
 - CI;
-- segurança, acessibilidade e performance;
-- preview, homologação, cutover e estabilização.
+- segurança;
+- acessibilidade;
+- performance;
+- Preview;
+- homologação;
+- cutover;
+- estabilização.
 
 ### Não entra neste roadmap
 
 - personagens;
 - NPCs;
-- páginas de lore;
-- editor de lore;
-- upload/galeria de referências por personagem;
+- páginas/editor de lore;
+- galerias de referências;
 - itens, armas, instrumentos e companheiros;
-- timeline de personagem;
+- jornada/timeline de personagem;
 - timeline global;
-- relações entre entidades;
-- grafo de conexões;
-- busca global entre entidades;
-- novas regras de domínio para canon além das já existentes.
+- relações;
+- grafo;
+- busca global de entidades;
+- novo modelo de canon;
+- modernização da Central Local/pipeline/Whisper;
+- migração completa do backend legado.
 
-Essas features serão planejadas em um roadmap novo somente quando a modernização estiver concluída.
+Esses temas pertencem a um roadmap novo somente depois da modernização ser formalmente encerrada.
+
+---
 
 ## Princípios
 
-1. **Paridade antes de expansão** — nada de feature nova enquanto o legado ainda for necessário para uso normal.
-2. **Preservar a identidade** — o visual atual continua sendo a base estética oficial.
-3. **Dark e light são produtos de primeira classe** — nenhum tema é tratado como fallback.
-4. **Local-first permanece** — áudio e processamento pesado continuam locais.
-5. **Supabase permanece** — banco, auth e dados existentes são evoluídos, não substituídos sem motivo.
-6. **Server-first** — conteúdo editorial e leitura devem enviar o mínimo possível de JavaScript ao browser.
+1. **Paridade antes de expansão** — feature nova não entra durante a migração.
+2. **Preservar a identidade** — o visual atual é a base oficial.
+3. **Dark e light são primeira classe** — nenhum é fallback.
+4. **Local-first permanece** — áudio/processamento pesado continuam locais.
+5. **Supabase permanece** — banco/auth não são trocados sem motivo.
+6. **Server-first** — leitura editorial envia pouco JS ao browser.
 7. **TypeScript strict** — contratos claros desde o início.
-8. **Acessibilidade não é acabamento** — entra desde a fundação.
-9. **Preview antes de produção** — modernização roda em paralelo ao legado até a homologação.
-10. **Sem “já que estamos aqui”** — qualquer feature fora do escopo vai para backlog do próximo roadmap.
+8. **Acessibilidade não é acabamento**.
+9. **Preview antes de produção**.
+10. **Sem “já que estamos aqui”** — expansão vai para backlog futuro.
+
+---
 
 ## Stack alvo
 
@@ -117,71 +116,101 @@ A política é usar a **versão estável/LTS mais recente suportada no momento d
 | Framework | Next.js App Router |
 | UI | React |
 | Linguagem | TypeScript strict |
-| CSS | Tailwind CSS + design tokens do DnD Scribe |
+| CSS | Tailwind CSS + design tokens próprios |
 | Banco | PostgreSQL / Supabase |
 | Auth | Supabase Auth + SSR/cookies |
-| Dados durante migração | BFF Next → API legada → Supabase |
+| Dados durante migração | BFF Next → origem legada → API → Supabase |
 | Validação | Zod |
-| Testes unitários | Vitest |
-| Testes E2E/visuais | Playwright |
-| Package manager | pnpm |
+| Unit tests | Vitest |
+| E2E/visual | Playwright |
+| Package manager | pnpm no novo app |
 | Deploy | Vercel; projeto separado para `apps/web` durante Preview/Homologação |
 | Processamento pesado | local companion atual |
 
-## Fases
+---
 
-| Fase | Nome | Estado atual | Saída principal |
-| --- | --- | --- | --- |
-| 0 | Baseline e congelamento | **em execução — último gate: issue #21** | estado atual documentado e screenshots/performance de referência |
-| 1 | Arquitetura alvo | **concluída** | stack, limites, dados e organização definidos |
-| 2 | ADRs e contratos | **concluída** | decisões técnicas formalizadas |
-| 3 | Bootstrap | **bloqueada pela Fase 0; plano pronto** | novo app Next rodando em paralelo |
-| 4 | Design system | **não iniciada; plano pronto** | identidade atual transformada em sistema |
-| 5 | Auth e shell | **não iniciada; plano pronto** | login, tema, header, sessão e permissões migrados |
-| 6 | Home e arquivo | **não iniciada; plano pronto** | Home moderna + `/sessoes` |
-| 7 | Página de sessão | **não iniciada; plano pronto** | resumo como default |
-| 8 | Transcrição | **não iniciada; plano pronto** | paridade funcional da transcrição |
-| 9 | Qualidade e segurança | não iniciada | strict, a11y, validação e revisão de acesso |
-| 10 | Performance | não iniciada | métricas e otimizações medidas |
-| 11 | Paridade | não iniciada | matriz antiga x nova em 100% |
-| 12 | Homologação | não iniciada | mesa valida Preview |
-| 13 | Cutover | não iniciada | nova aplicação em produção com rollback |
-| 14 | Estabilização | não iniciada | regressões corrigidas e métricas observadas |
-| 15 | Encerramento | não iniciada | relatório final e liberação do próximo roadmap |
+## Topologia de coexistência
 
-A preparação documental antecipada é permitida porque não altera produção e não compromete gates. Ela **não autoriza** iniciar a implementação da Fase 3 antes do baseline mínimo restante.
-
-## Fronteira arquitetural já aprovada
-
-Durante coexistência:
+Durante desenvolvimento/homologação:
 
 ```txt
 Browser
 → novo app Next
-→ BFF/adapter server-side
-→ API legada em produção
-→ Supabase/PostgreSQL
+→ BFF server-side
+→ DND_LEGACY_ORIGIN
+→ projeto Vercel legado
+→ API/Supabase
 ```
 
-O novo app roda em projeto Vercel separado com Root Directory `apps/web`. `dnd.faysk.dev` permanece no projeto atual até a Fase 13.
+O novo app roda em um segundo projeto Vercel com Root Directory `apps/web`.
 
-## Auth moderno já direcionado
+`dnd.faysk.dev` continua no projeto legado até a Fase 13.
 
-Para a Fase 5, a documentação atual considera a convenção moderna do ecossistema escolhido:
+### Origem técnica legada
 
-- `@supabase/ssr` para sessão em cookies;
-- Server/Browser clients separados;
-- Next.js 16+ usando `proxy.ts` no lugar da convenção antiga `middleware.ts` quando Proxy for necessário para refresh de sessão;
-- identidade/autorização verificada server-side;
-- API legada consumida pelo BFF com token do usuário resolvido no servidor.
+ADR 012 define uma origem estável, recomendada como:
 
-A implementação deve revalidar a documentação oficial vigente na data de execução.
+```txt
+legacy.dnd.faysk.dev
+```
 
-## Compatibilidade com URLs históricas
+Ela continua apontando ao projeto antigo mesmo depois do cutover.
 
-O ADR 011 formaliza a preservação dos links hash antigos.
+O BFF moderno **não usa** `dnd.faysk.dev` como upstream interno.
 
-Como fragmentos não chegam ao servidor, o cutover usará bridge client-side mínima:
+Isso evita self-loop quando o domínio principal for movido.
+
+---
+
+## Topologia após cutover
+
+```txt
+dnd.faysk.dev
+→ novo projeto Next
+│
+├── páginas modernas
+├── /api/web/* BFF moderno
+└── gateway de contratos ainda legados
+    → legacy.dnd.faysk.dev
+    → projeto legado
+```
+
+O projeto legado continua hospedando enquanto necessário:
+
+- API antiga;
+- Central Local/Edit;
+- jobs;
+- integrações;
+- crons;
+- outras superfícies operacionais fora do escopo do frontend.
+
+A modernização do app público não depende de eliminar esse backend legado.
+
+---
+
+## Rotas alvo
+
+```txt
+/
+/sessoes
+/sessoes/[id]
+/sessoes/[id]/transcricao
+```
+
+Semântica:
+
+```txt
+/                         → Home da campanha
+/sessoes                  → arquivo completo
+/sessoes/[id]             → resumo
+/sessoes/[id]/transcricao → transcrição
+```
+
+---
+
+## Compatibilidade histórica
+
+ADR 011 preserva links antigos:
 
 ```txt
 #/sessao/:id
@@ -191,68 +220,124 @@ Como fragmentos não chegam ao servidor, o cutover usará bridge client-side mí
 → /sessoes/:id
 ```
 
-Isso preserva links antigos sem manter o hash router como arquitetura do novo app.
+Como fragmentos `#` não chegam ao servidor, a compatibilidade usa bridge client-side mínima e isolada.
 
-## ADRs aceitos
+---
 
-A lista completa vive em [adr/README.md](adr/README.md).
+## Fases
 
-Até aqui estão aceitos ADRs para:
+| Fase | Nome | Estado atual | Plano |
+| --- | --- | --- | --- |
+| 0 | Baseline e congelamento | **em execução — issue #21** | docs 01, 10, 11, 16 + baseline |
+| 1 | Arquitetura alvo | **concluída** | doc 02 + ADRs |
+| 2 | ADRs e contratos | **concluída** | ADRs 001+ |
+| 3 | Bootstrap | **bloqueada; plano pronto** | doc 17 |
+| 4 | Design system | **não iniciada; plano pronto** | doc 18 |
+| 5 | Auth e shell | **não iniciada; plano pronto** | doc 19 |
+| 6 | Home e arquivo | **não iniciada; plano pronto** | doc 20 |
+| 7 | Página de sessão | **não iniciada; plano pronto** | doc 21 |
+| 8 | Transcrição | **não iniciada; plano pronto** | doc 22 |
+| 9 | Qualidade, segurança e a11y | **não iniciada; plano pronto** | doc 23 |
+| 10 | Performance | **não iniciada; plano pronto** | doc 24 |
+| 11 | Paridade total | **não iniciada; plano pronto** | doc 25 |
+| 12 | Homologação | **não iniciada; plano pronto** | doc 26 |
+| 13 | Cutover | **não iniciada; plano pronto** | doc 27 |
+| 14 | Estabilização | **não iniciada; plano pronto** | doc 28 |
+| 15 | Encerramento | **não iniciada; plano pronto** | doc 29 |
 
-- App Router;
-- TypeScript strict;
-- Supabase;
-- local-first;
-- design system próprio;
-- Server Components;
-- feature freeze;
-- API legada como fronteira de dados;
-- projeto Vercel separado;
-- BFF Next para API legada;
-- compatibilidade de URLs hash legadas.
+A preparação documental antecipada não muda o estado das fases.
 
-## Gate entre fases
+---
 
-Nenhuma fase é considerada concluída apenas porque “funcionou localmente”. Cada fase deve registrar:
+## Visão resumida da execução
 
-- objetivo;
-- decisão;
-- arquivos alterados;
-- validação;
-- testes;
-- riscos restantes;
-- rollback ou plano de recuperação quando aplicável;
-- próximo passo.
+```txt
+FASE 0
+congelar legado
+        ↓
+FASES 1–2
+arquitetura/decisões
+        ↓
+FASE 3
+criar apps/web + CI + Preview
+        ↓
+FASE 4
+Design System
+        ↓
+FASE 5
+Auth + Shell
+        ↓
+FASE 6
+Home + /sessoes
+        ↓
+FASE 7
+Resumo first
+        ↓
+FASE 8
+Transcrição completa
+        ↓
+FASE 9
+Segurança + a11y + qualidade
+        ↓
+FASE 10
+Performance comparativa
+        ↓
+FASE 11
+Paridade 100%
+        ↓
+FASE 12
+Homologação humana
+        ↓
+FASE 13
+Cutover reversível
+        ↓
+FASE 14
+Estabilização
+        ↓
+FASE 15
+Relatório final
+        ↓
+MODERNIZAÇÃO: COMPLETA
+```
+
+---
 
 ## Definition of Done da modernização
 
-O roadmap de features só pode começar quando todos os itens abaixo estiverem concluídos:
+O roadmap de features só pode começar quando:
 
 - [ ] nova stack em produção;
-- [ ] app público não depende mais do frontend legado para uso normal;
+- [ ] app público não depende do frontend legado para uso normal;
 - [ ] login e permissões estabilizados;
 - [ ] Home moderna publicada;
 - [ ] `/sessoes` publicado;
-- [ ] resumo é a entrada padrão da sessão;
+- [ ] resumo é entrada padrão da sessão;
 - [ ] transcrição preserva busca, filtro, paginação e download;
-- [ ] dark mode homologado;
-- [ ] light mode homologado;
+- [ ] dark homologado;
+- [ ] light homologado;
 - [ ] desktop homologado;
 - [ ] mobile homologado;
 - [ ] TypeScript strict sem erros;
 - [ ] lint/typecheck/test/build verdes;
-- [ ] suíte E2E crítica verde;
-- [ ] testes visuais de referência aceitos;
-- [ ] performance medida e sem regressão crítica;
-- [ ] segurança e RLS revisadas;
-- [ ] acessibilidade básica validada;
-- [ ] CI e Preview Deploy estáveis;
+- [ ] E2E crítico verde;
+- [ ] testes visuais aceitos;
+- [ ] performance medida e sem regressão crítica não justificada;
+- [ ] segurança/RLS revisadas;
+- [ ] acessibilidade validada;
+- [ ] CI e Preview estáveis;
+- [ ] legacy origin/gateway estabilizados;
+- [ ] contratos históricos críticos preservados;
 - [ ] rollback testado/documentado;
-- [ ] período de estabilização encerrado;
+- [ ] estabilização encerrada;
 - [ ] documentação atualizada;
-- [ ] relatório final publicado.
+- [ ] relatório final publicado;
+- [ ] README marcado como **MODERNIZAÇÃO: COMPLETA**.
 
-## Documentos deste diretório
+---
+
+## Documentação
+
+### Fundação
 
 - [00 — Escopo e princípios](00-escopo-e-principios.md)
 - [01 — Baseline atual](01-baseline-atual.md)
@@ -264,6 +349,9 @@ O roadmap de features só pode começar quando todos os itens abaixo estiverem c
 - [07 — Qualidade, segurança e acessibilidade](07-qualidade-seguranca-a11y.md)
 - [08 — Cutover e estabilização](08-cutover-estabilizacao.md)
 - [09 — Template do relatório final](09-relatorio-final-template.md)
+
+### Baseline/auditoria
+
 - [10 — Contratos do app público legado](10-contratos-legado-app-publico.md)
 - [11 — Fase 0: evidências e checklist](11-fase-0-evidencias-e-checklist.md)
 - [12 — Inventário de deploy e dependências do legado](12-inventario-deploy-e-dependencias-legado.md)
@@ -271,18 +359,43 @@ O roadmap de features só pode começar quando todos os itens abaixo estiverem c
 - [14 — Topologia Preview e coexistência Vercel](14-topologia-preview-e-coexistencia-vercel.md)
 - [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
 - [16 — Fase 0: runbook de captura](16-fase-0-runbook-de-captura.md)
-- [17 — Fase 3: plano de execução do bootstrap](17-fase-3-bootstrap-plano-de-execucao.md)
-- [18 — Fase 4: plano de execução do Design System](18-fase-4-design-system-plano-de-execucao.md)
-- [19 — Fase 5: plano de execução de Auth e Shell](19-fase-5-auth-shell-plano-de-execucao.md)
-- [20 — Fase 6: plano de execução da Home e Arquivo](20-fase-6-home-arquivo-plano-de-execucao.md)
-- [21 — Fase 7: plano de execução da Página de Sessão](21-fase-7-pagina-sessao-plano-de-execucao.md)
-- [22 — Fase 8: plano de execução da Transcrição](22-fase-8-transcricao-plano-de-execucao.md)
 - [Baseline visual](baseline/visual/README.md)
 - [Baseline de performance](baseline/performance/README.md)
+
+### Planos de execução
+
+- [17 — Fase 3: Bootstrap](17-fase-3-bootstrap-plano-de-execucao.md)
+- [18 — Fase 4: Design System](18-fase-4-design-system-plano-de-execucao.md)
+- [19 — Fase 5: Auth e Shell](19-fase-5-auth-shell-plano-de-execucao.md)
+- [20 — Fase 6: Home e Arquivo](20-fase-6-home-arquivo-plano-de-execucao.md)
+- [21 — Fase 7: Página de Sessão](21-fase-7-pagina-sessao-plano-de-execucao.md)
+- [22 — Fase 8: Transcrição](22-fase-8-transcricao-plano-de-execucao.md)
+- [23 — Fase 9: Qualidade, Segurança e A11y](23-fase-9-qualidade-seguranca-a11y-plano-de-execucao.md)
+- [24 — Fase 10: Performance](24-fase-10-performance-plano-de-execucao.md)
+- [25 — Fase 11: Paridade Total](25-fase-11-paridade-total-plano-de-execucao.md)
+- [26 — Fase 12: Homologação](26-fase-12-homologacao-plano-de-execucao.md)
+- [27 — Fase 13: Cutover](27-fase-13-cutover-plano-de-execucao.md)
+- [28 — Fase 14: Estabilização](28-fase-14-estabilizacao-plano-de-execucao.md)
+- [29 — Fase 15: Encerramento](29-fase-15-encerramento-plano-de-execucao.md)
+
+### Decisões
+
 - [ADRs](adr/README.md)
 
-## Estado do produto ao final deste roadmap
+---
 
-A aplicação continuará oferecendo essencialmente as mesmas capacidades de consulta atuais, porém com uma base moderna, modular, testada e preparada para o próximo ciclo.
+## Estado do produto ao final
 
-A expansão de domínio começa somente depois deste documento ser marcado como **modernização concluída**.
+A aplicação continuará oferecendo essencialmente as mesmas capacidades públicas de consulta, porém com base moderna, modular, tipada, testada e preparada para crescer.
+
+O frontend antigo não será mais necessário para o uso normal dos jogadores.
+
+API/Central Local/jobs/crons legados podem permanecer atrás da origem técnica/gateway, porque sua modernização nunca fez parte deste roadmap.
+
+Somente depois deste documento receber:
+
+```txt
+MODERNIZAÇÃO: COMPLETA
+```
+
+pode ser criado o roadmap das features de Pessoas, Lore, Coleções, Jornada, Mundo e Relações.
