@@ -32,13 +32,13 @@ function SetupState() {
   )
 }
 
-function ArchiveError({ message }: Readonly<{ message: string }>) {
+function ArchiveError() {
   return (
     <div className="mx-auto w-[min(900px,calc(100%-2.5rem))] py-16 sm:py-24">
       <Surface className="p-8 sm:p-10" tone="elevated">
         <Eyebrow>Arquivo indisponível</Eyebrow>
         <SectionTitle className="mt-4">Não foi possível abrir as sessões.</SectionTitle>
-        <BodyCopy className="mt-4 max-w-2xl">{message}</BodyCopy>
+        <BodyCopy className="mt-4 max-w-2xl">O arquivo não respondeu como esperado. Tente novamente em instantes.</BodyCopy>
         <div className="mt-7"><ActionLink href="/sessoes" variant="secondary">Tentar novamente</ActionLink></div>
       </Surface>
     </div>
@@ -75,15 +75,16 @@ export default async function SessionsArchivePage() {
 
   const accessToken = await readAuthenticatedAccessToken()
   let sessions: readonly LibrarySession[] = []
-  let loadError = ''
+  let loadFailed = false
 
   try {
     const payload = await fetchLibrarySessions(accessToken)
     sessions = ordered(payload.sessions)
   } catch (error) {
-    loadError = error instanceof Error ? error.message : 'Falha inesperada ao consultar a biblioteca.'
+    console.error('[web-next] Falha ao consultar o arquivo de sessões.', error)
+    loadFailed = true
   }
 
-  if (loadError) return <ArchiveError message={loadError} />
+  if (loadFailed) return <ArchiveError />
   return <SessionsArchive sessions={sessions} />
 }
