@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "audit:client-bundle": "node scripts/audit-client-bundle.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.5",

@@ -11,9 +11,13 @@ type CampaignLayoutProps = Readonly<{
   children: ReactNode
 }>
 
+function ContentBoundary({ children }: Readonly<{ children: ReactNode }>) {
+  return <main id="content" tabIndex={-1}>{children}</main>
+}
+
 export default async function CampaignLayout({ children }: CampaignLayoutProps) {
   if (!readPublicSupabaseConfig()) {
-    return <main id="content">{children}</main>
+    return <ContentBoundary>{children}</ContentBoundary>
   }
 
   let state: AuthState
@@ -21,11 +25,13 @@ export default async function CampaignLayout({ children }: CampaignLayoutProps) 
     state = await resolveAuthState()
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha inesperada ao validar o acesso.'
-    return <AuthError message={message} />
+    return <ContentBoundary><AuthError message={message} /></ContentBoundary>
   }
 
   if (state.kind === 'anonymous') redirect('/login')
-  if (state.kind === 'pendingAccess') return <PendingAccess identity={state.identity} />
+  if (state.kind === 'pendingAccess') {
+    return <ContentBoundary><PendingAccess identity={state.identity} /></ContentBoundary>
+  }
 
   return (
     <CampaignShell access={state.access} identity={state.identity}>

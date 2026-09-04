@@ -1,4 +1,8 @@
 export const TRANSCRIPT_PAGE_SIZE = 120
+export const TRANSCRIPT_SOURCE_SESSION_ID_MAX_LENGTH = 220
+export const TRANSCRIPT_CURSOR_MAX_LENGTH = 1200
+export const TRANSCRIPT_QUERY_MAX_LENGTH = 120
+export const TRANSCRIPT_SPEAKER_MAX_LENGTH = 120
 
 export type TranscriptSession = Readonly<{
   sourceSessionId: string

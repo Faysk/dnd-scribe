@@ -16,13 +16,34 @@ type LegacyFetchOptions = Readonly<{
   accept?: string
 }>
 
+const LEGACY_TIMEOUT_MS = 12_000
+const ALLOWED_LEGACY_PATHS = new Set([
+  '/api/library-sessions',
+  '/api/library-summary',
+  '/api/library-transcript',
+  '/api/session-download',
+])
+
 function legacyUrl(pathname: string, query: Readonly<Record<string, QueryValue>>) {
+  if (!ALLOWED_LEGACY_PATHS.has(pathname)) {
+    throw new LegacyApiError('Caminho da API legada não autorizado.', 500)
+  }
+
   const url = new URL(pathname, getLegacyOrigin())
   for (const [key, value] of Object.entries(query)) {
     if (value === null || value === undefined || value === '') continue
     url.searchParams.set(key, String(value))
   }
   return url
+}
+
+function logUpstreamFailure(pathname: string, status: number, startedAt: number) {
+  console.warn('[dnd-scribe:bff]', {
+    category: 'legacy_upstream',
+    pathname,
+    status,
+    durationMs: Date.now() - startedAt,
+  })
 }
 
 export async function fetchLegacyResponse(
@@ -33,6 +54,7 @@ export async function fetchLegacyResponse(
 ): Promise<Response> {
   if (!accessToken) throw new LegacyApiError('Sessão sem access token.', 401)
 
+  const startedAt = Date.now()
   let response: Response
   try {
     response = await fetch(legacyUrl(pathname, query), {
@@ -42,12 +64,19 @@ export async function fetchLegacyResponse(
         Authorization: `Bearer ${accessToken}`,
       },
       cache: 'no-store',
+      signal: AbortSignal.timeout(LEGACY_TIMEOUT_MS),
     })
-  } catch {
-    throw new LegacyApiError('A origem legada de dados está indisponível.', 503)
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === 'TimeoutError'
+    logUpstreamFailure(pathname, timedOut ? 504 : 503, startedAt)
+    throw new LegacyApiError(
+      timedOut ? 'A origem legada excedeu o tempo limite.' : 'A origem legada de dados está indisponível.',
+      timedOut ? 504 : 503,
+    )
   }
 
   if (!response.ok) {
+    logUpstreamFailure(pathname, response.status, startedAt)
     throw new LegacyApiError(`API legada recusou a consulta (${response.status}).`, response.status)
   }
   return response

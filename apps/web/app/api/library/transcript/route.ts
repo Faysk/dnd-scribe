@@ -1,13 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-import { TRANSCRIPT_PAGE_SIZE } from '@/lib/api/contracts/transcript'
+import {
+  TRANSCRIPT_CURSOR_MAX_LENGTH,
+  TRANSCRIPT_PAGE_SIZE,
+  TRANSCRIPT_QUERY_MAX_LENGTH,
+  TRANSCRIPT_SOURCE_SESSION_ID_MAX_LENGTH,
+  TRANSCRIPT_SPEAKER_MAX_LENGTH,
+} from '@/lib/api/contracts/transcript'
 import { LegacyApiError } from '@/lib/api/legacy'
 import { fetchSessionTranscript } from '@/lib/api/library'
 import { readAuthenticatedAccessToken } from '@/lib/auth/access-token'
-
-function value(searchParams: URLSearchParams, name: string, maxLength: number) {
-  return String(searchParams.get(name) || '').trim().slice(0, maxLength)
-}
+import { boundedText } from '@/lib/security'
 
 function json(payload: unknown, status = 200) {
   return NextResponse.json(payload, {
@@ -19,12 +22,20 @@ function json(payload: unknown, status = 200) {
 }
 
 export async function GET(request: NextRequest) {
-  const sourceSessionId = value(request.nextUrl.searchParams, 'sourceSessionId', 220)
+  const sourceSessionId = boundedText(
+    request.nextUrl.searchParams.get('sourceSessionId'),
+    TRANSCRIPT_SOURCE_SESSION_ID_MAX_LENGTH,
+  )
+  if (sourceSessionId === null) return json({ ok: false, error: 'Identificador de sessão inválido.' }, 400)
   if (!sourceSessionId) return json({ ok: false, error: 'Sessão não informada.' }, 400)
 
-  const cursor = value(request.nextUrl.searchParams, 'cursor', 1200)
-  const query = value(request.nextUrl.searchParams, 'q', 240)
-  const speaker = value(request.nextUrl.searchParams, 'speaker', 180)
+  const cursor = boundedText(request.nextUrl.searchParams.get('cursor'), TRANSCRIPT_CURSOR_MAX_LENGTH)
+  const query = boundedText(request.nextUrl.searchParams.get('q'), TRANSCRIPT_QUERY_MAX_LENGTH)
+  const speaker = boundedText(request.nextUrl.searchParams.get('speaker'), TRANSCRIPT_SPEAKER_MAX_LENGTH)
+  if (cursor === null || query === null || speaker === null) {
+    return json({ ok: false, error: 'Filtro da transcrição inválido.' }, 400)
+  }
+
   const accessToken = await readAuthenticatedAccessToken()
   if (!accessToken) return json({ ok: false, error: 'Sessão de login ausente.' }, 401)
 
