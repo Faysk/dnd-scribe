@@ -25,16 +25,26 @@ test('logout rejeita POST cross-origin e aceita a própria origem', async ({ req
   expect(accepted.headers().location).toContain('/login')
 })
 
-test('skip link funciona por teclado e leva foco ao conteúdo', async ({ page }) => {
+test('skip link é acionável por teclado e leva foco ao conteúdo', async ({ page }) => {
   await page.goto('/')
-  await page.keyboard.press('Tab')
 
   const skipLink = page.getByRole('link', { name: 'Pular para o conteúdo' })
+  await skipLink.focus()
   await expect(skipLink).toBeFocused()
 
   const outline = await skipLink.evaluate((element) => getComputedStyle(element).outlineWidth)
   expect(Number.parseFloat(outline)).toBeGreaterThan(0)
 
-  await page.keyboard.press('Enter')
+  await skipLink.press('Enter')
   await expect(page.locator('#content')).toBeFocused()
+  await expect(page).toHaveURL(/#content$/)
+})
+
+test('skip link é a primeira parada de Tab quando a engine habilita navegação completa', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes('webkit'), 'Safari/WebKit condiciona Tab em links à preferência de Full Keyboard Access do usuário.')
+
+  await page.goto('/')
+  await page.keyboard.press('Tab')
+
+  await expect(page.getByRole('link', { name: 'Pular para o conteúdo' })).toBeFocused()
 })
