@@ -21,6 +21,10 @@ function dedupeSegments(current: readonly TranscriptSegment[], incoming: readonl
   return [...current, ...incoming.filter((segment) => !seen.has(segment.id))]
 }
 
+function isAbortError(value: unknown) {
+  return value instanceof DOMException && value.name === 'AbortError'
+}
+
 export function TranscriptReader({ initial }: TranscriptReaderProps) {
   const [segments, setSegments] = useState<readonly TranscriptSegment[]>(initial.segments)
   const [speakers, setSpeakers] = useState<readonly string[]>(initial.speakers)
@@ -33,12 +37,22 @@ export function TranscriptReader({ initial }: TranscriptReaderProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const activeRequestRef = useRef<AbortController | null>(null)
+  const loadingRef = useRef(false)
+
+  useEffect(() => () => activeRequestRef.current?.abort(), [])
 
   const fetchPage = useCallback(async (
     cursor: string | null,
     filters: Readonly<{ query: string; speaker: string }>,
     replace: boolean,
   ) => {
+    if (!replace && loadingRef.current) return
+
+    activeRequestRef.current?.abort()
+    const controller = new AbortController()
+    activeRequestRef.current = controller
+    loadingRef.current = true
     setLoading(true)
     setError('')
 
@@ -51,26 +65,35 @@ export function TranscriptReader({ initial }: TranscriptReaderProps) {
       const response = await fetch(`/api/web/library/transcript?${params.toString()}`, {
         headers: { Accept: 'application/json' },
         cache: 'no-store',
+        signal: controller.signal,
       })
       const raw: unknown = await response.json().catch(() => null)
       if (!response.ok) throw new Error('A consulta da transcrição falhou.')
       const payload = parseTranscriptPayload(raw)
 
+      if (activeRequestRef.current !== controller || controller.signal.aborted) return
       setSegments((current) => replace ? payload.segments : dedupeSegments(current, payload.segments))
       setSpeakers(payload.speakers)
       setTotal(payload.total)
       setNextCursor(payload.nextCursor)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível carregar mais falas.')
+      if (controller.signal.aborted || isAbortError(cause)) return
+      if (activeRequestRef.current === controller) {
+        setError(cause instanceof Error ? cause.message : 'Não foi possível carregar mais falas.')
+      }
     } finally {
-      setLoading(false)
+      if (activeRequestRef.current === controller) {
+        activeRequestRef.current = null
+        loadingRef.current = false
+        setLoading(false)
+      }
     }
   }, [initial.session.sourceSessionId])
 
   const loadMore = useCallback(() => {
-    if (!nextCursor || loading) return
+    if (!nextCursor || loadingRef.current) return
     void fetchPage(nextCursor, { query, speaker }, false)
-  }, [fetchPage, loading, nextCursor, query, speaker])
+  }, [fetchPage, nextCursor, query, speaker])
 
   useEffect(() => {
     const node = sentinelRef.current
