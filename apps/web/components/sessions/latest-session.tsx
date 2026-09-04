@@ -1,13 +1,10 @@
 import Link from 'next/link'
 
+import { ArtworkImage } from '@/components/media/artwork-image'
 import { StatusPill } from '@/components/ui/status'
 import { BodyCopy, Eyebrow, MetaText } from '@/components/ui/typography'
 import type { LibrarySession } from '@/lib/api/contracts/library'
 import { displaySessionTitle, formatCount, formatDuration, formatSessionDate } from '@/lib/formatters'
-
-function artworkStyle(url: string) {
-  return url ? { backgroundImage: `url(${JSON.stringify(url)})` } : undefined
-}
 
 type LatestSessionProps = Readonly<{
   session: LibrarySession
@@ -43,16 +40,20 @@ export function LatestSession({ session }: LatestSessionProps) {
         </div>
       </div>
 
-      <div
-        aria-hidden="true"
-        className="min-h-72 bg-surface bg-cover bg-center lg:min-h-full"
-        style={artworkStyle(art)}
-      >
-        {!art ? (
+      <div className="relative min-h-72 overflow-hidden bg-surface lg:min-h-full">
+        {art ? (
+          <ArtworkImage
+            alt=""
+            className="object-cover"
+            priority
+            sizes="(min-width: 1024px) 40vw, 100vw"
+            src={art}
+          />
+        ) : (
           <div className="grid h-full min-h-72 place-items-center bg-[radial-gradient(circle_at_50%_35%,var(--ds-accent-muted),transparent_48%),var(--ds-surface)] font-display text-8xl text-accent/35">
             20
           </div>
-        ) : null}
+        )}
       </div>
     </section>
   )

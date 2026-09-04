@@ -16,6 +16,7 @@ export function SessionNavigation({ active, sourceSessionId }: SessionNavigation
           ? 'border-b-2 border-accent px-4 py-3 font-ui text-sm font-semibold text-foreground no-underline'
           : 'border-b-2 border-transparent px-4 py-3 font-ui text-sm text-foreground-muted no-underline hover:text-foreground'}
         href={`/sessoes/${encoded}`}
+        prefetch={false}
       >
         Resumo
       </Link>
@@ -25,6 +26,7 @@ export function SessionNavigation({ active, sourceSessionId }: SessionNavigation
           ? 'border-b-2 border-accent px-4 py-3 font-ui text-sm font-semibold text-foreground no-underline'
           : 'border-b-2 border-transparent px-4 py-3 font-ui text-sm text-foreground-muted no-underline hover:text-foreground'}
         href={`/sessoes/${encoded}/transcricao`}
+        prefetch={false}
       >
         Transcrição
       </Link>

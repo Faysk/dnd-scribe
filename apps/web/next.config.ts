@@ -15,6 +15,13 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'dmrqnbdvbkfqzctcerbx.supabase.co' },
+      { protocol: 'https', hostname: 'dnd.faysk.dev' },
+      { protocol: 'https', hostname: 'raw.githubusercontent.com' },
+    ],
+  },
   async headers() {
     return [
       {

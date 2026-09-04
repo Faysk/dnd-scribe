@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
 import { MarkdownContent } from '@/components/content/markdown'
+import { ArtworkImage } from '@/components/media/artwork-image'
 import { SessionNavigation } from '@/components/sessions/session-navigation'
 import { ActionLink } from '@/components/ui/action'
 import { StatusPill } from '@/components/ui/status'
@@ -87,9 +88,15 @@ function SessionHero({ session, summary }: SessionPageData) {
       <ActionLink href="/sessoes" size="sm" variant="tertiary">← Arquivo de sessões</ActionLink>
       <div className="mt-6 overflow-hidden rounded-xl border border-border bg-surface-elevated shadow-elevated">
         {art ? (
-          // A URL já foi validada como HTTPS pelo contrato da biblioteca.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img alt={`Arte de destaque de ${title}`} className="aspect-[16/7] w-full bg-surface object-cover" fetchPriority="high" src={art} />
+          <div className="relative aspect-[16/7] w-full bg-surface">
+            <ArtworkImage
+              alt={`Arte de destaque de ${title}`}
+              className="object-cover"
+              priority
+              sizes="(min-width: 1180px) 1180px, calc(100vw - 2.5rem)"
+              src={art}
+            />
+          </div>
         ) : (
           <div aria-label={`Sessão ${title} sem arte de destaque`} className="grid aspect-[16/7] w-full place-items-center bg-[radial-gradient(circle_at_50%_35%,var(--ds-accent-muted),transparent_45%),var(--ds-surface)]" role="img">
             <span className="font-display text-8xl text-accent/30">20</span>

@@ -1,3 +1,5 @@
+import { normalizeArtworkUrl } from '../../artwork'
+
 export type LibrarySession = Readonly<{
   sourceSessionId: string
   title: string
@@ -42,17 +44,6 @@ function nullableNumber(value: unknown) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
 }
 
-function httpsUrl(value: unknown) {
-  const raw = text(value)
-  if (!raw) return ''
-  try {
-    const parsed = new URL(raw)
-    return parsed.protocol === 'https:' ? parsed.toString() : ''
-  } catch {
-    return ''
-  }
-}
-
 function parseSession(value: unknown): LibrarySession {
   const item = record(value)
   if (!item) throw new Error('Sessão inválida na resposta da biblioteca.')
@@ -72,8 +63,8 @@ function parseSession(value: unknown): LibrarySession {
     durationMs: nullableNumber(item.durationMs),
     summary: text(item.summary),
     hasSummary: item.hasSummary === true,
-    coverImageUrl: httpsUrl(item.coverImageUrl),
-    heroImageUrl: httpsUrl(item.heroImageUrl),
+    coverImageUrl: normalizeArtworkUrl(item.coverImageUrl),
+    heroImageUrl: normalizeArtworkUrl(item.heroImageUrl),
     segments: count(item.segments),
     participants: count(item.participants),
     createdAt: text(item.createdAt),

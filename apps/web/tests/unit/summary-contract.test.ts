@@ -14,14 +14,14 @@ describe('session summary contract', () => {
         summary: 'Resumo curto',
         summaryFull: '# Capítulo\n\n**Memória**',
         hasSummary: true,
-        coverImageUrl: 'https://example.com/cover.webp',
+        coverImageUrl: 'https://dnd.faysk.dev/cover.webp',
         heroImageUrl: 'http://example.com/hero.webp',
         updatedAt: '2026-09-04T18:00:00Z',
       },
     })
 
     expect(payload.session.summaryFull).toContain('**Memória**')
-    expect(payload.session.coverImageUrl).toBe('https://example.com/cover.webp')
+    expect(payload.session.coverImageUrl).toBe('https://dnd.faysk.dev/cover.webp')
     expect(payload.session.heroImageUrl).toBe('')
   })
 
