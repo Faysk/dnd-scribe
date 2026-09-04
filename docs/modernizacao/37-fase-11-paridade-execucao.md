@@ -82,9 +82,55 @@ E executa os testes em cinco projetos Playwright.
 
 O timeout do job foi elevado de 15 para 20 minutos para absorver instalação das engines sem reduzir cobertura.
 
+Também foram adicionados dois cuidados operacionais durante a execução da Fase 11:
+
+- `pnpm/action-setup` atualizado da linha v4 para v6, eliminando dependência da action antiga baseada em Node 20;
+- artefatos de falha do Playwright preservados por sete dias com `actions/upload-artifact@v7`, permitindo inspecionar `test-results`, traces e error contexts quando o gate falhar.
+
 Nenhum browser é marcado como aprovado antes do workflow real passar.
 
-## 3. O que a automação atual já consegue provar
+## 3. Primeiro achado real da matriz — foco no WebKit
+
+A primeira execução com WebKit encontrou uma diferença real no teste do skip link.
+
+Evidência inicial:
+
+```txt
+Web Next CI #57
+56 passed
+1 failed  — mobile-webkit
+1 flaky   — desktop-webkit
+2 skipped
+```
+
+O ponto de falha era a expectativa de que um link recebesse foco programático no WebKit da mesma forma que Chromium/Firefox.
+
+Uma segunda tentativa adicionando `tabIndex=0` explicitamente não resolveu o comportamento do runner WebKit. Isso confirmou que o teste misturava duas responsabilidades diferentes:
+
+1. semântica e ativação do skip link;
+2. política de foco de links da engine/Safari, dependente de Full Keyboard Access.
+
+A suíte foi então separada:
+
+- todas as engines verificam `href="#content"`, target com `tabindex=-1`, ativação e foco transferido para `#content`;
+- Chromium e Firefox também verificam foco programático, foco visível, Enter e primeira parada de Tab;
+- WebKit não recebe um falso requisito de foco de link que depende da preferência de Full Keyboard Access do usuário.
+
+Isso mantém a exigência de acessibilidade do produto sem transformar uma preferência da engine em falso negativo de CI.
+
+## 4. Higiene encontrada durante o gate
+
+A execução de paridade também revelou warnings que não eram regressões funcionais, mas deixavam o gate ruidoso.
+
+Foram corrigidos:
+
+- export anônimo do `postcss.config.mjs`;
+- include de `.next/dev/types/**/*.ts` no `tsconfig.json`, evitando reescrita automática pelo build do Next;
+- configuração do Vitest movida para `vitest.config.mts`, declarando ESM de forma explícita.
+
+Essas correções não mudam domínio nem UX; apenas tornam o gate mais determinístico.
+
+## 5. O que a automação atual já consegue provar
 
 Sem credenciais reais, o conjunto local/CI pode provar:
 
@@ -92,7 +138,7 @@ Sem credenciais reais, o conjunto local/CI pode provar:
 - shell de login sem env;
 - estrutura semântica;
 - skip link;
-- foco visível;
+- foco visível nas engines em que navegação completa por links está habilitada;
 - reduced motion;
 - reflow estreito;
 - headers de segurança;
@@ -105,7 +151,7 @@ Sem credenciais reais, o conjunto local/CI pode provar:
 
 Esses testes são evidência técnica, não aprovação do fluxo autenticado completo.
 
-## 4. O que continua exigindo sessão real
+## 6. O que continua exigindo sessão real
 
 Não será falsamente marcado como PASS usando mocks:
 
@@ -131,7 +177,7 @@ benchmark autenticado
 
 Esses itens exigem release candidate acessível e sessão real aprovada.
 
-## 5. Preview Next e proteção Vercel
+## 7. Preview Next e proteção Vercel
 
 O deployment isolado existe e está READY.
 
@@ -142,7 +188,7 @@ Consequência:
 - build/infra = validado;
 - navegação real autenticada = ainda não homologada.
 
-## 6. Limite diário de deploy
+## 8. Limite diário de deploy
 
 A API de deploy do plano Hobby atingiu o limite diário durante a criação/validação do projeto:
 
@@ -156,7 +202,18 @@ Não serão gerados deploys redundantes antes do reset.
 
 O deployment READY existente continua sendo evidência válida do build.
 
-## 7. Política para release candidate
+Enquanto esse limite estiver ativo, a execução continua em tudo que não depende de um novo deployment:
+
+- CI;
+- matriz multi-browser;
+- correções determinísticas;
+- documentação de evidência;
+- contratos;
+- segurança;
+- acessibilidade;
+- preparação da homologação real.
+
+## 9. Política para release candidate
 
 Quando um novo deploy puder ser criado, ele deverá ser tratado como candidato formal, não como preview descartável.
 
@@ -174,7 +231,7 @@ resultado matriz browsers
 
 Se uma correção mudar o SHA, nasce um novo candidato.
 
-## 8. Ordem de execução da Fase 11
+## 10. Ordem de execução da Fase 11
 
 ```txt
 A. matriz multi-browser no CI
@@ -193,7 +250,7 @@ M. incorporar benchmark da Fase 10
 N. identificar release candidate final
 ```
 
-## 9. Feature freeze
+## 11. Feature freeze
 
 Continua proibido usar a Fase 11 para introduzir domínio novo.
 
@@ -212,7 +269,7 @@ coleções
 
 continua fora deste ciclo.
 
-## 10. Gate deste primeiro bloco
+## 12. Gate deste primeiro bloco
 
 ```txt
 Playwright Desktop Chromium configurado ✅
@@ -221,9 +278,11 @@ Playwright Desktop WebKit configurado   ✅
 Playwright Mobile Chromium configurado  ✅
 Playwright Mobile WebKit configurado    ✅
 CI instala as três engines              ✅
-workflow executado                       ⬜
+workflow executado                       ✅
+regressão WebKit identificada            ✅
+correção determinística aplicada         ✅
 5 projetos Playwright verdes             ⬜
-regressões corrigidas                     ⬜
+último workflow do head verde             ⬜
 ```
 
-O documento será atualizado com a evidência do workflow antes de marcar este bloco como concluído.
+O documento só marcará os dois últimos itens como concluídos depois da execução real do SHA mais recente da branch.
