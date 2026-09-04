@@ -13,7 +13,16 @@ describe('campaign access contract', () => {
 
     expect(payload.profile?.displayName).toBe('Dandelion')
     expect(payload.capabilities?.canOpenEdit).toBe(true)
+    expect(payload.campaignRole).toBe('player')
     expect(hasCampaignRole(payload.campaignRole)).toBe(true)
+  })
+
+  it('normalizes absent roles and rejects malformed role shapes', () => {
+    expect(parseCampaignAccessPayload({ campaignRole: null }).campaignRole).toBeNull()
+    expect(parseCampaignAccessPayload({ campaignRole: '' }).campaignRole).toBeNull()
+    expect(() => parseCampaignAccessPayload({ campaignRole: {} })).toThrow('campaignRole')
+    expect(() => parseCampaignAccessPayload({ campaignRole: ['player'] })).toThrow('campaignRole')
+    expect(hasCampaignRole({ role: 'player' })).toBe(false)
   })
 
   it('rejects invalid canOpenEdit types', () => {
