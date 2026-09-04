@@ -16,7 +16,7 @@ describe('parseLibrarySessionsPayload', () => {
         durationMs: 7_200_000,
         summary: 'Uma memória curta.',
         hasSummary: true,
-        coverImageUrl: 'https://example.com/cover.webp',
+        coverImageUrl: 'https://dnd.faysk.dev/cover.webp',
         heroImageUrl: 'http://unsafe.example/hero.webp',
         segments: '120',
         participants: 4,
@@ -30,7 +30,7 @@ describe('parseLibrarySessionsPayload', () => {
       sourceSessionId: 'sessao-1',
       segments: 120,
       participants: 4,
-      coverImageUrl: 'https://example.com/cover.webp',
+      coverImageUrl: 'https://dnd.faysk.dev/cover.webp',
       heroImageUrl: '',
     })
   })
