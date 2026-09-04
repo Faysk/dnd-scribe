@@ -35,6 +35,8 @@ O bloqueio atual da Fase 3 é exclusivamente o gate restante da Fase 0, controla
 
 Já existe agora um manifesto das capturas desktop fornecidas durante o planejamento, com dimensões e SHA-256, além de um protocolo reproduzível para medição de performance. Isso reduz o trabalho restante a persistir as evidências e executar as medições em um navegador autenticado real.
 
+A Fase 3 também já possui plano de execução detalhado, mas continua formalmente bloqueada. O plano existe para evitar decisões improvisadas quando o gate for liberado; ele não conta como início do bootstrap.
+
 Documentos de controle dessa etapa:
 
 - [01 — Baseline atual](01-baseline-atual.md)
@@ -45,6 +47,7 @@ Documentos de controle dessa etapa:
 - [14 — Topologia Preview e coexistência Vercel](14-topologia-preview-e-coexistencia-vercel.md)
 - [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
 - [16 — Fase 0: runbook de captura](16-fase-0-runbook-de-captura.md)
+- [17 — Fase 3: plano de execução do bootstrap](17-fase-3-bootstrap-plano-de-execucao.md)
 - [Baseline visual](baseline/visual/README.md)
 - [Baseline de performance](baseline/performance/README.md)
 
@@ -127,7 +130,7 @@ A política é usar a **versão estável/LTS mais recente suportada no momento d
 | 0 | Baseline e congelamento | **em execução — último gate: issue #21** | estado atual documentado e screenshots/performance de referência |
 | 1 | Arquitetura alvo | **concluída** | stack, limites, dados e organização definidos |
 | 2 | ADRs e contratos | **concluída** | decisões técnicas formalizadas |
-| 3 | Bootstrap | **bloqueada pela Fase 0** | novo app Next rodando em paralelo |
+| 3 | Bootstrap | **bloqueada pela Fase 0; plano pronto** | novo app Next rodando em paralelo |
 | 4 | Design system | não iniciada | identidade atual transformada em sistema |
 | 5 | Auth e shell | não iniciada | login, tema, header, sessão e permissões migrados |
 | 6 | Home e arquivo | não iniciada | Home moderna + `/sessoes` |
@@ -234,6 +237,7 @@ O roadmap de features só pode começar quando todos os itens abaixo estiverem c
 - [14 — Topologia Preview e coexistência Vercel](14-topologia-preview-e-coexistencia-vercel.md)
 - [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
 - [16 — Fase 0: runbook de captura](16-fase-0-runbook-de-captura.md)
+- [17 — Fase 3: plano de execução do bootstrap](17-fase-3-bootstrap-plano-de-execucao.md)
 - [Baseline visual](baseline/visual/README.md)
 - [Baseline de performance](baseline/performance/README.md)
 - [ADRs](adr/README.md)
