@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --bootstrap-canvas: #0a0c0f;
+  --bootstrap-surface: #11151a;
+  --bootstrap-foreground: #eee8dc;
+  --bootstrap-muted: #9aa3ad;
+  --bootstrap-accent: #d7aa61;
+  --bootstrap-border: #252c34;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bootstrap-canvas);
+  color: var(--bootstrap-foreground);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+a {
+  color: inherit;
+}
+
+.bootstrap-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.bootstrap-card {
+  width: min(42rem, 100%);
+  border: 1px solid var(--bootstrap-border);
+  border-radius: 1rem;
+  background: var(--bootstrap-surface);
+  padding: clamp(2rem, 6vw, 4rem);
+}
+
+.bootstrap-eyebrow {
+  margin: 0 0 1rem;
+  color: var(--bootstrap-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.bootstrap-title {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.75rem, 8vw, 5rem);
+  font-weight: 500;
+  line-height: 0.95;
+}
+
+.bootstrap-copy {
+  margin: 1.5rem 0 0;
+  color: var(--bootstrap-muted);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.bootstrap-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 2rem;
+  color: var(--bootstrap-foreground);
+  font-size: 0.875rem;
+}
+
+.bootstrap-status::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--bootstrap-accent);
+  content: "";
+}

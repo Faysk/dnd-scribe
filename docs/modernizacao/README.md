@@ -1,47 +1,46 @@
 # Modernização do DnD Scribe — Roadmap mestre
 
-Status: **Fase 0 em execução; Fases 1 e 2 concluídas; Fase 3 bloqueada pelo baseline**  
+Status: **Fases 0, 1 e 2 concluídas; Fase 3 em execução**  
 Escopo: **modernização tecnológica e de UX sem novas features de domínio**
 
 ## Objetivo
 
 Modernizar o app público do DnD Scribe preservando o que já funciona hoje, sem iniciar ainda a expansão para personagens, NPCs, lore editável, galerias, timeline, relações ou grafo.
 
-A modernização deve deixar a aplicação pronta para crescer depois, mas sem misturar a migração de tecnologia com o roadmap de novas funcionalidades.
-
 > Regra principal: primeiro modernizar a casa; depois ampliar a casa.
 
 ## Estado atual
 
-A auditoria do legado da Fase 0 já documenta:
+A Fase 0 foi encerrada em 2026-09-04 após autorização explícita do owner para avançar ao bootstrap. O fechamento está registrado em [30 — Encerramento da Fase 0](30-fase-0-encerramento.md).
 
-- shell e rotas atuais;
-- auth e estados de acesso;
-- APIs consumidas pelo player;
-- resumo e Markdown;
-- transcrição, busca, speaker filter e paginação;
-- temas dark/light/system;
-- build estático atual;
-- dependências;
-- limites do deploy compartilhado com API/Central Local;
-- schema Supabase relevante;
-- topologia Vercel atual.
+O baseline estrutural do legado está congelado: shell, rotas, auth, APIs do player, resumo, transcrição, temas, build, deploy, Supabase, local-first, feature freeze e topologia de coexistência.
 
-A Fase 0 ainda **não está encerrada** porque o golden baseline visual e o baseline técnico de performance precisam ser congelados de forma reproduzível, conforme issue **#21**.
+As evidências visuais ainda não coletadas não foram descartadas: login/pending/menu entram na Fase 5 e a paridade visual completa desktop/mobile dark/light continua obrigatória na Fase 11. O baseline quantitativo de performance continua obrigatório na Fase 10 antes do cutover.
 
-As Fases 1 e 2 já foram encerradas documentalmente. Arquitetura, fronteira de dados e coexistência não são mais bloqueadores.
+A Fase 3 está sendo executada na branch `modernizacao/fase-3-bootstrap` e no PR #25. O novo `apps/web` já existe como shell técnico em Next e possui CI próprio. A produção legada continua intacta.
 
-O bloqueio atual da Fase 3 é exclusivamente a Fase 0.
+### Resultado técnico parcial da Fase 3
 
-### Planejamento antecipado
+O bootstrap já provou em CI:
 
-As Fases **3 a 15** já possuem planos de execução detalhados.
+```txt
+pnpm install       ✅
+TypeScript strict  ✅
+ESLint             ✅
+Vitest             ✅
+Next build         ✅
+Playwright smoke   ✅
+CI legado          ✅
+```
 
-Isso é preparação documental, não execução antecipada:
+A primeira tentativa usou TypeScript 7.0.2. O `tsc` passou, mas `typescript-eslint@8.69.0`, usado pela integração estável do Next 16.3.3, ainda não suporta a API do TS7. O ADR 013 formaliza TypeScript 6.0.3 como bridge temporária, mantendo `strict`, lint e build reais.
 
-> nenhuma fase começa antes do gate da fase anterior.
+Pendências para encerrar a Fase 3:
 
-O objetivo é chegar ao código sem improvisar arquitetura, auth, paridade, cutover ou rollback no meio da implementação.
+- persistir o `pnpm-lock.yaml` reproduzível e trocar o CI para frozen lockfile;
+- publicar/validar o Next em **projeto Vercel separado** com Root Directory `apps/web`;
+- registrar o deployment Preview técnico;
+- manter planejada/saudável a origem técnica legada do ADR 012 antes do primeiro BFF real.
 
 ---
 
@@ -50,38 +49,29 @@ O objetivo é chegar ao código sem improvisar arquitetura, auth, paridade, cuto
 ### Entra neste roadmap
 
 - frontend público moderno;
-- Next.js + React + TypeScript;
-- App Router;
-- Server Components por padrão;
-- design system formalizado;
-- dark e light preservados/refinados;
+- Next.js + React + TypeScript strict;
+- App Router e Server Components por padrão;
+- design system próprio;
+- dark e light como temas de primeira classe;
 - Supabase Auth com SSR/cookies;
 - Home reorganizada usando apenas dados existentes;
 - `/sessoes` como arquivo completo;
 - resumo como página padrão da sessão;
 - transcrição como recurso secundário;
 - busca, speaker filter, paginação e download preservados;
-- testes automatizados;
-- CI;
-- segurança;
-- acessibilidade;
-- performance;
-- Preview;
-- homologação;
-- cutover;
-- estabilização.
+- testes automatizados e CI;
+- segurança, acessibilidade e performance;
+- Preview, homologação, cutover e estabilização.
 
 ### Não entra neste roadmap
 
-- personagens;
-- NPCs;
+- personagens e NPCs;
 - páginas/editor de lore;
 - galerias de referências;
 - itens, armas, instrumentos e companheiros;
 - jornada/timeline de personagem;
 - timeline global;
-- relações;
-- grafo;
+- relações e grafo;
 - busca global de entidades;
 - novo modelo de canon;
 - modernização da Central Local/pipeline/Whisper;
@@ -106,26 +96,25 @@ Esses temas pertencem a um roadmap novo somente depois da modernização ser for
 
 ---
 
-## Stack alvo
+## Stack operacional da Fase 3
 
-A política é usar a **versão estável/LTS mais recente suportada no momento de cada fase**, sem canary, beta ou RC em produção.
-
-| Camada | Direção |
+| Camada | Versão/direção atual |
 | --- | --- |
-| Runtime | Node.js LTS |
-| Framework | Next.js App Router |
-| UI | React |
-| Linguagem | TypeScript strict |
-| CSS | Tailwind CSS + design tokens próprios |
-| Banco | PostgreSQL / Supabase |
-| Auth | Supabase Auth + SSR/cookies |
+| Runtime | Node.js 24 LTS |
+| Framework | Next.js 16.3.3 App Router |
+| UI | React 19.2.7 |
+| Linguagem | TypeScript 6.0.3 strict — bridge do ADR 013 |
+| CSS | Tailwind CSS 4.3.0 + tokens próprios |
+| Unit tests | Vitest 5.0.0 |
+| E2E | Playwright 1.62.1 |
+| Package manager | pnpm 11.25.0 no novo workspace |
+| Banco | PostgreSQL / Supabase preservado |
+| Auth futuro | Supabase Auth + SSR/cookies |
 | Dados durante migração | BFF Next → origem legada → API → Supabase |
-| Validação | Zod |
-| Unit tests | Vitest |
-| E2E/visual | Playwright |
-| Package manager | pnpm no novo app |
-| Deploy | Vercel; projeto separado para `apps/web` durante Preview/Homologação |
+| Deploy | segundo projeto Vercel para `apps/web` durante Preview/Homologação |
 | Processamento pesado | local companion atual |
+
+A política continua sendo usar versões estáveis/LTS recentes. Exceções de compatibilidade precisam de ADR e não podem ser resolvidas desativando checks.
 
 ---
 
@@ -142,27 +131,17 @@ Browser
 → API/Supabase
 ```
 
-O novo app roda em um segundo projeto Vercel com Root Directory `apps/web`.
-
 `dnd.faysk.dev` continua no projeto legado até a Fase 13.
 
-### Origem técnica legada
-
-ADR 012 define uma origem estável, recomendada como:
+ADR 012 define uma origem técnica estável recomendada como:
 
 ```txt
 legacy.dnd.faysk.dev
 ```
 
-Ela continua apontando ao projeto antigo mesmo depois do cutover.
+O BFF moderno não deve usar `dnd.faysk.dev` como upstream interno, evitando self-loop depois do cutover.
 
-O BFF moderno **não usa** `dnd.faysk.dev` como upstream interno.
-
-Isso evita self-loop quando o domínio principal for movido.
-
----
-
-## Topologia após cutover
+### Após o cutover
 
 ```txt
 dnd.faysk.dev
@@ -175,29 +154,11 @@ dnd.faysk.dev
     → projeto legado
 ```
 
-O projeto legado continua hospedando enquanto necessário:
-
-- API antiga;
-- Central Local/Edit;
-- jobs;
-- integrações;
-- crons;
-- outras superfícies operacionais fora do escopo do frontend.
-
-A modernização do app público não depende de eliminar esse backend legado.
+API antiga, Central Local/Edit, jobs, integrações e crons podem permanecer no projeto legado enquanto necessário.
 
 ---
 
 ## Rotas alvo
-
-```txt
-/
-/sessoes
-/sessoes/[id]
-/sessoes/[id]/transcricao
-```
-
-Semântica:
 
 ```txt
 /                         → Home da campanha
@@ -206,21 +167,12 @@ Semântica:
 /sessoes/[id]/transcricao → transcrição
 ```
 
----
-
-## Compatibilidade histórica
-
-ADR 011 preserva links antigos:
+ADR 011 preserva links históricos:
 
 ```txt
-#/sessao/:id
-→ /sessoes/:id/transcricao
-
-#/sessao/:id/resumo
-→ /sessoes/:id
+#/sessao/:id        → /sessoes/:id/transcricao
+#/sessao/:id/resumo → /sessoes/:id
 ```
-
-Como fragmentos `#` não chegam ao servidor, a compatibilidade usa bridge client-side mínima e isolada.
 
 ---
 
@@ -228,10 +180,10 @@ Como fragmentos `#` não chegam ao servidor, a compatibilidade usa bridge client
 
 | Fase | Nome | Estado atual | Plano |
 | --- | --- | --- | --- |
-| 0 | Baseline e congelamento | **em execução — issue #21** | docs 01, 10, 11, 16 + baseline |
+| 0 | Baseline e congelamento | **concluída** | docs 01, 10, 11, 16 e 30 |
 | 1 | Arquitetura alvo | **concluída** | doc 02 + ADRs |
 | 2 | ADRs e contratos | **concluída** | ADRs 001+ |
-| 3 | Bootstrap | **bloqueada; plano pronto** | doc 17 |
+| 3 | Bootstrap | **em execução** | doc 17 + PR #25 |
 | 4 | Design system | **não iniciada; plano pronto** | doc 18 |
 | 5 | Auth e shell | **não iniciada; plano pronto** | doc 19 |
 | 6 | Home e arquivo | **não iniciada; plano pronto** | doc 20 |
@@ -245,60 +197,7 @@ Como fragmentos `#` não chegam ao servidor, a compatibilidade usa bridge client
 | 14 | Estabilização | **não iniciada; plano pronto** | doc 28 |
 | 15 | Encerramento | **não iniciada; plano pronto** | doc 29 |
 
-A preparação documental antecipada não muda o estado das fases.
-
----
-
-## Visão resumida da execução
-
-```txt
-FASE 0
-congelar legado
-        ↓
-FASES 1–2
-arquitetura/decisões
-        ↓
-FASE 3
-criar apps/web + CI + Preview
-        ↓
-FASE 4
-Design System
-        ↓
-FASE 5
-Auth + Shell
-        ↓
-FASE 6
-Home + /sessoes
-        ↓
-FASE 7
-Resumo first
-        ↓
-FASE 8
-Transcrição completa
-        ↓
-FASE 9
-Segurança + a11y + qualidade
-        ↓
-FASE 10
-Performance comparativa
-        ↓
-FASE 11
-Paridade 100%
-        ↓
-FASE 12
-Homologação humana
-        ↓
-FASE 13
-Cutover reversível
-        ↓
-FASE 14
-Estabilização
-        ↓
-FASE 15
-Relatório final
-        ↓
-MODERNIZAÇÃO: COMPLETA
-```
+Nenhuma fase posterior começa antes do gate da anterior.
 
 ---
 
@@ -313,10 +212,8 @@ O roadmap de features só pode começar quando:
 - [ ] `/sessoes` publicado;
 - [ ] resumo é entrada padrão da sessão;
 - [ ] transcrição preserva busca, filtro, paginação e download;
-- [ ] dark homologado;
-- [ ] light homologado;
-- [ ] desktop homologado;
-- [ ] mobile homologado;
+- [ ] dark e light homologados;
+- [ ] desktop e mobile homologados;
 - [ ] TypeScript strict sem erros;
 - [ ] lint/typecheck/test/build verdes;
 - [ ] E2E crítico verde;
@@ -359,6 +256,7 @@ O roadmap de features só pode começar quando:
 - [14 — Topologia Preview e coexistência Vercel](14-topologia-preview-e-coexistencia-vercel.md)
 - [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
 - [16 — Fase 0: runbook de captura](16-fase-0-runbook-de-captura.md)
+- [30 — Encerramento da Fase 0](30-fase-0-encerramento.md)
 - [Baseline visual](baseline/visual/README.md)
 - [Baseline de performance](baseline/performance/README.md)
 
@@ -390,7 +288,7 @@ A aplicação continuará oferecendo essencialmente as mesmas capacidades públi
 
 O frontend antigo não será mais necessário para o uso normal dos jogadores.
 
-API/Central Local/jobs/crons legados podem permanecer atrás da origem técnica/gateway, porque sua modernização nunca fez parte deste roadmap.
+API/Central Local/jobs/crons legados podem permanecer atrás da origem técnica/gateway porque sua modernização não faz parte deste roadmap.
 
 Somente depois deste documento receber:
 
