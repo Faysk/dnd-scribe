@@ -31,7 +31,9 @@ A Fase 0 ainda **não está encerrada** porque o baseline visual oficial e o bas
 
 Em paralelo, as Fases 1 e 2 foram encerradas documentalmente. Arquitetura, fronteira de dados e coexistência não são mais bloqueadores do bootstrap.
 
-O bloqueio atual da Fase 3 é exclusivamente o gate restante da Fase 0.
+O bloqueio atual da Fase 3 é exclusivamente o gate restante da Fase 0, controlado pelo issue **#21 — golden baseline visual + performance**.
+
+Já existe agora um manifesto das capturas desktop fornecidas durante o planejamento, com dimensões e SHA-256, além de um protocolo reproduzível para medição de performance. Isso reduz o trabalho restante a persistir as evidências e executar as medições em um navegador autenticado real.
 
 Documentos de controle dessa etapa:
 
@@ -42,6 +44,9 @@ Documentos de controle dessa etapa:
 - [13 — Inventário Supabase e fronteira de dados](13-inventario-supabase-e-fronteira-de-dados.md)
 - [14 — Topologia Preview e coexistência Vercel](14-topologia-preview-e-coexistencia-vercel.md)
 - [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
+- [16 — Fase 0: runbook de captura](16-fase-0-runbook-de-captura.md)
+- [Baseline visual](baseline/visual/README.md)
+- [Baseline de performance](baseline/performance/README.md)
 
 ## Escopo congelado
 
@@ -119,7 +124,7 @@ A política é usar a **versão estável/LTS mais recente suportada no momento d
 
 | Fase | Nome | Estado atual | Saída principal |
 | --- | --- | --- | --- |
-| 0 | Baseline e congelamento | **em execução** | estado atual documentado e screenshots/performance de referência |
+| 0 | Baseline e congelamento | **em execução — último gate: issue #21** | estado atual documentado e screenshots/performance de referência |
 | 1 | Arquitetura alvo | **concluída** | stack, limites, dados e organização definidos |
 | 2 | ADRs e contratos | **concluída** | decisões técnicas formalizadas |
 | 3 | Bootstrap | **bloqueada pela Fase 0** | novo app Next rodando em paralelo |
@@ -228,6 +233,9 @@ O roadmap de features só pode começar quando todos os itens abaixo estiverem c
 - [13 — Inventário Supabase e fronteira de dados](13-inventario-supabase-e-fronteira-de-dados.md)
 - [14 — Topologia Preview e coexistência Vercel](14-topologia-preview-e-coexistencia-vercel.md)
 - [15 — Gates das Fases 1 e 2](15-fases-1-2-gates.md)
+- [16 — Fase 0: runbook de captura](16-fase-0-runbook-de-captura.md)
+- [Baseline visual](baseline/visual/README.md)
+- [Baseline de performance](baseline/performance/README.md)
 - [ADRs](adr/README.md)
 
 ## Estado do produto ao final deste roadmap
