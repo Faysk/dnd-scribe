@@ -21,13 +21,52 @@ performance técnica                      ✅
 matriz multi-browser                     ✅
 corpus real                              ✅
 gateway em código                        ✅
-namespace /api/web                       ✅
+namespace /api/web reservado             ✅
+health local /api/web/health             ✅
+smoke reproduzível do RC                 ✅
 cutover runbook                          ✅
 rollback runbook                         ✅
 estabilização runbook                    ✅
 relatório final draft                    ✅
 produção antiga preservada               ✅
 ```
+
+## Smoke técnico preparado
+
+O Web Next possui um endpoint de identificação local e sem segredo:
+
+```txt
+GET /api/web/health
+→ 200
+→ { "ok": true, "surface": "dnd-scribe-web-next" }
+→ Cache-Control: no-store
+```
+
+O namespace `/api/web/*` também possui fallback local `404`, impedindo que endpoints modernos desconhecidos escapem silenciosamente para `/api/*` do projeto legado.
+
+Quando existir um RC, rodar:
+
+```bash
+DND_RC_BASE_URL="https://<rc>" pnpm --filter @dnd-scribe/web smoke:rc
+```
+
+Depois que o gateway estiver configurado no candidato:
+
+```bash
+DND_RC_BASE_URL="https://<rc>" \
+DND_RC_EXPECT_GATEWAY=1 \
+pnpm --filter @dnd-scribe/web smoke:rc
+```
+
+O script valida sem sessão:
+
+- identidade local do Web Next;
+- reserva de `/api/web/*`;
+- shell + headers de segurança;
+- login acessível;
+- opcionalmente `/api/auth-config`, `/terms`, `/privacy` e `/docs/api` pelo fallback legado.
+
+Ele não substitui OAuth nem homologação autenticada.
 
 ## Gate A — novo RC
 
@@ -41,7 +80,7 @@ Quando a quota/plataforma permitir:
 [ ] confirmar envs públicas do Supabase
 [ ] confirmar DND_LEGACY_ORIGIN
 [ ] configurar/confirmar redirects permitidos para a URL do RC
-[ ] smoke sem sessão
+[ ] rodar smoke:rc
 ```
 
 ## Gate B — sessão real
@@ -93,7 +132,8 @@ Usar `39-fase-11-corpus-homologacao.md`:
 ## Gate E — gateway real
 
 ```txt
-[ ] /api/web/* continua local
+[ ] /api/web/health identifica o Next
+[ ] endpoint desconhecido de /api/web retorna 404 local
 [ ] /api/* legado chega ao upstream
 [ ] /edit funciona
 [ ] /central-local funciona

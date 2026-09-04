@@ -17,8 +17,10 @@ A aplicação já contém:
 - busca/filtro/cursor/progressive load;
 - download `.md`;
 - compatibilidade de links hash antigos;
-- BFF server-side;
-- preparação do gateway legado para o cutover;
+- BFF server-side em `/api/web/*`;
+- gateway legado preparado para o cutover;
+- health técnico local;
+- smoke reproduzível de release candidate;
 - testes unitários e E2E multi-browser.
 
 O app ainda **não substituiu `dnd.faysk.dev`**. Produção permanece no frontend legado até homologação e cutover.
@@ -76,7 +78,7 @@ DND_LEGACY_EDIT_ORIGIN   # opcional
 
 ## BFF moderno
 
-Namespace canônico:
+Namespace canônico e integralmente reservado:
 
 ```txt
 /api/web/*
@@ -85,9 +87,12 @@ Namespace canônico:
 Rotas atuais usadas pelo client:
 
 ```txt
+/api/web/health
 /api/web/library/transcript
 /api/web/library/download
 ```
+
+`/api/web/health` identifica sem segredo que a requisição chegou ao Web Next e responde com `Cache-Control: no-store`. Endpoints desconhecidos dentro de `/api/web/*` recebem `404` local em vez de escaparem para o backend legado.
 
 Handlers antigos em `/api/library/*` continuam temporariamente versionados durante a migração para reduzir risco, mas o client moderno já usa `/api/web/*`.
 
@@ -118,6 +123,24 @@ Permissions-Policy: local-network=(self), loopback-network=(self)
 ```
 
 A efetividade final em external rewrite será homologada no release candidate da Vercel antes do cutover.
+
+## Smoke do release candidate
+
+Quando existir um RC HTTPS:
+
+```bash
+DND_RC_BASE_URL="https://<rc>" pnpm --filter @dnd-scribe/web smoke:rc
+```
+
+Para também cobrar os fallbacks do gateway legado:
+
+```bash
+DND_RC_BASE_URL="https://<rc>" \
+DND_RC_EXPECT_GATEWAY=1 \
+pnpm --filter @dnd-scribe/web smoke:rc
+```
+
+O smoke é propositalmente não autenticado. OAuth, cookies, acervo e transcrição reais continuam no roteiro de homologação.
 
 ## Coexistência
 
