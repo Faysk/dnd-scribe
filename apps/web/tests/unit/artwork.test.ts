@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeArtworkUrl } from '@/lib/artwork'
+import { normalizeArtworkUrl } from '../../lib/artwork'
 
 describe('normalizeArtworkUrl', () => {
   it('aceita apenas hosts de arte conhecidos via HTTPS', () => {
