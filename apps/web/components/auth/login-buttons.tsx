@@ -1,0 +1,63 @@
+'use client'
+
+import { useState } from 'react'
+
+import { Button } from '@/components/ui/action'
+import { createBrowserSupabaseClient } from '@/lib/supabase/browser'
+
+type Provider = 'discord' | 'google'
+
+type LoginButtonsProps = Readonly<{
+  configured: boolean
+}>
+
+export function LoginButtons({ configured }: LoginButtonsProps) {
+  const [loadingProvider, setLoadingProvider] = useState<Provider | null>(null)
+  const [error, setError] = useState('')
+
+  async function signIn(provider: Provider) {
+    setError('')
+    setLoadingProvider(provider)
+
+    const supabase = createBrowserSupabaseClient()
+    if (!supabase) {
+      setError('Configuração de autenticação indisponível neste ambiente.')
+      setLoadingProvider(null)
+      return
+    }
+
+    const callback = new URL('/auth/callback', window.location.origin)
+    callback.searchParams.set('next', '/')
+    const { error: authError } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: callback.toString() },
+    })
+
+    if (authError) {
+      setError(authError.message)
+      setLoadingProvider(null)
+    }
+  }
+
+  return (
+    <div className="mt-8">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Button
+          disabled={!configured || Boolean(loadingProvider)}
+          onClick={() => void signIn('discord')}
+          variant="primary"
+        >
+          {loadingProvider === 'discord' ? 'Abrindo Discord…' : 'Entrar com Discord'}
+        </Button>
+        <Button
+          disabled={!configured || Boolean(loadingProvider)}
+          onClick={() => void signIn('google')}
+          variant="secondary"
+        >
+          {loadingProvider === 'google' ? 'Abrindo Google…' : 'Entrar com Google'}
+        </Button>
+      </div>
+      {error ? <p className="mt-4 text-sm text-danger" role="alert">{error}</p> : null}
+    </div>
+  )
+}

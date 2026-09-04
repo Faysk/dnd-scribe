@@ -1,0 +1,65 @@
+export const CAMPAIGN_SLUG = 'yuhara-main'
+export const THEME_STORAGE_KEY = 'dnd-scribe-theme'
+export const PUBLIC_LEGACY_HOSTNAME = 'dnd.faysk.dev'
+
+export type PublicSupabaseConfig = Readonly<{
+  url: string
+  publishableKey: string
+}>
+
+function isLocalHostname(hostname: string) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+}
+
+export function readPublicSupabaseConfig(
+  url = process.env.NEXT_PUBLIC_SUPABASE_URL,
+  publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+): PublicSupabaseConfig | null {
+  if (!url || !publishableKey) return null
+
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:' && !isLocalHostname(parsed.hostname)) return null
+    return { url: parsed.origin, publishableKey }
+  } catch {
+    return null
+  }
+}
+
+export function parseLegacyOrigin(value: string | undefined) {
+  if (!value) throw new Error('DND_LEGACY_ORIGIN não configurado.')
+
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    throw new Error('DND_LEGACY_ORIGIN inválido.')
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error('DND_LEGACY_ORIGIN precisa usar HTTPS.')
+  }
+  if (parsed.hostname.toLowerCase() === PUBLIC_LEGACY_HOSTNAME) {
+    throw new Error('DND_LEGACY_ORIGIN não pode usar o domínio público móvel.')
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/') {
+    throw new Error('DND_LEGACY_ORIGIN deve conter somente a origem HTTPS.')
+  }
+
+  return parsed.origin
+}
+
+export function getLegacyOrigin() {
+  return parseLegacyOrigin(process.env.DND_LEGACY_ORIGIN)
+}
+
+export function getLegacyEditUrl() {
+  const raw = process.env.DND_LEGACY_EDIT_ORIGIN || 'https://dnd.faysk.dev'
+  try {
+    const parsed = new URL(raw)
+    if (parsed.protocol !== 'https:') return null
+    return new URL('/edit/', parsed.origin).toString()
+  } catch {
+    return null
+  }
+}
