@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { marked } from 'marked'
 
-import { normalizeArtworkUrl } from '@/lib/artwork'
+import { normalizeArtworkUrl } from '../../lib/artwork'
 
 type MarkdownToken = Readonly<{
   type?: string
