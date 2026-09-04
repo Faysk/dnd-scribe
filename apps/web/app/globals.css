@@ -1,87 +1,189 @@
 @import "tailwindcss";
 
-:root {
+:root,
+[data-theme="dark"] {
   color-scheme: dark;
-  --bootstrap-canvas: #0a0c0f;
-  --bootstrap-surface: #11151a;
-  --bootstrap-foreground: #eee8dc;
-  --bootstrap-muted: #9aa3ad;
-  --bootstrap-accent: #d7aa61;
-  --bootstrap-border: #252c34;
+  --ds-canvas: #0a0c0f;
+  --ds-canvas-subtle: #101419;
+  --ds-surface: #151a20;
+  --ds-surface-hover: #1a2027;
+  --ds-surface-elevated: #11151a;
+  --ds-border: #2a3038;
+  --ds-border-subtle: rgba(255, 255, 255, 0.07);
+  --ds-foreground: #eee8dc;
+  --ds-foreground-soft: #c8c2b7;
+  --ds-foreground-muted: #8f969f;
+  --ds-accent: #d7aa61;
+  --ds-accent-strong: #f2c879;
+  --ds-accent-muted: rgba(215, 170, 97, 0.13);
+  --ds-accent-contrast: #17120b;
+  --ds-danger: #e59383;
+  --ds-success: #8fc49b;
+  --ds-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  --ds-radius-sm: 8px;
+  --ds-radius-md: 12px;
+  --ds-radius-lg: 18px;
+  --ds-radius-xl: 24px;
+  --ds-font-display: Georgia, "Times New Roman", serif;
+  --ds-font-body: Georgia, "Times New Roman", serif;
+  --ds-font-ui: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ds-ambient-accent: rgba(215, 170, 97, 0.09);
+  --ds-ambient-cool: rgba(75, 91, 109, 0.08);
+}
+
+:root[data-theme="light"],
+[data-theme="light"] {
+  color-scheme: light;
+  --ds-canvas: #f3efe7;
+  --ds-canvas-subtle: #fffdf8;
+  --ds-surface: #e9e3d8;
+  --ds-surface-hover: #ffffff;
+  --ds-surface-elevated: #fffdf8;
+  --ds-border: #c8c0b3;
+  --ds-border-subtle: rgba(25, 25, 23, 0.12);
+  --ds-foreground: #191917;
+  --ds-foreground-soft: #4f4b44;
+  --ds-foreground-muted: #6a655d;
+  --ds-accent: #805817;
+  --ds-accent-strong: #9a6a1d;
+  --ds-accent-muted: rgba(128, 88, 23, 0.11);
+  --ds-accent-contrast: #fffdf8;
+  --ds-danger: #9a3025;
+  --ds-success: #326c42;
+  --ds-shadow: 0 24px 70px rgba(48, 39, 28, 0.14);
+  --ds-ambient-accent: rgba(128, 88, 23, 0.08);
+  --ds-ambient-cool: rgba(92, 78, 58, 0.05);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --ds-canvas: #f3efe7;
+    --ds-canvas-subtle: #fffdf8;
+    --ds-surface: #e9e3d8;
+    --ds-surface-hover: #ffffff;
+    --ds-surface-elevated: #fffdf8;
+    --ds-border: #c8c0b3;
+    --ds-border-subtle: rgba(25, 25, 23, 0.12);
+    --ds-foreground: #191917;
+    --ds-foreground-soft: #4f4b44;
+    --ds-foreground-muted: #6a655d;
+    --ds-accent: #805817;
+    --ds-accent-strong: #9a6a1d;
+    --ds-accent-muted: rgba(128, 88, 23, 0.11);
+    --ds-accent-contrast: #fffdf8;
+    --ds-danger: #9a3025;
+    --ds-success: #326c42;
+    --ds-shadow: 0 24px 70px rgba(48, 39, 28, 0.14);
+    --ds-ambient-accent: rgba(128, 88, 23, 0.08);
+    --ds-ambient-cool: rgba(92, 78, 58, 0.05);
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--ds-canvas);
+  --color-canvas-subtle: var(--ds-canvas-subtle);
+  --color-surface: var(--ds-surface);
+  --color-surface-hover: var(--ds-surface-hover);
+  --color-surface-elevated: var(--ds-surface-elevated);
+  --color-border: var(--ds-border);
+  --color-border-subtle: var(--ds-border-subtle);
+  --color-foreground: var(--ds-foreground);
+  --color-foreground-soft: var(--ds-foreground-soft);
+  --color-foreground-muted: var(--ds-foreground-muted);
+  --color-accent: var(--ds-accent);
+  --color-accent-strong: var(--ds-accent-strong);
+  --color-accent-muted: var(--ds-accent-muted);
+  --color-accent-contrast: var(--ds-accent-contrast);
+  --color-danger: var(--ds-danger);
+  --color-success: var(--ds-success);
+  --font-display: var(--ds-font-display);
+  --font-body: var(--ds-font-body);
+  --font-ui: var(--ds-font-ui);
+  --radius-sm: var(--ds-radius-sm);
+  --radius-md: var(--ds-radius-md);
+  --radius-lg: var(--ds-radius-lg);
+  --radius-xl: var(--ds-radius-xl);
+  --shadow-elevated: var(--ds-shadow);
 }
 
 * {
   box-sizing: border-box;
 }
 
-html,
-body {
-  margin: 0;
+html {
+  min-width: 320px;
   min-height: 100%;
+  background: var(--ds-canvas);
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--bootstrap-canvas);
-  color: var(--bootstrap-foreground);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--ds-foreground);
+  background:
+    radial-gradient(circle at 82% -15%, var(--ds-ambient-accent), transparent 34rem),
+    radial-gradient(circle at -10% 40%, var(--ds-ambient-cool), transparent 32rem),
+    var(--ds-canvas);
+  font-family: var(--ds-font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
 }
 
 a {
   color: inherit;
 }
 
-.bootstrap-shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 2rem;
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--ds-accent-strong);
+  outline-offset: 3px;
 }
 
-.bootstrap-card {
-  width: min(42rem, 100%);
-  border: 1px solid var(--bootstrap-border);
-  border-radius: 1rem;
-  background: var(--bootstrap-surface);
-  padding: clamp(2rem, 6vw, 4rem);
+::selection {
+  color: var(--ds-foreground);
+  background: var(--ds-accent-muted);
 }
 
-.bootstrap-eyebrow {
-  margin: 0 0 1rem;
-  color: var(--bootstrap-accent);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-.bootstrap-title {
-  margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(2.75rem, 8vw, 5rem);
-  font-weight: 500;
-  line-height: 0.95;
-}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 
-.bootstrap-copy {
-  margin: 1.5rem 0 0;
-  color: var(--bootstrap-muted);
-  font-size: 1rem;
-  line-height: 1.7;
-}
-
-.bootstrap-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 2rem;
-  color: var(--bootstrap-foreground);
-  font-size: 0.875rem;
-}
-
-.bootstrap-status::before {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 999px;
-  background: var(--bootstrap-accent);
-  content: "";
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
