@@ -11,6 +11,10 @@ function isLocalHostname(hostname: string) {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
 }
 
+export function canRenderUnconfiguredPreview(nodeEnv = process.env.NODE_ENV) {
+  return nodeEnv !== 'production'
+}
+
 export function readPublicSupabaseConfig(
   url = process.env.NEXT_PUBLIC_SUPABASE_URL,
   publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
