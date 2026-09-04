@@ -1,5 +1,7 @@
 import { normalizeArtworkUrl } from '../../artwork'
 
+const LIBRARY_MAX_SESSIONS = 1_000
+
 export type LibrarySession = Readonly<{
   sourceSessionId: string
   title: string
@@ -18,7 +20,7 @@ export type LibrarySession = Readonly<{
 }>
 
 export type LibrarySessionsPayload = Readonly<{
-  ok: boolean
+  ok: true
   campaignSlug: string
   sessions: readonly LibrarySession[]
 }>
@@ -31,6 +33,12 @@ function record(value: unknown): JsonRecord | null {
 
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function bounded(value: unknown, maxLength: number, field: string) {
+  const normalized = text(value)
+  if (normalized.length > maxLength) throw new Error(`Resposta da biblioteca excede o limite de ${field}.`)
+  return normalized
 }
 
 function count(value: unknown) {
@@ -48,8 +56,8 @@ function parseSession(value: unknown): LibrarySession {
   const item = record(value)
   if (!item) throw new Error('Sessão inválida na resposta da biblioteca.')
 
-  const sourceSessionId = text(item.sourceSessionId)
-  const title = text(item.title)
+  const sourceSessionId = bounded(item.sourceSessionId, 220, 'identificador')
+  const title = bounded(item.title, 500, 'título')
   if (!sourceSessionId || !title) {
     throw new Error('Sessão da biblioteca sem identificador ou título.')
   }
@@ -57,30 +65,36 @@ function parseSession(value: unknown): LibrarySession {
   return {
     sourceSessionId,
     title,
-    sessionDate: text(item.sessionDate),
-    arc: text(item.arc),
-    status: text(item.status),
+    sessionDate: bounded(item.sessionDate, 80, 'data'),
+    arc: bounded(item.arc, 300, 'arco'),
+    status: bounded(item.status, 80, 'status'),
     durationMs: nullableNumber(item.durationMs),
-    summary: text(item.summary),
+    summary: bounded(item.summary, 20_000, 'resumo'),
     hasSummary: item.hasSummary === true,
     coverImageUrl: normalizeArtworkUrl(item.coverImageUrl),
     heroImageUrl: normalizeArtworkUrl(item.heroImageUrl),
     segments: count(item.segments),
     participants: count(item.participants),
-    createdAt: text(item.createdAt),
-    updatedAt: text(item.updatedAt),
+    createdAt: bounded(item.createdAt, 80, 'createdAt'),
+    updatedAt: bounded(item.updatedAt, 80, 'updatedAt'),
   }
 }
 
 export function parseLibrarySessionsPayload(value: unknown): LibrarySessionsPayload {
   const payload = record(value)
-  if (!payload || !Array.isArray(payload.sessions)) {
+  if (!payload || payload.ok !== true || !Array.isArray(payload.sessions)) {
     throw new Error('Resposta inválida da biblioteca de sessões.')
   }
+  if (payload.sessions.length > LIBRARY_MAX_SESSIONS) {
+    throw new Error('Resposta da biblioteca excede o limite de sessões.')
+  }
+
+  const campaignSlug = bounded(payload.campaignSlug, 120, 'campaignSlug')
+  if (!campaignSlug) throw new Error('Resposta da biblioteca sem campanha.')
 
   return {
-    ok: payload.ok !== false,
-    campaignSlug: text(payload.campaignSlug),
+    ok: true,
+    campaignSlug,
     sessions: payload.sessions.map(parseSession),
   }
 }
