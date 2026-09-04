@@ -1,7 +1,7 @@
-import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { Brand } from '@/components/shell/brand'
+import { PrimaryNav } from '@/components/shell/primary-nav'
 import { UserMenu } from '@/components/shell/user-menu'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
 import type { AuthIdentity } from '@/lib/auth/state'
@@ -20,22 +20,7 @@ export function CampaignShell({ access, children, identity }: CampaignShellProps
         <div className="mx-auto flex min-h-[76px] w-[min(1280px,calc(100%-2.5rem))] items-center justify-between gap-5 py-3">
           <Brand />
           <div className="flex items-center gap-3">
-            <nav aria-label="Navegação principal" className="hidden items-center gap-1 md:flex">
-              <Link
-                aria-current="page"
-                className="rounded-sm px-3 py-2 text-sm text-foreground no-underline hover:bg-accent-muted"
-                href="/"
-              >
-                Início
-              </Link>
-              <span
-                aria-disabled="true"
-                className="cursor-not-allowed rounded-sm px-3 py-2 text-sm text-foreground-muted opacity-60"
-                title="Arquivo de sessões entra na Fase 6"
-              >
-                Sessões
-              </span>
-            </nav>
+            <PrimaryNav />
             <ThemeToggle />
             <UserMenu access={access} identity={identity} />
           </div>
