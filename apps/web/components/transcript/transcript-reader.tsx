@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { actionStyles, Button } from '@/components/ui/action'
 import {
   parseTranscriptPayload,
+  TRANSCRIPT_QUERY_MAX_LENGTH,
+  TRANSCRIPT_SPEAKER_MAX_LENGTH,
   type TranscriptPayload,
   type TranscriptSegment,
 } from '@/lib/api/contracts/transcript'
@@ -84,8 +86,8 @@ export function TranscriptReader({ initial }: TranscriptReaderProps) {
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const nextQuery = queryDraft.trim().slice(0, 240)
-    const nextSpeaker = speakerDraft.trim().slice(0, 180)
+    const nextQuery = queryDraft.trim().slice(0, TRANSCRIPT_QUERY_MAX_LENGTH)
+    const nextSpeaker = speakerDraft.trim().slice(0, TRANSCRIPT_SPEAKER_MAX_LENGTH)
     setQuery(nextQuery)
     setSpeaker(nextSpeaker)
     setSegments([])
@@ -109,19 +111,27 @@ export function TranscriptReader({ initial }: TranscriptReaderProps) {
   }
 
   const filtered = Boolean(query || speaker)
-  const status = filtered
+  const settledStatus = filtered
     ? `${formatCount(segments.length)} resultado(s) carregado(s)`
     : `${formatCount(segments.length)} de ${formatCount(total)} falas`
+  const status = loading
+    ? segments.length ? 'Carregando mais falas…' : 'Carregando falas…'
+    : settledStatus
   const downloadHref = `/api/library/download?sourceSessionId=${encodeURIComponent(initial.session.sourceSessionId)}`
 
   return (
-    <div className="pb-20 pt-8 sm:pt-10">
-      <form className="grid gap-4 rounded-lg border border-border-subtle bg-canvas-subtle p-4 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.42fr)_auto] sm:items-end sm:p-5" onSubmit={applyFilters}>
+    <div aria-busy={loading} className="pb-20 pt-8 sm:pt-10">
+      <form
+        aria-controls="transcript-segments"
+        className="grid gap-4 rounded-lg border border-border-subtle bg-canvas-subtle p-4 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.42fr)_auto] sm:items-end sm:p-5"
+        onSubmit={applyFilters}
+      >
         <label className="grid gap-2 font-ui text-xs font-semibold text-foreground-soft">
           Buscar na transcrição
           <input
+            aria-controls="transcript-segments"
             className="min-h-11 rounded-md border border-border bg-canvas px-3 text-sm font-normal text-foreground outline-none placeholder:text-foreground-muted focus:border-accent"
-            maxLength={240}
+            maxLength={TRANSCRIPT_QUERY_MAX_LENGTH}
             onChange={(event) => setQueryDraft(event.target.value)}
             placeholder="Uma frase, nome ou lembrança…"
             type="search"
@@ -132,6 +142,7 @@ export function TranscriptReader({ initial }: TranscriptReaderProps) {
         <label className="grid gap-2 font-ui text-xs font-semibold text-foreground-soft">
           Speaker
           <select
+            aria-controls="transcript-segments"
             className="min-h-11 rounded-md border border-border bg-canvas px-3 text-sm font-normal text-foreground outline-none focus:border-accent"
             onChange={(event) => setSpeakerDraft(event.target.value)}
             value={speakerDraft}
@@ -148,12 +159,12 @@ export function TranscriptReader({ initial }: TranscriptReaderProps) {
       </form>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle pb-5 font-ui text-xs text-foreground-muted">
-        <span aria-live="polite">{loading && !segments.length ? 'Carregando falas…' : status}</span>
-        <a className={actionStyles({ size: 'sm', variant: 'tertiary' })} href={downloadHref}>Baixar .md</a>
+        <span aria-atomic="true" aria-live="polite" role="status">{status}</span>
+        <a className={actionStyles({ size: 'sm', variant: 'tertiary' })} download href={downloadHref}>Baixar .md</a>
       </div>
 
       {segments.length ? (
-        <ol aria-label="Falas da sessão" className="divide-y divide-border-subtle">
+        <ol aria-label="Falas da sessão" className="divide-y divide-border-subtle" id="transcript-segments">
           {segments.map((segment) => (
             <li className="grid gap-3 py-6 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-6" key={segment.id}>
               <div className="font-ui text-xs">
@@ -165,11 +176,13 @@ export function TranscriptReader({ initial }: TranscriptReaderProps) {
           ))}
         </ol>
       ) : !loading && !error ? (
-        <div className="py-14 text-center">
+        <div className="py-14 text-center" id="transcript-segments" role="status">
           <p className="font-display text-2xl text-foreground">Nenhuma fala encontrada.</p>
           <p className="mt-2 font-ui text-sm text-foreground-muted">Tente remover ou alterar os filtros.</p>
         </div>
-      ) : null}
+      ) : (
+        <div aria-hidden="true" id="transcript-segments" />
+      )}
 
       {error ? (
         <div className="mt-6 rounded-md border border-danger/35 bg-surface p-4 font-ui text-sm text-foreground-soft" role="alert">

@@ -34,7 +34,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const callbackError = errorKey ? callbackErrors[errorKey] : ''
 
   return (
-    <main id="content" className="mx-auto grid min-h-screen w-[min(1180px,calc(100%-2.5rem))] place-items-center py-12">
+    <main id="content" tabIndex={-1} className="mx-auto grid min-h-screen w-[min(1180px,calc(100%-2.5rem))] place-items-center py-12">
       <Surface className="w-full max-w-2xl p-7 sm:p-10 lg:p-14" tone="elevated">
         <Brand />
         <div className="mt-10">

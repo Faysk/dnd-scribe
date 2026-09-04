@@ -1,12 +1,10 @@
 import type { NextRequest } from 'next/server'
 
+import { TRANSCRIPT_SOURCE_SESSION_ID_MAX_LENGTH } from '@/lib/api/contracts/transcript'
 import { fetchLegacyResponse, LegacyApiError } from '@/lib/api/legacy'
 import { readAuthenticatedAccessToken } from '@/lib/auth/access-token'
 import { CAMPAIGN_SLUG } from '@/lib/config'
-
-function safeSourceId(value: string | null) {
-  return String(value || '').trim().slice(0, 220)
-}
+import { boundedText } from '@/lib/security'
 
 function fallbackFilename(sourceSessionId: string) {
   const slug = sourceSessionId
@@ -19,7 +17,11 @@ function fallbackFilename(sourceSessionId: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const sourceSessionId = safeSourceId(request.nextUrl.searchParams.get('sourceSessionId'))
+  const sourceSessionId = boundedText(
+    request.nextUrl.searchParams.get('sourceSessionId'),
+    TRANSCRIPT_SOURCE_SESSION_ID_MAX_LENGTH,
+  )
+  if (sourceSessionId === null) return new Response('Identificador de sessão inválido.', { status: 400 })
   if (!sourceSessionId) return new Response('Sessão não informada.', { status: 400 })
 
   const accessToken = await readAuthenticatedAccessToken()
