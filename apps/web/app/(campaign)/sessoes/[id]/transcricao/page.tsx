@@ -27,7 +27,7 @@ type TranscriptPageProps = Readonly<{
 type LoadResult =
   | Readonly<{ kind: 'data'; data: TranscriptPayload }>
   | Readonly<{ kind: 'notFound' }>
-  | Readonly<{ kind: 'error'; message: string }>
+  | Readonly<{ kind: 'error' }>
 
 async function loadTranscript(sourceSessionId: string, accessToken: string): Promise<LoadResult> {
   try {
@@ -38,10 +38,8 @@ async function loadTranscript(sourceSessionId: string, accessToken: string): Pro
     return { kind: 'data', data }
   } catch (error) {
     if (error instanceof LegacyApiError && error.status === 404) return { kind: 'notFound' }
-    return {
-      kind: 'error',
-      message: error instanceof Error ? error.message : 'Falha inesperada ao carregar a transcrição.',
-    }
+    console.error('[web-next] Falha ao carregar transcrição.', error)
+    return { kind: 'error' }
   }
 }
 
@@ -58,13 +56,13 @@ function SetupState() {
   )
 }
 
-function TranscriptError({ message }: Readonly<{ message: string }>) {
+function TranscriptError() {
   return (
     <div className="mx-auto w-[min(900px,calc(100%-2.5rem))] py-16 sm:py-24">
       <Surface className="p-8 sm:p-10" tone="elevated">
         <Eyebrow>Transcrição indisponível</Eyebrow>
         <SectionTitle className="mt-4">Não foi possível abrir as falas desta sessão.</SectionTitle>
-        <BodyCopy className="mt-4 max-w-2xl">{message}</BodyCopy>
+        <BodyCopy className="mt-4 max-w-2xl">A transcrição não respondeu como esperado. Tente novamente em instantes.</BodyCopy>
         <div className="mt-7"><ActionLink href="/sessoes" variant="secondary">Voltar ao arquivo</ActionLink></div>
       </Surface>
     </div>
@@ -131,6 +129,6 @@ export default async function SessionTranscriptPage({ params }: TranscriptPagePr
   const result = await loadTranscript(sourceSessionId, accessToken)
 
   if (result.kind === 'notFound') notFound()
-  if (result.kind === 'error') return <TranscriptError message={result.message} />
+  if (result.kind === 'error') return <TranscriptError />
   return <TranscriptPage data={result.data} />
 }
