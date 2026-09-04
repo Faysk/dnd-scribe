@@ -1,10 +1,20 @@
 # 01 — Baseline atual
 
-Status: **documentação do legado em uso**
+Status: **Fase 0 em execução — auditoria de código concluída, baseline visual parcial**
 
 ## Objetivo
 
 Registrar o comportamento e a estrutura do app público atual antes da modernização. Este documento é referência de paridade e não define a arquitetura futura.
+
+## Documentos de evidência da Fase 0
+
+Este baseline é complementado por:
+
+- [10 — Contratos do app público legado](10-contratos-legado-app-publico.md) — rotas, auth, endpoints, transcrição, tema e formatos efetivamente consumidos;
+- [11 — Fase 0: evidências e checklist](11-fase-0-evidencias-e-checklist.md) — matriz de capturas, itens concluídos e pendências para congelar o baseline;
+- [12 — Inventário de deploy e dependências do legado](12-inventario-deploy-e-dependencias-legado.md) — build, Vercel, API, Central Local, env e riscos de coexistência.
+
+A auditoria documental de código está suficientemente detalhada para orientar a migração. A Fase 0 permanece aberta porque o baseline visual oficial ainda precisa ser congelado/versionado, especialmente em mobile e estados de auth/erro.
 
 ## Aplicação pública atual
 
@@ -251,6 +261,8 @@ mobile/transcript-dark
 mobile/transcript-light
 ```
 
+Já existem capturas reais de Home dark, Home light e sessão/transcrição dark fornecidas durante o planejamento. Elas ainda precisam ser promovidas a baseline oficial versionado ou reproduzível. A matriz detalhada está em `11-fase-0-evidencias-e-checklist.md`.
+
 ## Golden baseline funcional
 
 Fluxos obrigatórios:
@@ -272,6 +284,34 @@ Fluxos obrigatórios:
 15. logout;
 16. tratamento de erro e retry.
 
+## Estado atual do gate
+
+### Concluído
+
+- [x] escopo congelado;
+- [x] mapa de código principal;
+- [x] rotas identificadas;
+- [x] auth identificada;
+- [x] contratos de API do player identificados;
+- [x] tema identificado;
+- [x] comportamento de resumo identificado;
+- [x] comportamento da transcrição identificado;
+- [x] build/deploy atual inventariado;
+- [x] riscos de coexistência documentados.
+
+### Pendente
+
+- [ ] screenshots desktop essenciais congelados/versionados;
+- [ ] screenshots mobile essenciais congelados/versionados;
+- [ ] estados de login/acesso pendente/erro congelados visualmente;
+- [ ] baseline técnico de performance medido de forma reproduzível.
+
 ## Critério de encerramento desta fase
 
 O baseline está concluído quando os screenshots, fluxos e contratos acima estiverem registrados de forma reproduzível e puderem ser usados nos testes de paridade do novo app.
+
+Enquanto os itens visuais essenciais não estiverem congelados:
+
+```txt
+FASE 0 = EM EXECUÇÃO
+```
