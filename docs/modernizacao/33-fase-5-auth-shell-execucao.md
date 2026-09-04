@@ -38,7 +38,10 @@ A implementação foi revalidada contra a documentação vigente antes do códig
 - Supabase recomenda `getClaims()` para proteger páginas/dados;
 - `getSession()` não é usado como prova de identidade, apenas para recuperar o token bruto após validação;
 - `@supabase/ssr` usa PKCE por padrão em SSR e o callback troca o code por sessão;
-- versão estável observada durante a execução: `@supabase/ssr` 0.12.6.
+- `@supabase/ssr` 0.12.6 foi publicado no mesmo dia da execução e foi rejeitado corretamente pela política `minimumReleaseAge` do pnpm;
+- a implementação foi então fixada em `@supabase/ssr` 0.12.5, release estável anterior e já fora da janela mínima de idade.
+
+Essa escolha é deliberada: a modernização não relaxa a política de supply chain apenas para consumir uma publicação recém-saída.
 
 ## Configuração necessária no Preview
 
@@ -71,7 +74,8 @@ Enquanto os envs de Auth não estiverem configurados, `/` continua mostrando exa
 - mensagens do BFF não incluem token;
 - upstream público móvel é recusado por código;
 - fetch de auth usa `cache: no-store`;
-- redirect pós-OAuth aceita apenas path same-origin.
+- redirect pós-OAuth aceita apenas path same-origin;
+- política de `minimumReleaseAge` do pnpm permanece ativa.
 
 ## Gate ainda externo
 
