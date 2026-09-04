@@ -28,7 +28,15 @@ test('namespace /api/web permanece integralmente local no Next', async ({ reques
   const unknown = await request.get('/api/web/endpoint-que-nao-existe')
 
   expect(health.status()).toBe(200)
-  expect(healthPayload).toEqual({ ok: true, surface: 'dnd-scribe-web-next' })
+  expect(healthPayload).toMatchObject({
+    ok: true,
+    surface: 'dnd-scribe-web-next',
+    ready: false,
+    runtime: {
+      supabaseConfigured: false,
+      legacyOriginConfigured: false,
+    },
+  })
   expect(health.headers()['cache-control']).toContain('no-store')
   expect(transcript.status()).toBe(400)
   expect(download.status()).toBe(400)
@@ -43,8 +51,11 @@ test('logout rejeita POST cross-origin e aceita a própria origem', async ({ req
   })
   expect(rejected.status()).toBe(403)
 
+  // O Next dev normaliza request.url para localhost mesmo quando o Playwright
+  // alcança o servidor pelo loopback 127.0.0.1. O helper unitário cobre a
+  // equivalência semântica; aqui validamos a integração real do Route Handler.
   const accepted = await request.post('/auth/logout', {
-    headers: { Origin: 'http://127.0.0.1:3000' },
+    headers: { Origin: 'http://localhost:3000' },
     maxRedirects: 0,
   })
   expect(accepted.status()).toBe(303)
