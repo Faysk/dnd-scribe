@@ -29,6 +29,15 @@ export function formatDuration(value: number | null) {
   return minutes ? `${hours}h${String(minutes).padStart(2, '0')}` : `${hours}h`
 }
 
+export function formatTimestamp(value: number | null) {
+  const totalSeconds = Math.max(0, Math.floor(Number(value || 0) / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours) return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
 export function formatCount(value: number) {
   return numberFormatter.format(Math.max(0, Math.trunc(value)))
 }
