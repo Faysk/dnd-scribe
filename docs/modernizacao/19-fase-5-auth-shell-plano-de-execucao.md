@@ -69,8 +69,9 @@ Browser
     ├── Server Components
     ├── Route Handlers/Server Actions quando necessário
     └── BFF
-        └── API legada
-            └── Supabase/PostgreSQL
+        └── ${DND_LEGACY_ORIGIN}
+            └── projeto Vercel legado
+                └── API/Supabase
 ```
 
 Regra:
@@ -78,6 +79,8 @@ Regra:
 > o browser não deve precisar chamar a API legada diretamente com Bearer token para navegar pelo novo app.
 
 O BFF resolve a sessão no servidor e anexa o access token do usuário ao chamar a API legada que ainda espera `Authorization: Bearer`.
+
+Conforme ADR 012, `DND_LEGACY_ORIGIN` aponta para origem técnica estável do projeto legado e **nunca** para o domínio público móvel `https://dnd.faysk.dev`.
 
 ---
 
@@ -216,7 +219,7 @@ No novo app:
 Server Component/layout
 → BFF helper
 → access token da sessão server-side
-→ API legada /api/auth/me
+→ ${DND_LEGACY_ORIGIN}/api/auth/me
 → profile + campaignRole + capabilities
 ```
 
@@ -230,6 +233,28 @@ lib/api/contracts/auth.ts
 ```
 
 Não expor o payload cru como estado global sem necessidade.
+
+### Pré-condição obrigatória
+
+Antes da primeira chamada real do BFF:
+
+```txt
+DND_LEGACY_ORIGIN configurado ✅
+origem técnica legada TLS/health ✅
+origem != https://dnd.faysk.dev ✅
+```
+
+Isso impede que o BFF entre em self-loop quando o domínio principal for movido ao novo projeto na Fase 13.
+
+### Route Handlers chamados pelo browser
+
+Quando alguma ação client-side precisar de BFF HTTP same-origin, usar namespace reservado:
+
+```txt
+/api/web/*
+```
+
+Isso deixa `/api/*` histórico disponível para passthrough legado no cutover sem colisão conceitual.
 
 ---
 
@@ -315,6 +340,8 @@ O menu deve preparar/parificar:
 
 Se `Editar` apontar ao legado durante a modernização, documentar explicitamente que é uma bridge temporária.
 
+Durante Preview/Homologação, uma bridge para Edit/Central Local pode apontar explicitamente para a origem pública atual ou para a origem técnica legada conforme o comportamento aprovado. No cutover, `/edit/*` será preservado no domínio principal via gateway do ADR 012.
+
 Não criar nova Central Local nesta fase.
 
 ---
@@ -383,7 +410,8 @@ Cuidados:
 - resposta que atualiza cookies de sessão não deve entrar em cache compartilhado;
 - evitar ISR em rotas que podem realizar refresh de auth;
 - respeitar headers privados/no-store quando aplicável;
-- nunca permitir que resposta com `Set-Cookie` de um usuário seja reutilizada para outro.
+- nunca permitir que resposta com `Set-Cookie` de um usuário seja reutilizada para outro;
+- passthrough/gateway futuro não deve habilitar cache compartilhado de rotas privadas por acidente.
 
 A política detalhada deve seguir a versão vigente do `@supabase/ssr` e da Vercel no momento da implementação.
 
@@ -394,13 +422,17 @@ A política detalhada deve seguir a versão vigente do `@supabase/ssr` e da Verc
 Proibições:
 
 - `SUPABASE_SECRET_KEY`/service role no client bundle;
+- expor `DND_LEGACY_ORIGIN` como env client sem necessidade;
 - guardar token em logs;
 - incluir Bearer token em mensagem de erro;
 - confiar apenas em conteúdo client-side para autorização;
 - usar `campaignRole` recebido do browser como fonte de verdade;
-- ampliar redirect OAuth indiscriminadamente.
+- ampliar redirect OAuth indiscriminadamente;
+- encaminhar cookies modernos indiscriminadamente à origem legada.
 
 Logs de auth devem ser sanitizados.
+
+Headers enviados ao upstream legado devem ser construídos deliberadamente, com `Authorization` vindo da sessão validada do usuário.
 
 ---
 
@@ -413,6 +445,7 @@ falha ao iniciar Supabase
 falha OAuth
 callback inválido
 sessão expirada
+origem legada indisponível
 API legada indisponível
 401 da API legada
 403 sem campaignRole
@@ -423,6 +456,16 @@ Nenhum desses cenários deve resultar apenas em tela branca.
 
 Erros não sensíveis podem ser logados server-side com request context mínimo.
 
+Logs do BFF devem permitir distinguir:
+
+```txt
+falha do app novo
+falha de auth
+falha da origem legada
+```
+
+sem registrar token.
+
 ---
 
 ## 20. Testes
@@ -432,7 +475,8 @@ Erros não sensíveis podem ser logados server-side com request context mínimo.
 - normalização de AuthState;
 - validação dos contratos de `/api/auth/me`;
 - helpers de redirect seguro;
-- helpers de BFF.
+- helpers de BFF;
+- montagem segura de URL a partir de `DND_LEGACY_ORIGIN`.
 
 ### E2E
 
@@ -456,10 +500,12 @@ Testar:
 
 - rota autenticada sem cookie;
 - cookie inválido;
-- API legada 401;
-- API legada 403;
+- upstream legado 401;
+- upstream legado 403;
+- upstream legado indisponível;
 - capability ausente;
-- retorno OAuth com redirect externo não permitido.
+- retorno OAuth com redirect externo não permitido;
+- BFF não usa `dnd.faysk.dev` como upstream interno.
 
 ---
 
@@ -494,7 +540,8 @@ Comparar com baseline do legado quando houver tela equivalente.
 - alterar RLS por conveniência do frontend;
 - migrar API legada;
 - remover login legado;
-- mudar domínio de produção;
+- mover domínio de produção;
+- migrar crons;
 - adicionar Pessoas/Mundo/Lore.
 
 ---
@@ -516,6 +563,8 @@ pending access ✅
 user menu ✅
 theme system/light/dark ✅
 logout ✅
+DND_LEGACY_ORIGIN estável ✅
+BFF usa origem técnica, não domínio público móvel ✅
 BFF sem token no browser ✅
 E2E crítico ✅
 visual regression ✅
@@ -529,6 +578,7 @@ Documentar ao final:
 - arquivos de auth criados;
 - estratégia de cookies;
 - comportamento de refresh;
+- origem legada usada pelo BFF;
 - bridges temporárias;
 - riscos/dívidas;
 - checks executados.
@@ -543,7 +593,8 @@ Revalidar especialmente:
 - Supabase SSR com cookies;
 - recomendação vigente de `getClaims()` para proteção;
 - PKCE/callback;
-- cache headers em refresh de sessão.
+- cache headers em refresh de sessão;
+- comportamento atual de external rewrites da Vercel antes do cutover.
 
 A documentação oficial pode evoluir; este plano define o comportamento desejado, não congela snippets externos.
 
