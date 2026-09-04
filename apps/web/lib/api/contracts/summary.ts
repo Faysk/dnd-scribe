@@ -1,4 +1,4 @@
-import { normalizeArtworkUrl } from '@/lib/artwork'
+import { normalizeArtworkUrl } from '../../artwork'
 
 export type SessionSummary = Readonly<{
   sourceSessionId: string
