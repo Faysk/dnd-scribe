@@ -10,6 +10,24 @@ test('envia headers de segurança básicos em todas as páginas', async ({ reque
   expect(response.headers()['cross-origin-opener-policy']).toBe('same-origin-allow-popups')
 })
 
+test('preserva Permissions-Policy de rede local em Edit/Central Local', async ({ request }) => {
+  const edit = await request.get('/edit', { maxRedirects: 0 })
+  const central = await request.get('/central-local', { maxRedirects: 0 })
+
+  expect(edit.headers()['permissions-policy']).toContain('local-network=(self)')
+  expect(edit.headers()['permissions-policy']).toContain('loopback-network=(self)')
+  expect(central.headers()['permissions-policy']).toContain('local-network=(self)')
+  expect(central.headers()['permissions-policy']).toContain('loopback-network=(self)')
+})
+
+test('namespace /api/web permanece local no Next', async ({ request }) => {
+  const transcript = await request.get('/api/web/library/transcript')
+  const download = await request.get('/api/web/library/download')
+
+  expect(transcript.status()).toBe(400)
+  expect(download.status()).toBe(400)
+})
+
 test('logout rejeita POST cross-origin e aceita a própria origem', async ({ request }) => {
   const rejected = await request.post('/auth/logout', {
     headers: { Origin: 'https://evil.example' },

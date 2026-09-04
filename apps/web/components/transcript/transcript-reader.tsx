@@ -48,7 +48,7 @@ export function TranscriptReader({ initial }: TranscriptReaderProps) {
     if (filters.speaker) params.set('speaker', filters.speaker)
 
     try {
-      const response = await fetch(`/api/library/transcript?${params.toString()}`, {
+      const response = await fetch(`/api/web/library/transcript?${params.toString()}`, {
         headers: { Accept: 'application/json' },
         cache: 'no-store',
       })
@@ -117,7 +117,7 @@ export function TranscriptReader({ initial }: TranscriptReaderProps) {
   const status = loading
     ? segments.length ? 'Carregando mais falas…' : 'Carregando falas…'
     : settledStatus
-  const downloadHref = `/api/library/download?sourceSessionId=${encodeURIComponent(initial.session.sourceSessionId)}`
+  const downloadHref = `/api/web/library/download?sourceSessionId=${encodeURIComponent(initial.session.sourceSessionId)}`
 
   return (
     <div aria-busy={loading} className="pb-20 pt-8 sm:pt-10">
