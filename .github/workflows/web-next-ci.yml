@@ -25,9 +25,9 @@ concurrency:
 
 jobs:
   quality:
-    name: Next bootstrap checks
+    name: Next quality and parity checks
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -65,8 +65,8 @@ jobs:
       - name: Measure client bundle
         run: pnpm --filter @dnd-scribe/web measure:client-bundle
 
-      - name: Install Playwright Chromium
-        run: pnpm --filter @dnd-scribe/web exec playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: pnpm --filter @dnd-scribe/web exec playwright install --with-deps chromium firefox webkit
 
-      - name: E2E smoke
+      - name: E2E parity smoke
         run: pnpm --filter @dnd-scribe/web test:e2e
