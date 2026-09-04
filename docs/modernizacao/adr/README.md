@@ -23,14 +23,15 @@ Architecture Decision Records usados para registrar decisões que não devem dep
 | [008](008-api-legada-como-fronteira-durante-migracao.md) | API existente permanece como fronteira canônica de dados do player durante a migração | Accepted |
 | [009](009-preview-next-em-projeto-vercel-separado.md) | Novo app Next usa projeto Vercel separado durante bootstrap e homologação | Accepted |
 | [010](010-bff-next-para-api-legada.md) | Novo app usa BFF server-side para consumir a API legada durante coexistência | Accepted |
+| [011](011-compatibilidade-hash-legado-no-cutover.md) | Links hash do legado serão preservados por bridge client-side mínima no cutover | Accepted |
 
 ## Pendências deliberadamente adiadas
 
 Não bloqueiam o bootstrap:
 
-- estratégia final de bridge/redirect para URLs hash do legado — deve ser fechada antes da Fase 7/cutover;
 - eventual substituição dos endpoints legados por acesso direto/handlers novos — só pode ocorrer depois de paridade e revisão de autorização;
-- remoção do projeto Vercel legado — somente após cutover e estabilização.
+- remoção do projeto Vercel legado — somente após cutover e estabilização;
+- data futura de remoção da bridge de hash — somente depois de uso estável das URLs modernas e decisão explícita.
 
 ## Formato
 
