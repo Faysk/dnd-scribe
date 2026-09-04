@@ -48,6 +48,7 @@ export function UserMenu({ access, identity }: UserMenuProps) {
           <span className="mt-1 block text-[11px] text-foreground-muted">{campaignRoleLabel(access.campaignRole)}</span>
         </div>
         <Link className="mt-1 rounded-sm px-3 py-2 text-sm text-foreground-soft no-underline hover:bg-surface hover:text-foreground" href="/">Início</Link>
+        <Link className="rounded-sm px-3 py-2 text-sm text-foreground-soft no-underline hover:bg-surface hover:text-foreground" href="/sessoes">Sessões</Link>
         {editUrl ? (
           <a className="rounded-sm px-3 py-2 text-sm text-foreground-soft no-underline hover:bg-surface hover:text-foreground" href={editUrl}>Editar <span className="sr-only">no app legado</span></a>
         ) : null}
