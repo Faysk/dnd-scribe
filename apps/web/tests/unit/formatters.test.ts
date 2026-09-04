@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { displaySessionTitle, formatDuration, formatSessionDate } from '@/lib/formatters'
+import { displaySessionTitle, formatDuration, formatSessionDate } from '../../lib/formatters'
 
 describe('formatters de sessão', () => {
   it('mantém data estável em pt-BR', () => {
