@@ -14,6 +14,7 @@ function segment(index: number) {
 
 function payload(segments = [segment(1)]) {
   return {
+    ok: true,
     session: {
       sourceSessionId: 'session-1',
       title: 'Uma memória',
@@ -48,5 +49,11 @@ describe('transcript contract', () => {
 
   it('rejects an oversized cursor before it reaches client state', () => {
     expect(() => parseTranscriptPayload({ ...payload(), nextCursor: 'x'.repeat(1201) })).toThrow('cursor')
+  })
+
+  it('rejects an unsuccessful or missing upstream envelope', () => {
+    expect(() => parseTranscriptPayload({ ...payload(), ok: false })).toThrow('Resposta inválida')
+    const { ok: _ok, ...withoutOk } = payload()
+    expect(() => parseTranscriptPayload(withoutOk)).toThrow('Resposta inválida')
   })
 })
