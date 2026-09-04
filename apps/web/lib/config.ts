@@ -54,7 +54,7 @@ export function getLegacyOrigin() {
 }
 
 export function getLegacyEditUrl() {
-  const raw = process.env.DND_LEGACY_EDIT_ORIGIN || 'https://dnd.faysk.dev'
+  const raw = process.env.DND_LEGACY_EDIT_ORIGIN || process.env.DND_LEGACY_ORIGIN || 'https://dnd.faysk.dev'
   try {
     const parsed = new URL(raw)
     if (parsed.protocol !== 'https:') return null
