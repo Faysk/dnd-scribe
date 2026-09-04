@@ -1,3 +1,5 @@
+import { normalizeArtworkUrl } from '@/lib/artwork'
+
 export const TRANSCRIPT_PAGE_SIZE = 120
 export const TRANSCRIPT_SOURCE_SESSION_ID_MAX_LENGTH = 220
 export const TRANSCRIPT_CURSOR_MAX_LENGTH = 1200
@@ -55,17 +57,6 @@ function count(value: unknown) {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0
 }
 
-function httpsUrl(value: unknown) {
-  const raw = text(value)
-  if (!raw) return ''
-  try {
-    const parsed = new URL(raw)
-    return parsed.protocol === 'https:' ? parsed.toString() : ''
-  } catch {
-    return ''
-  }
-}
-
 function parseSession(value: unknown): TranscriptSession {
   const item = record(value)
   if (!item) throw new Error('Transcrição sem dados da sessão.')
@@ -82,8 +73,8 @@ function parseSession(value: unknown): TranscriptSession {
     durationMs: nullableNumber(item.durationMs),
     summary: text(item.summary),
     hasSummary: item.hasSummary === true,
-    coverImageUrl: httpsUrl(item.coverImageUrl),
-    heroImageUrl: httpsUrl(item.heroImageUrl),
+    coverImageUrl: normalizeArtworkUrl(item.coverImageUrl),
+    heroImageUrl: normalizeArtworkUrl(item.heroImageUrl),
     updatedAt: text(item.updatedAt),
   }
 }

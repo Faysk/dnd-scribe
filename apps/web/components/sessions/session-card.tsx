@@ -1,16 +1,12 @@
 import Link from 'next/link'
 
+import { ArtworkImage } from '@/components/media/artwork-image'
 import { MetaText } from '@/components/ui/typography'
 import type { LibrarySession } from '@/lib/api/contracts/library'
 import { displaySessionTitle, formatCount, formatDuration, formatSessionDate } from '@/lib/formatters'
 
-function artworkStyle(url: string) {
-  return url ? { backgroundImage: `url(${JSON.stringify(url)})` } : undefined
-}
-
 type SessionCardProps = Readonly<{
   session: LibrarySession
-  priority?: boolean
 }>
 
 export function SessionCard({ session }: SessionCardProps) {
@@ -22,17 +18,21 @@ export function SessionCard({ session }: SessionCardProps) {
       aria-label={`Abrir ${title}`}
       className="group grid min-h-64 overflow-hidden rounded-lg border border-border-subtle bg-canvas-subtle no-underline transition-[border-color,background-color,transform] duration-150 hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface md:grid-cols-[11rem_minmax(0,1fr)]"
       href={`/sessoes/${encodeURIComponent(session.sourceSessionId)}`}
+      prefetch={false}
     >
-      <div
-        aria-hidden="true"
-        className="min-h-52 bg-surface bg-cover bg-center md:min-h-full"
-        style={artworkStyle(art)}
-      >
-        {!art ? (
+      <div className="relative min-h-52 overflow-hidden bg-surface md:min-h-full">
+        {art ? (
+          <ArtworkImage
+            alt=""
+            className="object-cover"
+            sizes="(min-width: 768px) 11rem, 100vw"
+            src={art}
+          />
+        ) : (
           <div className="grid h-full min-h-52 place-items-center bg-[radial-gradient(circle_at_40%_20%,var(--ds-accent-muted),transparent_55%),var(--ds-surface)] font-display text-5xl text-accent/45">
             20
           </div>
-        ) : null}
+        )}
       </div>
 
       <article className="flex min-w-0 flex-col p-5 sm:p-6">

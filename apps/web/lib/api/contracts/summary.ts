@@ -1,3 +1,5 @@
+import { normalizeArtworkUrl } from '@/lib/artwork'
+
 export type SessionSummary = Readonly<{
   sourceSessionId: string
   title: string
@@ -26,17 +28,6 @@ function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function httpsUrl(value: unknown) {
-  const raw = text(value)
-  if (!raw) return ''
-  try {
-    const parsed = new URL(raw)
-    return parsed.protocol === 'https:' ? parsed.toString() : ''
-  } catch {
-    return ''
-  }
-}
-
 export function parseSessionSummaryPayload(value: unknown): SessionSummaryPayload {
   const payload = record(value)
   const item = record(payload?.session)
@@ -57,8 +48,8 @@ export function parseSessionSummaryPayload(value: unknown): SessionSummaryPayloa
       summary: text(item.summary),
       summaryFull,
       hasSummary: item.hasSummary === true || Boolean(summaryFull),
-      coverImageUrl: httpsUrl(item.coverImageUrl),
-      heroImageUrl: httpsUrl(item.heroImageUrl),
+      coverImageUrl: normalizeArtworkUrl(item.coverImageUrl),
+      heroImageUrl: normalizeArtworkUrl(item.heroImageUrl),
       updatedAt: text(item.updatedAt),
     },
   }
