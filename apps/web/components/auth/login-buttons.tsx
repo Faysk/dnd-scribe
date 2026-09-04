@@ -21,7 +21,7 @@ export function LoginButtons({ configured }: LoginButtonsProps) {
 
     const supabase = createBrowserSupabaseClient()
     if (!supabase) {
-      setError('Configuração de autenticação indisponível neste ambiente.')
+      setError('O login está temporariamente indisponível.')
       setLoadingProvider(null)
       return
     }
@@ -34,7 +34,8 @@ export function LoginButtons({ configured }: LoginButtonsProps) {
     })
 
     if (authError) {
-      setError(authError.message)
+      console.error('[web-next] Falha ao iniciar OAuth.', authError)
+      setError('Não foi possível iniciar o login. Tente novamente em instantes.')
       setLoadingProvider(null)
     }
   }
