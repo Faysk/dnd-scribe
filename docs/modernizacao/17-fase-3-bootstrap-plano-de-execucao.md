@@ -235,13 +235,25 @@ Apenas valores realmente públicos, com prefixo apropriado do framework.
 
 ### Server-only
 
-- URL/base da API legada quando necessário;
+- `DND_LEGACY_ORIGIN` — origem técnica estável do projeto legado;
 - secrets de sessão/integração, se algum for introduzido;
 - qualquer chave privilegiada.
 
+### Origem legada
+
+Conforme ADR 012, o BFF nunca deve usar `https://dnd.faysk.dev` como upstream interno.
+
+Direção:
+
+```txt
+DND_LEGACY_ORIGIN=https://legacy.dnd.faysk.dev
+```
+
+O hostname final pode variar, mas precisa ser estável e continuar apontando para o projeto legado mesmo depois que `dnd.faysk.dev` for movido ao novo projeto na Fase 13.
+
 ### Regra
 
-`SUPABASE_SERVICE_ROLE_KEY` ou equivalente privilegiado nunca entra em client bundle.
+`SUPABASE_SERVICE_ROLE_KEY`, secret key ou equivalente privilegiado nunca entra em client bundle.
 
 Criar validação de env server-side e client-side separadas.
 
@@ -253,13 +265,14 @@ Nenhum `.env` real entra no Git.
 
 A Fase 3 não migra os endpoints da biblioteca.
 
-Fronteira:
+Fronteira aprovada:
 
 ```txt
 Browser
 → Next
 → adapter/BFF server-side
-→ https://dnd.faysk.dev/api/*
+→ ${DND_LEGACY_ORIGIN}/api/*
+→ projeto Vercel legado
 ```
 
 Endpoints iniciais a suportar posteriormente:
@@ -272,6 +285,25 @@ Endpoints iniciais a suportar posteriormente:
 /api/library-transcript
 /api/session-download
 ```
+
+### Namespace do BFF moderno
+
+Para não conflitar futuramente com o passthrough de `/api/*` no cutover, os Route Handlers chamados pelo browser devem usar namespace explícito reservado.
+
+Direção aprovada:
+
+```txt
+/api/web/*
+```
+
+Exemplos futuros:
+
+```txt
+/api/web/transcript
+/api/web/session-download
+```
+
+Helpers server-only podem chamar o upstream diretamente e não precisam passar pelo endpoint público do BFF.
 
 ### No bootstrap
 
@@ -288,7 +320,45 @@ sem duplicar domínio ou chamadas reais antes das fases correspondentes.
 
 ---
 
-## 9. Auth
+## 9. Origem técnica do projeto legado
+
+Antes da primeira integração real da Fase 5, a topologia do ADR 012 precisa estar operacional.
+
+A Fase 3 deve preparar — e preferencialmente concluir — estes passos de infraestrutura:
+
+```txt
+projeto Vercel legado
+→ adicionar hostname técnico estável
+→ validar TLS
+→ validar /api/auth-config ou health equivalente
+→ configurar DND_LEGACY_ORIGIN no projeto Next
+```
+
+Nome recomendado:
+
+```txt
+legacy.dnd.faysk.dev
+```
+
+### Importante
+
+Adicionar esse hostname não move `dnd.faysk.dev` e não faz cutover.
+
+Produção continua no projeto legado exatamente como antes.
+
+O objetivo é desacoplar desde cedo:
+
+```txt
+domínio público que será movido
+≠
+origem interna que precisa permanecer estável
+```
+
+Se a equipe preferir executar a associação do hostname no início da Fase 5, a Fase 3 deve ao menos deixar o domínio reservado, a configuração documentada e o gate explícito. A Fase 5 não pode começar integração real do BFF usando o domínio público móvel.
+
+---
+
+## 10. Auth
 
 A implementação real de login pertence à Fase 5.
 
@@ -303,7 +373,7 @@ Não mexer nas configurações OAuth de produção antes do Preview existir.
 
 ---
 
-## 10. Tailwind e CSS
+## 11. Tailwind e CSS
 
 Tailwind entra como ferramenta de composição.
 
@@ -320,7 +390,7 @@ A implementação completa de tokens dark/light começa na Fase 4.
 
 ---
 
-## 11. Qualidade desde o primeiro commit
+## 12. Qualidade desde o primeiro commit
 
 Scripts mínimos em `apps/web/package.json`:
 
@@ -348,7 +418,7 @@ Playwright pode começar com um smoke test simples do shell de bootstrap. Não p
 
 ---
 
-## 12. CI da Fase 3
+## 13. CI da Fase 3
 
 Workflow separado do legado inicialmente.
 
@@ -372,7 +442,7 @@ A nova pipeline não substitui `npm run check` do root nesta fase.
 
 ---
 
-## 13. Vercel — segundo projeto
+## 14. Vercel — segundo projeto
 
 Conforme ADR 009:
 
@@ -381,6 +451,7 @@ Projeto atual:
   dnd-scribe
   dnd.faysk.dev
   legado + API + Central Local
+  + origem técnica estável do ADR 012
 
 Novo projeto:
   dnd-scribe-web-next (nome final pode variar)
@@ -398,13 +469,20 @@ Novo projeto:
 - Git branch/PR Preview habilitado;
 - proteção de Preview definida conforme necessidade da equipe.
 
+### Requisitos antes de integrar BFF real
+
+- origem técnica legada estável criada/validada;
+- `DND_LEGACY_ORIGIN` configurado server-only;
+- smoke da origem legada verde;
+- nenhuma chamada BFF apontando para `dnd.faysk.dev`.
+
 ### Proibição
 
 Não apontar `dnd.faysk.dev` para o projeto novo na Fase 3.
 
 ---
 
-## 14. Primeiro conteúdo do app
+## 15. Primeiro conteúdo do app
 
 O bootstrap deve renderizar somente um shell neutro de verificação, algo equivalente a:
 
@@ -425,17 +503,18 @@ Objetivo:
 
 ---
 
-## 15. O que NÃO fazer na Fase 3
+## 16. O que NÃO fazer na Fase 3
 
 - migrar Home;
 - migrar login;
 - migrar sessão;
 - migrar transcrição;
-- criar API nova;
+- criar API nova de domínio;
 - mover banco;
 - alterar RLS;
 - remover frontend legado;
-- mexer em `dnd.faysk.dev`;
+- mover `dnd.faysk.dev`;
+- migrar crons;
 - criar Pessoas/Mundo/Lore;
 - instalar Tiptap;
 - instalar XYFlow;
@@ -443,7 +522,7 @@ Objetivo:
 
 ---
 
-## 16. Gate de saída
+## 17. Gate de saída
 
 A Fase 3 termina somente quando:
 
@@ -455,6 +534,8 @@ test ✅
 build ✅
 e2e smoke ✅
 Preview Vercel separado ✅
+DND_LEGACY_ORIGIN definido/planejado sem usar domínio público móvel ✅
+origem técnica legada saudável antes do primeiro BFF real ✅
 produção legado intacta ✅
 CI legado intacto ✅
 ```
@@ -466,12 +547,13 @@ E houver documentação registrando:
 - deployment Preview;
 - scripts;
 - resultado dos checks;
+- hostname técnico legado e estado de validação;
 - problemas encontrados;
-- rollback (remoção de `apps/web`/novo projeto sem tocar em produção).
+- rollback do novo app/projeto sem tocar no domínio público.
 
 ---
 
-## 17. Próxima fase
+## 18. Próxima fase
 
 Somente após o gate acima:
 
