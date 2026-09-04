@@ -12,7 +12,7 @@ export type CampaignCapabilities = JsonRecord & {
 export type CampaignAccessPayload = Readonly<{
   user: JsonRecord | null
   profile: CampaignProfile | null
-  campaignRole: unknown
+  campaignRole: string | null
   capabilities: CampaignCapabilities | null
 }>
 
@@ -24,6 +24,14 @@ function optionalRecord(value: unknown, field: string) {
   if (value == null) return null
   if (!isRecord(value)) throw new Error(`Payload de auth inválido: ${field}.`)
   return value
+}
+
+function parseCampaignRole(value: unknown) {
+  if (value == null || value === '') return null
+  if (typeof value !== 'string') throw new Error('Payload de auth inválido: campaignRole.')
+  const role = value.trim()
+  if (!role || role.length > 80) throw new Error('Payload de auth inválido: campaignRole.')
+  return role
 }
 
 export function parseCampaignAccessPayload(value: unknown): CampaignAccessPayload {
@@ -46,11 +54,11 @@ export function parseCampaignAccessPayload(value: unknown): CampaignAccessPayloa
   return {
     user,
     profile,
-    campaignRole: value.campaignRole ?? null,
+    campaignRole: parseCampaignRole(value.campaignRole),
     capabilities,
   }
 }
 
-export function hasCampaignRole(role: unknown) {
-  return role !== null && role !== undefined && role !== '' && role !== false
+export function hasCampaignRole(role: unknown): role is string {
+  return typeof role === 'string' && role.trim().length > 0 && role.length <= 80
 }
