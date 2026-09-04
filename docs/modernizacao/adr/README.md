@@ -20,6 +20,7 @@ Architecture Decision Records usados para registrar decisões que não devem dep
 | [005](005-design-system-proprio.md) | Identidade visual própria, sem UI kit ditando estética | Accepted |
 | [006](006-server-components-default.md) | Server Components por padrão | Accepted |
 | [007](007-feature-freeze.md) | Nenhuma expansão de domínio durante a modernização | Accepted |
+| [008](008-api-legada-como-fronteira-durante-migracao.md) | API existente permanece como fronteira canônica de dados do player durante a migração | Accepted |
 
 ## Formato
 
