@@ -9,9 +9,10 @@ type Provider = 'discord' | 'google'
 
 type LoginButtonsProps = Readonly<{
   configured: boolean
+  nextPath?: string
 }>
 
-export function LoginButtons({ configured }: LoginButtonsProps) {
+export function LoginButtons({ configured, nextPath = '/' }: LoginButtonsProps) {
   const [loadingProvider, setLoadingProvider] = useState<Provider | null>(null)
   const [error, setError] = useState('')
 
@@ -27,7 +28,7 @@ export function LoginButtons({ configured }: LoginButtonsProps) {
     }
 
     const callback = new URL('/auth/callback', window.location.origin)
-    callback.searchParams.set('next', '/')
+    callback.searchParams.set('next', nextPath)
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: callback.toString() },
