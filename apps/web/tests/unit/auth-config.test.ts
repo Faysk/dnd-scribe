@@ -29,6 +29,10 @@ describe('auth configuration', () => {
       url: 'http://localhost:54321',
       publishableKey: 'key',
     })
+    expect(readPublicSupabaseConfig('http://[::1]:54321', 'key')).toEqual({
+      url: 'http://[::1]:54321',
+      publishableKey: 'key',
+    })
   })
 
   it('allows unconfigured technical preview only outside production', () => {
