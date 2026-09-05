@@ -2,6 +2,13 @@ export const CAMPAIGN_SLUG = 'yuhara-main'
 export const THEME_STORAGE_KEY = 'dnd-scribe-theme'
 export const PUBLIC_LEGACY_HOSTNAME = 'dnd.faysk.dev'
 
+// Valores públicos e intencionalmente versionados como fallback de cutover.
+// O alias legado não é o domínio móvel de produção e continua servindo somente
+// como origem operacional enquanto a modernização convive com o backend antigo.
+export const DEFAULT_LEGACY_ORIGIN = 'https://dnd-scribe-amber.vercel.app'
+const DEFAULT_PUBLIC_SUPABASE_URL = 'https://dmrqnbdvbkfqzctcerbx.supabase.co'
+const DEFAULT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_SsWmRNe0Erpdj1rmJ8wRMA_NMIUFJjS'
+
 export type PublicSupabaseConfig = Readonly<{
   url: string
   publishableKey: string
@@ -16,8 +23,8 @@ export function canRenderUnconfiguredPreview(nodeEnv = process.env.NODE_ENV) {
 }
 
 export function readPublicSupabaseConfig(
-  url = process.env.NEXT_PUBLIC_SUPABASE_URL,
-  publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  url = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_PUBLIC_SUPABASE_URL,
+  publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || DEFAULT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 ): PublicSupabaseConfig | null {
   const key = String(publishableKey || '').trim()
   if (!url || !key || key.length > 4_096) return null
@@ -67,11 +74,11 @@ export function hasConfiguredLegacyOrigin(value = process.env.DND_LEGACY_ORIGIN)
 }
 
 export function getLegacyOrigin() {
-  return parseLegacyOrigin(process.env.DND_LEGACY_ORIGIN)
+  return parseLegacyOrigin(process.env.DND_LEGACY_ORIGIN || DEFAULT_LEGACY_ORIGIN)
 }
 
 export function getLegacyEditUrl() {
-  const raw = process.env.DND_LEGACY_EDIT_ORIGIN || process.env.DND_LEGACY_ORIGIN || 'https://dnd.faysk.dev'
+  const raw = process.env.DND_LEGACY_EDIT_ORIGIN || process.env.DND_LEGACY_ORIGIN || DEFAULT_LEGACY_ORIGIN
   try {
     const parsed = new URL(raw)
     if (parsed.protocol !== 'https:') return null
