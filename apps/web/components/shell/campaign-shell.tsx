@@ -1,19 +1,20 @@
+import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { Brand } from '@/components/shell/brand'
 import { PrimaryNav } from '@/components/shell/primary-nav'
 import { UserMenu } from '@/components/shell/user-menu'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
-import type { AuthIdentity } from '@/lib/auth/state'
-import type { CampaignAccessPayload } from '@/lib/api/contracts/auth'
+import type { AuthState } from '@/lib/auth/state'
 
 type CampaignShellProps = Readonly<{
   children: ReactNode
-  identity: AuthIdentity
-  access: CampaignAccessPayload
+  authState: AuthState
 }>
 
-export function CampaignShell({ access, children, identity }: CampaignShellProps) {
+export function CampaignShell({ authState, children }: CampaignShellProps) {
+  const pending = authState.kind === 'pendingAccess'
+
   return (
     <>
       <header className="sticky top-0 z-20 border-b border-border-subtle bg-canvas/90 backdrop-blur-xl">
@@ -22,9 +23,26 @@ export function CampaignShell({ access, children, identity }: CampaignShellProps
           <div className="flex items-center gap-3">
             <PrimaryNav />
             <ThemeToggle />
-            <UserMenu access={access} identity={identity} />
+            {authState.kind === 'anonymous' ? (
+              <Link
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-border px-3 font-ui text-sm font-semibold text-foreground no-underline transition-colors hover:border-accent/60 hover:bg-surface"
+                href="/login"
+              >
+                Entrar
+              </Link>
+            ) : (
+              <UserMenu
+                access={authState.kind === 'authorized' ? authState.access : null}
+                identity={authState.identity}
+              />
+            )}
           </div>
         </div>
+        {pending ? (
+          <div className="border-t border-border-subtle bg-accent-muted/45 px-5 py-2 text-center font-ui text-xs text-foreground-soft">
+            Sua conta está conectada. Transcrições e material interno aguardam aprovação de acesso.
+          </div>
+        ) : null}
       </header>
       <main id="content" tabIndex={-1}>{children}</main>
     </>

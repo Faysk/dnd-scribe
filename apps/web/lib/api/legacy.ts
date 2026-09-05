@@ -25,18 +25,28 @@ const ALLOWED_LEGACY_PATHS = new Set([
   '/api/library-transcript',
   '/api/session-download',
 ])
+const ALLOWED_PUBLIC_LEGACY_PATHS = new Set(['/api/public-library'])
 
-function legacyUrl(pathname: string, query: Readonly<Record<string, QueryValue>>) {
-  if (!ALLOWED_LEGACY_PATHS.has(pathname)) {
-    throw new LegacyApiError('Caminho da API legada não autorizado.', 500)
-  }
-
-  const url = new URL(pathname, getLegacyOrigin())
+function appendQuery(url: URL, query: Readonly<Record<string, QueryValue>>) {
   for (const [key, value] of Object.entries(query)) {
     if (value === null || value === undefined || value === '') continue
     url.searchParams.set(key, String(value))
   }
   return url
+}
+
+function legacyUrl(pathname: string, query: Readonly<Record<string, QueryValue>>) {
+  if (!ALLOWED_LEGACY_PATHS.has(pathname)) {
+    throw new LegacyApiError('Caminho da API legada não autorizado.', 500)
+  }
+  return appendQuery(new URL(pathname, getLegacyOrigin()), query)
+}
+
+function publicLegacyUrl(pathname: string, query: Readonly<Record<string, QueryValue>>) {
+  if (!ALLOWED_PUBLIC_LEGACY_PATHS.has(pathname)) {
+    throw new LegacyApiError('Caminho da API pública legada não autorizado.', 500)
+  }
+  return appendQuery(new URL(pathname, getLegacyOrigin()), query)
 }
 
 function logUpstreamFailure(pathname: string, status: number, startedAt: number) {
@@ -48,23 +58,23 @@ function logUpstreamFailure(pathname: string, status: number, startedAt: number)
   })
 }
 
-export async function fetchLegacyResponse(
+async function performLegacyFetch(
   pathname: string,
-  accessToken: string,
-  query: Readonly<Record<string, QueryValue>> = {},
-  options: LegacyFetchOptions = {},
+  url: URL,
+  accessToken: string | null,
+  options: LegacyFetchOptions,
 ): Promise<Response> {
-  if (!accessToken) throw new LegacyApiError('Sessão sem access token.', 401)
-
   const startedAt = Date.now()
+  const headers: Record<string, string> = {
+    Accept: options.accept || 'application/json',
+  }
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+
   let response: Response
   try {
-    response = await fetch(legacyUrl(pathname, query), {
+    response = await fetch(url, {
       method: 'GET',
-      headers: {
-        Accept: options.accept || 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers,
       cache: 'no-store',
       signal: AbortSignal.timeout(LEGACY_TIMEOUT_MS),
     })
@@ -84,12 +94,17 @@ export async function fetchLegacyResponse(
   return response
 }
 
-export async function fetchLegacyJson(
+export async function fetchLegacyResponse(
   pathname: string,
   accessToken: string,
   query: Readonly<Record<string, QueryValue>> = {},
-): Promise<unknown> {
-  const response = await fetchLegacyResponse(pathname, accessToken, query)
+  options: LegacyFetchOptions = {},
+): Promise<Response> {
+  if (!accessToken) throw new LegacyApiError('Sessão sem access token.', 401)
+  return performLegacyFetch(pathname, legacyUrl(pathname, query), accessToken, options)
+}
+
+async function parseLegacyJsonResponse(response: Response): Promise<unknown> {
   try {
     const payload = await readBoundedResponseJson(response, LEGACY_JSON_MAX_BYTES)
     if (payload === null) throw new LegacyApiError('API legada retornou uma resposta vazia.', 502)
@@ -98,4 +113,21 @@ export async function fetchLegacyJson(
     if (error instanceof LegacyApiError) throw error
     throw new LegacyApiError('API legada retornou JSON inválido ou excessivo.', 502)
   }
+}
+
+export async function fetchLegacyJson(
+  pathname: string,
+  accessToken: string,
+  query: Readonly<Record<string, QueryValue>> = {},
+): Promise<unknown> {
+  const response = await fetchLegacyResponse(pathname, accessToken, query)
+  return parseLegacyJsonResponse(response)
+}
+
+export async function fetchPublicLegacyJson(
+  pathname: string,
+  query: Readonly<Record<string, QueryValue>> = {},
+): Promise<unknown> {
+  const response = await performLegacyFetch(pathname, publicLegacyUrl(pathname, query), null, {})
+  return parseLegacyJsonResponse(response)
 }

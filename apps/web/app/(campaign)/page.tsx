@@ -7,24 +7,19 @@ import { ActionLink } from '@/components/ui/action'
 import { StatusPill } from '@/components/ui/status'
 import { Surface } from '@/components/ui/surface'
 import { BodyCopy, DisplayTitle, Eyebrow, SectionTitle } from '@/components/ui/typography'
-import { fetchLibrarySessions } from '@/lib/api/library'
-import type { LibrarySession } from '@/lib/api/contracts/library'
-import { readAuthenticatedAccessToken } from '@/lib/auth/access-token'
+import type { PublicSession } from '@/lib/api/contracts/public-library'
+import { fetchPublicSessions } from '@/lib/api/public-library'
 import { bootstrapContent } from '@/lib/bootstrap'
-import { readPublicSupabaseConfig } from '@/lib/config'
+import { canRenderUnconfiguredPreview, hasConfiguredLegacyOrigin } from '@/lib/config'
 
 export const metadata: Metadata = {
   title: 'Início',
-  description: 'A memória navegável da campanha.',
+  description: 'Memórias públicas da campanha — resumos, arcos e sessões para relembrar a história.',
 }
 
-function ordered<T extends { sessionDate: string; createdAt: string }>(sessions: readonly T[]) {
-  return [...sessions].sort((a, b) => {
-    const right = b.sessionDate || b.createdAt
-    const left = a.sessionDate || a.createdAt
-    return right.localeCompare(left)
-  })
-}
+// A Home depende do arquivo público em runtime. Evita chamadas ao legado durante `next build`
+// e garante que uma memória recém-publicada apareça sem depender de um novo deploy.
+export const dynamic = 'force-dynamic'
 
 function TechnicalPreview() {
   return (
@@ -48,24 +43,24 @@ function DataError() {
       <Surface className="p-7 sm:p-10" tone="elevated">
         <Eyebrow>Arquivo temporariamente indisponível</Eyebrow>
         <SectionTitle className="mt-4">As memórias continuam guardadas.</SectionTitle>
-        <BodyCopy className="mt-4 max-w-2xl">Não foi possível carregar o catálogo agora. Tente novamente em instantes.</BodyCopy>
+        <BodyCopy className="mt-4 max-w-2xl">Não foi possível carregar o catálogo público agora. Tente novamente em instantes.</BodyCopy>
         <div className="mt-7"><ActionLink href="/" variant="secondary">Tentar novamente</ActionLink></div>
       </Surface>
     </div>
   )
 }
 
-function CampaignHome({ sessions }: Readonly<{ sessions: readonly LibrarySession[] }>) {
+function CampaignHome({ sessions }: Readonly<{ sessions: readonly PublicSession[] }>) {
   const latest = sessions[0]
   const recent = sessions.slice(1, 5)
 
   return (
     <div className="mx-auto w-[min(1180px,calc(100%-2.5rem))] py-10 sm:py-14 lg:py-16">
       <header className="max-w-3xl pb-10 sm:pb-12">
-        <Eyebrow>Arquivo da campanha</Eyebrow>
+        <Eyebrow>Memórias da campanha</Eyebrow>
         <DisplayTitle className="mt-4">Onde paramos?</DisplayTitle>
         <BodyCopy className="mt-5 max-w-2xl">
-          O DnD Scribe organiza a campanha como memória: primeiro o que aconteceu, depois o arquivo completo para quando alguém disser “caralho, quem era esse NPC mesmo?”.
+          Aqui ficam as histórias que já viraram memória. Os resumos são públicos; transcrições e material bruto continuam reservados para a mesa.
         </BodyCopy>
       </header>
 
@@ -98,17 +93,16 @@ function CampaignHome({ sessions }: Readonly<{ sessions: readonly LibrarySession
 }
 
 export default async function CampaignHomePage() {
-  if (!readPublicSupabaseConfig()) return <TechnicalPreview />
+  if (!hasConfiguredLegacyOrigin() && canRenderUnconfiguredPreview()) return <TechnicalPreview />
 
-  const accessToken = await readAuthenticatedAccessToken()
-  let sessions: readonly LibrarySession[] = []
+  let sessions: readonly PublicSession[] = []
   let loadFailed = false
 
   try {
-    const payload = await fetchLibrarySessions(accessToken)
-    sessions = ordered(payload.sessions)
+    const payload = await fetchPublicSessions()
+    sessions = payload.sessions
   } catch (error) {
-    console.error('[web-next] Falha ao consultar a biblioteca da Home.', error)
+    console.error('[web-next] Falha ao consultar a memória pública da Home.', error)
     loadFailed = true
   }
 

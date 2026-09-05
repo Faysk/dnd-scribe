@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { canRenderUnconfiguredPreview, parseLegacyOrigin, readPublicSupabaseConfig } from '../../lib/config'
+import {
+  canRenderUnconfiguredPreview,
+  hasConfiguredLegacyOrigin,
+  parseLegacyOrigin,
+  readPublicSupabaseConfig,
+} from '../../lib/config'
 
 describe('auth configuration', () => {
   it('rejects the movable public domain as BFF upstream', () => {
@@ -9,6 +14,13 @@ describe('auth configuration', () => {
 
   it('accepts a dedicated HTTPS legacy origin', () => {
     expect(parseLegacyOrigin('https://legacy.example.com')).toBe('https://legacy.example.com')
+    expect(hasConfiguredLegacyOrigin('https://legacy.example.com')).toBe(true)
+  })
+
+  it('fails closed when the public-data upstream is absent or movable', () => {
+    expect(hasConfiguredLegacyOrigin(undefined)).toBe(false)
+    expect(hasConfiguredLegacyOrigin('https://dnd.faysk.dev')).toBe(false)
+    expect(hasConfiguredLegacyOrigin('http://legacy.example.com')).toBe(false)
   })
 
   it('returns null when public Supabase settings are incomplete or malformed', () => {

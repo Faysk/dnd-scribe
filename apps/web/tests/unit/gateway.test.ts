@@ -16,6 +16,10 @@ describe('legacy gateway', () => {
     const rewrites = buildLegacyFallbackRewrites('https://dnd-scribe-amber.vercel.app')
 
     expect(rewrites).toContainEqual({
+      source: '/assets/sessions/:path*',
+      destination: 'https://dnd-scribe-amber.vercel.app/assets/sessions/:path*',
+    })
+    expect(rewrites).toContainEqual({
       source: '/api/:path*',
       destination: 'https://dnd-scribe-amber.vercel.app/api/:path*',
     })
@@ -31,6 +35,11 @@ describe('legacy gateway', () => {
       source: '/docs/api/:path*',
       destination: 'https://dnd-scribe-amber.vercel.app/docs/api/:path*',
     })
+  })
+
+  it('não cria proxy genérico para todo o namespace de assets', () => {
+    const rewrites = buildLegacyFallbackRewrites('https://dnd-scribe-amber.vercel.app')
+    expect(rewrites.some((rewrite) => rewrite.source === '/assets/:path*')).toBe(false)
   })
 
   it('desabilita gateway quando a origem não é segura', () => {

@@ -27,6 +27,7 @@ Architecture Decision Records usados para registrar decisões que não devem dep
 | [012](012-origem-legada-estavel-e-gateway-no-cutover.md) | Projeto legado mantém origem técnica estável e o novo domínio atua como gateway no cutover | Accepted |
 | [013](013-typescript-6-bridge-para-tooling.md) | TypeScript 6.0.3 é bridge temporária até o tooling estável suportar TypeScript 7 | Accepted |
 | [014](014-preview-next-via-deploy-mcp.md) | Projeto Next isolado pode ser homologado por deploy MCP reproduzível e pinado por SHA | Accepted |
+| [015](015-memoria-publica-material-bruto-privado.md) | Resumos publicados são públicos; transcrições e material bruto permanecem privados | Accepted |
 
 ## Pendências deliberadamente adiadas
 
@@ -37,7 +38,8 @@ Não bloqueiam o bootstrap:
 - data futura de remoção da bridge de hash — somente depois de uso estável das URLs modernas e decisão explícita;
 - retirada gradual dos paths de passthrough do gateway — cada contrato exige migração ou aposentadoria explícita;
 - reavaliar TypeScript 7 quando `eslint-config-next`/`typescript-eslint` da linha estável suportarem sua API oficialmente;
-- ligar `dnd-scribe-web-next` diretamente ao GitHub quando a superfície operacional permitir, substituindo o deploy MCP como caminho normal de Preview.
+- ligar `dnd-scribe-web-next` diretamente ao GitHub quando a superfície operacional permitir, substituindo o deploy MCP como caminho normal de Preview;
+- política de visibilidade por sessão (`public | members | private`) só entra com migração e semântica explícitas; até lá `status = 'published'` é o gate do resumo público.
 
 ## Formato
 

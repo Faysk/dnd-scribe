@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 
 import { ArtworkImage } from '@/components/media/artwork-image'
 import { SessionNavigation } from '@/components/sessions/session-navigation'
@@ -17,7 +17,7 @@ import { displaySessionTitle, formatDuration, formatSessionDate } from '@/lib/fo
 
 export const metadata: Metadata = {
   title: 'Transcrição',
-  description: 'Transcrição pesquisável da sessão.',
+  description: 'Transcrição pesquisável da sessão, reservada aos membros da campanha.',
 }
 
 type TranscriptPageProps = Readonly<{
@@ -47,9 +47,9 @@ function SetupState() {
   return (
     <div className="mx-auto w-[min(900px,calc(100%-2.5rem))] py-16 sm:py-24">
       <Surface className="p-8 sm:p-10" tone="elevated">
-        <Eyebrow>Preview técnico</Eyebrow>
-        <SectionTitle className="mt-4">A transcrição real depende do ambiente autenticado.</SectionTitle>
-        <BodyCopy className="mt-4 max-w-2xl">Configure os envs do Preview para carregar as falas privadas da campanha.</BodyCopy>
+        <Eyebrow>Área reservada</Eyebrow>
+        <SectionTitle className="mt-4">A transcrição depende do ambiente autenticado.</SectionTitle>
+        <BodyCopy className="mt-4 max-w-2xl">Os resumos públicos continuam disponíveis normalmente.</BodyCopy>
         <div className="mt-7"><ActionLink href="/sessoes" variant="tertiary">Voltar às sessões</ActionLink></div>
       </Surface>
     </div>
@@ -63,7 +63,7 @@ function TranscriptError() {
         <Eyebrow>Transcrição indisponível</Eyebrow>
         <SectionTitle className="mt-4">Não foi possível abrir as falas desta sessão.</SectionTitle>
         <BodyCopy className="mt-4 max-w-2xl">A transcrição não respondeu como esperado. Tente novamente em instantes.</BodyCopy>
-        <div className="mt-7"><ActionLink href="/sessoes" variant="secondary">Voltar ao arquivo</ActionLink></div>
+        <div className="mt-7"><ActionLink href="/sessoes" variant="secondary">Voltar ao arquivo público</ActionLink></div>
       </Surface>
     </div>
   )
@@ -77,7 +77,7 @@ function TranscriptPage({ data }: Readonly<{ data: TranscriptPayload }>) {
   return (
     <div className="mx-auto w-[min(1180px,calc(100%-2.5rem))] py-8 sm:py-12">
       <header>
-        <ActionLink href={`/sessoes/${encodeURIComponent(session.sourceSessionId)}`} size="sm" variant="tertiary">← Resumo da sessão</ActionLink>
+        <ActionLink href={`/sessoes/${encodeURIComponent(session.sourceSessionId)}`} size="sm" variant="tertiary">← Resumo público da sessão</ActionLink>
         <div className="mt-6 overflow-hidden rounded-xl border border-border bg-surface-elevated shadow-elevated">
           {art ? (
             <div className="relative aspect-[16/7] w-full bg-surface">
@@ -98,7 +98,7 @@ function TranscriptPage({ data }: Readonly<{ data: TranscriptPayload }>) {
 
         <div className="mx-auto max-w-4xl py-8 sm:py-10">
           <div className="flex flex-wrap items-center gap-3">
-            <Eyebrow>Transcrição da sessão</Eyebrow>
+            <Eyebrow>Transcrição · área da mesa</Eyebrow>
             {session.arc ? <StatusPill tone="accent">{session.arc}</StatusPill> : null}
           </div>
           <DisplayTitle className="mt-4">{title}</DisplayTitle>
@@ -126,6 +126,11 @@ export default async function SessionTranscriptPage({ params }: TranscriptPagePr
   if (!sourceSessionId || sourceSessionId.length > 220) notFound()
 
   const accessToken = await readAuthenticatedAccessToken()
+  if (!accessToken) {
+    const next = `/sessoes/${encodeURIComponent(sourceSessionId)}/transcricao`
+    redirect(`/login?next=${encodeURIComponent(next)}`)
+  }
+
   const result = await loadTranscript(sourceSessionId, accessToken)
 
   if (result.kind === 'notFound') notFound()

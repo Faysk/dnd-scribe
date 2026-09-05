@@ -2,11 +2,11 @@ import Link from 'next/link'
 
 import { ArtworkImage } from '@/components/media/artwork-image'
 import { MetaText } from '@/components/ui/typography'
-import type { LibrarySession } from '@/lib/api/contracts/library'
-import { displaySessionTitle, formatCount, formatDuration, formatSessionDate } from '@/lib/formatters'
+import type { PublicSession } from '@/lib/api/contracts/public-library'
+import { displaySessionTitle, formatSessionDate } from '@/lib/formatters'
 
 type SessionCardProps = Readonly<{
-  session: LibrarySession
+  session: PublicSession
 }>
 
 export function SessionCard({ session }: SessionCardProps) {
@@ -50,10 +50,8 @@ export function SessionCard({ session }: SessionCardProps) {
           {session.summary || 'Esta memória ainda não possui um resumo curto publicado.'}
         </p>
 
-        <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-6 font-ui text-[11px] text-foreground-muted">
-          <span>{formatDuration(session.durationMs)}</span>
-          <span>{formatCount(session.segments)} falas</span>
-          <span>{formatCount(session.participants)} participantes</span>
+        <div className="mt-auto pt-6 font-ui text-[11px] text-foreground-muted">
+          <span>{session.hasSummary ? 'Memória completa publicada' : 'Resumo em preparação'}</span>
         </div>
       </article>
     </Link>
