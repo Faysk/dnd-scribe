@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
 
-import { readPublicSupabaseConfig } from '@/lib/config'
+import { DEFAULT_LEGACY_ORIGIN, readPublicSupabaseConfig } from '@/lib/config'
 import { parseLegacyGatewayOrigin } from '@/lib/gateway'
 
 export function GET() {
   const supabaseConfigured = Boolean(readPublicSupabaseConfig())
-  const legacyOriginConfigured = Boolean(parseLegacyGatewayOrigin(process.env.DND_LEGACY_ORIGIN))
+  const legacyOriginConfigured = Boolean(
+    parseLegacyGatewayOrigin(process.env.DND_LEGACY_ORIGIN || DEFAULT_LEGACY_ORIGIN),
+  )
   const ready = supabaseConfigured && legacyOriginConfigured
 
   return NextResponse.json(
