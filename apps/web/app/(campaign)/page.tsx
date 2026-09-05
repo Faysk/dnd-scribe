@@ -21,14 +21,6 @@ export const metadata: Metadata = {
 // e garante que uma memória recém-publicada apareça sem depender de um novo deploy.
 export const dynamic = 'force-dynamic'
 
-function ordered<T extends { sessionDate: string; updatedAt: string }>(sessions: readonly T[]) {
-  return [...sessions].sort((a, b) => {
-    const right = b.sessionDate || b.updatedAt
-    const left = a.sessionDate || a.updatedAt
-    return right.localeCompare(left)
-  })
-}
-
 function TechnicalPreview() {
   return (
     <div className="grid min-h-[calc(100vh-77px)] place-items-center px-5 py-10 sm:px-8">
@@ -108,7 +100,7 @@ export default async function CampaignHomePage() {
 
   try {
     const payload = await fetchPublicSessions()
-    sessions = ordered(payload.sessions)
+    sessions = payload.sessions
   } catch (error) {
     console.error('[web-next] Falha ao consultar a memória pública da Home.', error)
     loadFailed = true
