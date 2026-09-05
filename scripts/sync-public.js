@@ -7,6 +7,7 @@ const integrationsDir = path.join(root, "integrations");
 const outputDir = path.join(root, "public");
 const requiredSource = path.join(sourceDir, "index.html");
 const requiredOutput = path.join(outputDir, "index.html");
+const isVercelDeployment = process.env.VERCEL === "1";
 const browserVendors = [
   {
     source: path.join(root, "node_modules", "marked", "lib", "marked.umd.js"),
@@ -77,7 +78,15 @@ for (const vendor of browserVendors) {
   fs.copyFileSync(vendor.source, vendor.target);
 }
 
-if (!fs.existsSync(requiredOutput)) {
+// Após o cutover, o projeto legado continua hospedando API, Edit, jobs e assets,
+// mas não deve mais competir com a Home moderna no domínio público. Em Vercel,
+// remover somente o index legado deixa a rewrite de "/" assumir o tráfego sem
+// desmontar as superfícies operacionais que ainda vivem neste projeto.
+if (isVercelDeployment) {
+  fs.rmSync(requiredOutput, { force: true });
+}
+
+if (!isVercelDeployment && !fs.existsSync(requiredOutput)) {
   fail(`public output is missing index.html after sync: ${requiredOutput}`);
 }
 
@@ -86,4 +95,4 @@ if (copiedFiles === 0) {
   fail(`public output is empty after sync: ${outputDir}`);
 }
 
-console.log(`Synced ${sourceDir} -> ${outputDir} (${copiedFiles} files)`);
+console.log(`Synced ${sourceDir} -> ${outputDir} (${copiedFiles} files${isVercelDeployment ? "; legacy index omitted for cutover" : ""})`);
