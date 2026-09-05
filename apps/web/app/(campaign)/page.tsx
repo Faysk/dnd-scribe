@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   description: 'Memórias públicas da campanha — resumos, arcos e sessões para relembrar a história.',
 }
 
+// A Home depende do arquivo público em runtime. Evita chamadas ao legado durante `next build`
+// e garante que uma memória recém-publicada apareça sem depender de um novo deploy.
+export const dynamic = 'force-dynamic'
+
 function ordered<T extends { sessionDate: string; updatedAt: string }>(sessions: readonly T[]) {
   return [...sessions].sort((a, b) => {
     const right = b.sessionDate || b.updatedAt
