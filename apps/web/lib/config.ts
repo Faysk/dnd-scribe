@@ -78,12 +78,5 @@ export function getLegacyOrigin() {
 }
 
 export function getLegacyEditUrl() {
-  const raw = process.env.DND_LEGACY_EDIT_ORIGIN || process.env.DND_LEGACY_ORIGIN || DEFAULT_LEGACY_ORIGIN
-  try {
-    const parsed = new URL(raw)
-    if (parsed.protocol !== 'https:') return null
-    return new URL('/edit/', parsed.origin).toString()
-  } catch {
-    return null
-  }
+  return '/edit/'
 }
