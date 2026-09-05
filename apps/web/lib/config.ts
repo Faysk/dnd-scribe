@@ -57,6 +57,15 @@ export function parseLegacyOrigin(value: string | undefined) {
   return parsed.origin
 }
 
+export function hasConfiguredLegacyOrigin(value = process.env.DND_LEGACY_ORIGIN) {
+  try {
+    parseLegacyOrigin(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function getLegacyOrigin() {
   return parseLegacyOrigin(process.env.DND_LEGACY_ORIGIN)
 }
