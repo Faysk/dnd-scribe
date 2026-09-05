@@ -1,6 +1,8 @@
 import { normalizeArtworkUrl } from '../../artwork'
 
-const PUBLIC_LIBRARY_MAX_SESSIONS = 1_000
+const PUBLIC_LIBRARY_MAX_SESSIONS = 500
+const PUBLIC_SUMMARY_MAX_LENGTH = 4_000
+const PUBLIC_SUMMARY_FULL_MAX_LENGTH = 200_000
 
 export type PublicSession = Readonly<{
   sourceSessionId: string
@@ -58,7 +60,7 @@ function parsePublicSession(value: unknown): PublicSession {
     title,
     sessionDate: bounded(item.sessionDate, 80, 'data'),
     arc: bounded(item.arc, 300, 'arco'),
-    summary: bounded(item.summary, 20_000, 'resumo'),
+    summary: bounded(item.summary, PUBLIC_SUMMARY_MAX_LENGTH, 'resumo'),
     hasSummary: item.hasSummary === true,
     coverImageUrl: normalizeArtworkUrl(item.coverImageUrl),
     heroImageUrl: normalizeArtworkUrl(item.heroImageUrl),
@@ -100,7 +102,7 @@ export function parsePublicSessionPayload(value: unknown): PublicSessionPayload 
     campaignSlug: parseCampaignSlug(payload.campaignSlug),
     session: {
       ...base,
-      summaryFull: bounded(sessionRecord.summaryFull, 1_000_000, 'resumo completo'),
+      summaryFull: bounded(sessionRecord.summaryFull, PUBLIC_SUMMARY_FULL_MAX_LENGTH, 'resumo completo'),
     },
   }
 }
