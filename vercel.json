@@ -15,6 +15,38 @@
   ],
   "rewrites": [
     {
+      "source": "/",
+      "destination": "https://dnd-scribe-web-next.vercel.app/"
+    },
+    {
+      "source": "/_next/:path*",
+      "destination": "https://dnd-scribe-web-next.vercel.app/_next/:path*"
+    },
+    {
+      "source": "/login",
+      "destination": "https://dnd-scribe-web-next.vercel.app/login"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "https://dnd-scribe-web-next.vercel.app/auth/:path*"
+    },
+    {
+      "source": "/sessoes",
+      "destination": "https://dnd-scribe-web-next.vercel.app/sessoes"
+    },
+    {
+      "source": "/sessoes/:path*",
+      "destination": "https://dnd-scribe-web-next.vercel.app/sessoes/:path*"
+    },
+    {
+      "source": "/api/web/:path*",
+      "destination": "https://dnd-scribe-web-next.vercel.app/api/web/:path*"
+    },
+    {
+      "source": "/api/library/:path*",
+      "destination": "https://dnd-scribe-web-next.vercel.app/api/library/:path*"
+    },
+    {
       "source": "/api/v1/health",
       "destination": "/api/summary-api-v1?summaryApiRoute=health"
     },
