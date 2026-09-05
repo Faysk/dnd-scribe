@@ -18,10 +18,6 @@ export const metadata: Metadata = {
 // a API legada durante o build e não prende novas memórias ao ciclo de deploy do frontend.
 export const dynamic = 'force-dynamic'
 
-function ordered<T extends { sessionDate: string; updatedAt: string }>(sessions: readonly T[]) {
-  return [...sessions].sort((a, b) => (b.sessionDate || b.updatedAt).localeCompare(a.sessionDate || a.updatedAt))
-}
-
 function SetupState() {
   return (
     <div className="mx-auto w-[min(900px,calc(100%-2.5rem))] py-16 sm:py-24">
@@ -81,7 +77,7 @@ export default async function SessionsArchivePage() {
 
   try {
     const payload = await fetchPublicSessions()
-    sessions = ordered(payload.sessions)
+    sessions = payload.sessions
   } catch (error) {
     console.error('[web-next] Falha ao consultar o arquivo público de sessões.', error)
     loadFailed = true
