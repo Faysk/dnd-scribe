@@ -1,4 +1,5 @@
 import { getLegacyOrigin } from '@/lib/config'
+import { readBoundedResponseJson } from '@/lib/http'
 
 export class LegacyApiError extends Error {
   readonly status: number
@@ -17,6 +18,7 @@ type LegacyFetchOptions = Readonly<{
 }>
 
 const LEGACY_TIMEOUT_MS = 12_000
+const LEGACY_JSON_MAX_BYTES = 4 * 1024 * 1024
 const ALLOWED_LEGACY_PATHS = new Set([
   '/api/library-sessions',
   '/api/library-summary',
@@ -88,7 +90,12 @@ export async function fetchLegacyJson(
   query: Readonly<Record<string, QueryValue>> = {},
 ): Promise<unknown> {
   const response = await fetchLegacyResponse(pathname, accessToken, query)
-  const payload: unknown = await response.json().catch(() => null)
-  if (payload === null) throw new LegacyApiError('API legada retornou uma resposta vazia.', 502)
-  return payload
+  try {
+    const payload = await readBoundedResponseJson(response, LEGACY_JSON_MAX_BYTES)
+    if (payload === null) throw new LegacyApiError('API legada retornou uma resposta vazia.', 502)
+    return payload
+  } catch (error) {
+    if (error instanceof LegacyApiError) throw error
+    throw new LegacyApiError('API legada retornou JSON inválido ou excessivo.', 502)
+  }
 }

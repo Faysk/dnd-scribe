@@ -25,7 +25,19 @@ describe('session summary contract', () => {
     expect(payload.session.heroImageUrl).toBe('')
   })
 
-  it('rejeita payload sem sessão', () => {
+  it('rejeita payload sem sessão ou envelope de sucesso', () => {
     expect(() => parseSessionSummaryPayload({ ok: true })).toThrow(/resumo/i)
+    expect(() => parseSessionSummaryPayload({ ok: false, session: {} })).toThrow(/inválida/i)
+  })
+
+  it('rejeita resumo completo além do limite legado publicado', () => {
+    expect(() => parseSessionSummaryPayload({
+      ok: true,
+      session: {
+        sourceSessionId: 'sessao-42',
+        title: 'A memória',
+        summaryFull: 'x'.repeat(125_001),
+      },
+    })).toThrow(/summaryFull/i)
   })
 })

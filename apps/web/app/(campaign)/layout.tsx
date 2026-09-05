@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { AuthError } from '@/components/auth/auth-error'
 import { PendingAccess } from '@/components/auth/pending-access'
 import { CampaignShell } from '@/components/shell/campaign-shell'
-import { readPublicSupabaseConfig } from '@/lib/config'
+import { canRenderUnconfiguredPreview, readPublicSupabaseConfig } from '@/lib/config'
 import { resolveAuthState, type AuthState } from '@/lib/auth/state'
 
 type CampaignLayoutProps = Readonly<{
@@ -17,15 +17,26 @@ function ContentBoundary({ children }: Readonly<{ children: ReactNode }>) {
 
 export default async function CampaignLayout({ children }: CampaignLayoutProps) {
   if (!readPublicSupabaseConfig()) {
-    return <ContentBoundary>{children}</ContentBoundary>
+    if (canRenderUnconfiguredPreview()) {
+      return <ContentBoundary>{children}</ContentBoundary>
+    }
+    return (
+      <ContentBoundary>
+        <AuthError message="O DnD Scribe está temporariamente indisponível. A configuração de acesso precisa ser revisada." />
+      </ContentBoundary>
+    )
   }
 
   let state: AuthState
   try {
     state = await resolveAuthState()
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha inesperada ao validar o acesso.'
-    return <ContentBoundary><AuthError message={message} /></ContentBoundary>
+    console.error('[web-next] Falha ao validar acesso da campanha.', error)
+    return (
+      <ContentBoundary>
+        <AuthError message="Não foi possível validar seu acesso agora. Tente novamente em instantes." />
+      </ContentBoundary>
+    )
   }
 
   if (state.kind === 'anonymous') redirect('/login')

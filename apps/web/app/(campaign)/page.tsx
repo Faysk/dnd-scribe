@@ -42,13 +42,13 @@ function TechnicalPreview() {
   )
 }
 
-function DataError({ message }: Readonly<{ message: string }>) {
+function DataError() {
   return (
     <div className="mx-auto w-[min(900px,calc(100%-2.5rem))] py-16 sm:py-24">
       <Surface className="p-7 sm:p-10" tone="elevated">
         <Eyebrow>Arquivo temporariamente indisponível</Eyebrow>
         <SectionTitle className="mt-4">As memórias continuam guardadas.</SectionTitle>
-        <BodyCopy className="mt-4 max-w-2xl">Não foi possível carregar o catálogo agora. {message}</BodyCopy>
+        <BodyCopy className="mt-4 max-w-2xl">Não foi possível carregar o catálogo agora. Tente novamente em instantes.</BodyCopy>
         <div className="mt-7"><ActionLink href="/" variant="secondary">Tentar novamente</ActionLink></div>
       </Surface>
     </div>
@@ -102,15 +102,16 @@ export default async function CampaignHomePage() {
 
   const accessToken = await readAuthenticatedAccessToken()
   let sessions: readonly LibrarySession[] = []
-  let loadError = ''
+  let loadFailed = false
 
   try {
     const payload = await fetchLibrarySessions(accessToken)
     sessions = ordered(payload.sessions)
   } catch (error) {
-    loadError = error instanceof Error ? error.message : 'Falha inesperada ao consultar a biblioteca.'
+    console.error('[web-next] Falha ao consultar a biblioteca da Home.', error)
+    loadFailed = true
   }
 
-  if (loadError) return <DataError message={loadError} />
+  if (loadFailed) return <DataError />
   return <CampaignHome sessions={sessions} />
 }

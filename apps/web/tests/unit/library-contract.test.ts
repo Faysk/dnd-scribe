@@ -36,8 +36,15 @@ describe('parseLibrarySessionsPayload', () => {
   })
 
   it('rejeita sessões sem identificador estável', () => {
-    expect(() => parseLibrarySessionsPayload({ sessions: [{ title: 'Sem id' }] })).toThrow(
-      /identificador/i,
-    )
+    expect(() => parseLibrarySessionsPayload({
+      ok: true,
+      campaignSlug: 'yuhara-main',
+      sessions: [{ title: 'Sem id' }],
+    })).toThrow(/identificador/i)
+  })
+
+  it('rejeita envelopes sem sucesso ou campanha', () => {
+    expect(() => parseLibrarySessionsPayload({ ok: false, campaignSlug: 'yuhara-main', sessions: [] })).toThrow(/inválida/i)
+    expect(() => parseLibrarySessionsPayload({ ok: true, sessions: [] })).toThrow(/campanha/i)
   })
 })

@@ -4,7 +4,10 @@ import { TRANSCRIPT_SOURCE_SESSION_ID_MAX_LENGTH } from '@/lib/api/contracts/tra
 import { fetchLegacyResponse, LegacyApiError } from '@/lib/api/legacy'
 import { readAuthenticatedAccessToken } from '@/lib/auth/access-token'
 import { CAMPAIGN_SLUG } from '@/lib/config'
+import { readBoundedResponseText } from '@/lib/http'
 import { boundedText } from '@/lib/security'
+
+const DOWNLOAD_MAX_BYTES = 16 * 1024 * 1024
 
 function fallbackFilename(sourceSessionId: string) {
   const slug = sourceSessionId
@@ -34,17 +37,14 @@ export async function GET(request: NextRequest) {
       { campaignSlug: CAMPAIGN_SLUG, sourceSessionId },
       { accept: 'text/markdown,text/plain;q=0.9,*/*;q=0.1' },
     )
-    const content = await upstream.text()
-    const disposition = String(upstream.headers.get('content-disposition') || '')
-      .replace(/[\r\n]/g, '')
-      .slice(0, 500)
+    const content = await readBoundedResponseText(upstream, DOWNLOAD_MAX_BYTES)
 
     return new Response(content, {
       status: 200,
       headers: {
         'Cache-Control': 'private, no-store',
         'Content-Type': 'text/markdown; charset=utf-8',
-        'Content-Disposition': disposition || fallbackFilename(sourceSessionId),
+        'Content-Disposition': fallbackFilename(sourceSessionId),
         'X-Content-Type-Options': 'nosniff',
       },
     })

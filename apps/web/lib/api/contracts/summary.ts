@@ -1,5 +1,7 @@
 import { normalizeArtworkUrl } from '../../artwork'
 
+const SUMMARY_FULL_MAX_LENGTH = 125_000
+
 export type SessionSummary = Readonly<{
   sourceSessionId: string
   title: string
@@ -14,7 +16,7 @@ export type SessionSummary = Readonly<{
 }>
 
 export type SessionSummaryPayload = Readonly<{
-  ok: boolean
+  ok: true
   session: SessionSummary
 }>
 
@@ -28,29 +30,35 @@ function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function bounded(value: unknown, maxLength: number, field: string) {
+  const normalized = text(value)
+  if (normalized.length > maxLength) throw new Error(`Resposta do resumo excede o limite de ${field}.`)
+  return normalized
+}
+
 export function parseSessionSummaryPayload(value: unknown): SessionSummaryPayload {
   const payload = record(value)
   const item = record(payload?.session)
-  if (!payload || !item) throw new Error('Resposta inválida do resumo da sessão.')
+  if (!payload || payload.ok !== true || !item) throw new Error('Resposta inválida do resumo da sessão.')
 
-  const sourceSessionId = text(item.sourceSessionId)
-  const title = text(item.title)
-  const summaryFull = text(item.summaryFull)
+  const sourceSessionId = bounded(item.sourceSessionId, 220, 'identificador')
+  const title = bounded(item.title, 500, 'título')
+  const summaryFull = bounded(item.summaryFull, SUMMARY_FULL_MAX_LENGTH, 'summaryFull')
   if (!sourceSessionId || !title) throw new Error('Resumo sem identificador ou título da sessão.')
 
   return {
-    ok: payload.ok !== false,
+    ok: true,
     session: {
       sourceSessionId,
       title,
-      sessionDate: text(item.sessionDate),
-      arc: text(item.arc),
-      summary: text(item.summary),
+      sessionDate: bounded(item.sessionDate, 80, 'data'),
+      arc: bounded(item.arc, 300, 'arco'),
+      summary: bounded(item.summary, 20_000, 'resumo'),
       summaryFull,
       hasSummary: item.hasSummary === true || Boolean(summaryFull),
       coverImageUrl: normalizeArtworkUrl(item.coverImageUrl),
       heroImageUrl: normalizeArtworkUrl(item.heroImageUrl),
-      updatedAt: text(item.updatedAt),
+      updatedAt: bounded(item.updatedAt, 80, 'updatedAt'),
     },
   }
 }

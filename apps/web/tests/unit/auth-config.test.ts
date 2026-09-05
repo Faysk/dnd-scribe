@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseLegacyOrigin, readPublicSupabaseConfig } from '../../lib/config'
+import { canRenderUnconfiguredPreview, parseLegacyOrigin, readPublicSupabaseConfig } from '../../lib/config'
 
 describe('auth configuration', () => {
   it('rejects the movable public domain as BFF upstream', () => {
@@ -11,7 +11,33 @@ describe('auth configuration', () => {
     expect(parseLegacyOrigin('https://legacy.example.com')).toBe('https://legacy.example.com')
   })
 
-  it('returns null when public Supabase settings are incomplete', () => {
+  it('returns null when public Supabase settings are incomplete or malformed', () => {
     expect(readPublicSupabaseConfig('', '')).toBeNull()
+    expect(readPublicSupabaseConfig('ftp://localhost:54321', 'key')).toBeNull()
+    expect(readPublicSupabaseConfig('https://project.supabase.co/path', 'key')).toBeNull()
+    expect(readPublicSupabaseConfig('https://project.supabase.co/?debug=1', 'key')).toBeNull()
+    expect(readPublicSupabaseConfig('https://user:pass@project.supabase.co', 'key')).toBeNull()
+    expect(readPublicSupabaseConfig('https://project.supabase.co', '   ')).toBeNull()
+  })
+
+  it('accepts HTTPS and local HTTP Supabase origins only', () => {
+    expect(readPublicSupabaseConfig('https://project.supabase.co/', ' publishable-key ')).toEqual({
+      url: 'https://project.supabase.co',
+      publishableKey: 'publishable-key',
+    })
+    expect(readPublicSupabaseConfig('http://localhost:54321', 'key')).toEqual({
+      url: 'http://localhost:54321',
+      publishableKey: 'key',
+    })
+    expect(readPublicSupabaseConfig('http://[::1]:54321', 'key')).toEqual({
+      url: 'http://[::1]:54321',
+      publishableKey: 'key',
+    })
+  })
+
+  it('allows unconfigured technical preview only outside production', () => {
+    expect(canRenderUnconfiguredPreview('development')).toBe(true)
+    expect(canRenderUnconfiguredPreview('test')).toBe(true)
+    expect(canRenderUnconfiguredPreview('production')).toBe(false)
   })
 })

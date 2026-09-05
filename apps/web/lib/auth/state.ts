@@ -22,22 +22,30 @@ export type AuthState =
       access: CampaignAccessPayload
     }>
 
+const ID_MAX_LENGTH = 220
+const EMAIL_MAX_LENGTH = 320
+const DISPLAY_NAME_MAX_LENGTH = 200
+const AVATAR_URL_MAX_LENGTH = 2_048
+
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as JsonRecord)
     : null
 }
 
-function text(record: JsonRecord | null, key: string) {
+function text(record: JsonRecord | null, key: string, maxLength = DISPLAY_NAME_MAX_LENGTH) {
   const value = record?.[key]
-  return typeof value === 'string' ? value.trim() : ''
+  if (typeof value !== 'string') return ''
+  const normalized = value.trim()
+  return normalized.length <= maxLength ? normalized : ''
 }
 
 function safeHttpsUrl(value: string) {
-  if (!value) return ''
+  if (!value || value.length > AVATAR_URL_MAX_LENGTH) return ''
   try {
     const parsed = new URL(value)
-    return parsed.protocol === 'https:' ? parsed.toString() : ''
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return ''
+    return parsed.toString()
   } catch {
     return ''
   }
@@ -52,7 +60,7 @@ export function buildAuthIdentity(
   const apiUser = access?.user ?? null
   const profile = access?.profile ?? null
 
-  const email = text(apiUser, 'email') || text(claims, 'email')
+  const email = text(apiUser, 'email', EMAIL_MAX_LENGTH) || text(claims, 'email', EMAIL_MAX_LENGTH)
   const displayName =
     text(profile, 'displayName') ||
     text(apiUser, 'displayName') ||
@@ -62,14 +70,14 @@ export function buildAuthIdentity(
     email ||
     'Membro da mesa'
   const avatarUrl = safeHttpsUrl(
-    text(profile, 'avatarUrl') ||
-      text(apiUser, 'avatarUrl') ||
-      text(metadata, 'avatar_url') ||
-      text(metadata, 'picture'),
+    text(profile, 'avatarUrl', AVATAR_URL_MAX_LENGTH) ||
+      text(apiUser, 'avatarUrl', AVATAR_URL_MAX_LENGTH) ||
+      text(metadata, 'avatar_url', AVATAR_URL_MAX_LENGTH) ||
+      text(metadata, 'picture', AVATAR_URL_MAX_LENGTH),
   )
 
   return {
-    id: text(apiUser, 'id') || text(claims, 'sub'),
+    id: text(apiUser, 'id', ID_MAX_LENGTH) || text(claims, 'sub', ID_MAX_LENGTH),
     email,
     displayName,
     avatarUrl,
@@ -77,7 +85,8 @@ export function buildAuthIdentity(
 }
 
 export function campaignRoleLabel(role: unknown) {
-  if (typeof role === 'string' && role.trim()) return role.trim()
+  if (role === 'master') return 'Mestre'
+  if (role === 'player') return 'Jogador'
   const record = asRecord(role)
   return text(record, 'label') || text(record, 'name') || text(record, 'role') || 'Membro da campanha'
 }

@@ -2,9 +2,12 @@ import type { NextConfig } from 'next'
 
 import { buildLegacyFallbackRewrites } from './lib/gateway'
 
+const basePermissionsPolicy = 'camera=(), geolocation=(), microphone=(), payment=(), usb=()'
+const localNetworkPermissionsPolicy = `${basePermissionsPolicy}, local-network=(self), loopback-network=(self)`
+
 const securityHeaders = [
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
-  { key: 'Permissions-Policy', value: 'camera=(), geolocation=(), microphone=(), payment=(), usb=()' },
+  { key: 'Permissions-Policy', value: basePermissionsPolicy },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-DNS-Prefetch-Control', value: 'off' },
@@ -13,7 +16,7 @@ const securityHeaders = [
 ]
 
 const localNetworkHeaders = [
-  { key: 'Permissions-Policy', value: 'local-network=(self), loopback-network=(self)' },
+  { key: 'Permissions-Policy', value: localNetworkPermissionsPolicy },
 ]
 
 if (process.env.NODE_ENV === 'production') {

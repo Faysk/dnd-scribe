@@ -32,23 +32,29 @@ type SessionPageData = Readonly<{
 type LoadResult =
   | Readonly<{ kind: 'data'; data: SessionPageData }>
   | Readonly<{ kind: 'notFound' }>
-  | Readonly<{ kind: 'error'; message: string }>
+  | Readonly<{ kind: 'error' }>
 
 async function loadSessionPage(sourceSessionId: string, accessToken: string): Promise<LoadResult> {
-  try {
-    const library = await fetchLibrarySessions(accessToken)
-    const session = library.sessions.find((item) => item.sourceSessionId === sourceSessionId)
-    if (!session) return { kind: 'notFound' }
-    if (!session.hasSummary) return { kind: 'data', data: { session, summary: null } }
+  const [libraryResult, summaryResult] = await Promise.allSettled([
+    fetchLibrarySessions(accessToken),
+    fetchSessionSummary(accessToken, sourceSessionId),
+  ])
 
-    const summary = await fetchSessionSummary(accessToken, sourceSessionId)
-    return { kind: 'data', data: { session, summary: summary.session } }
-  } catch (error) {
-    return {
-      kind: 'error',
-      message: error instanceof Error ? error.message : 'Falha inesperada ao carregar a sessão.',
-    }
+  if (libraryResult.status === 'rejected') {
+    console.error('[web-next] Falha ao carregar o catálogo para a sessão.', libraryResult.reason)
+    return { kind: 'error' }
   }
+
+  const session = libraryResult.value.sessions.find((item) => item.sourceSessionId === sourceSessionId)
+  if (!session) return { kind: 'notFound' }
+  if (!session.hasSummary) return { kind: 'data', data: { session, summary: null } }
+
+  if (summaryResult.status === 'rejected') {
+    console.error('[web-next] Falha ao carregar o resumo completo da sessão.', summaryResult.reason)
+    return { kind: 'error' }
+  }
+
+  return { kind: 'data', data: { session, summary: summaryResult.value.session } }
 }
 
 function SetupState() {
@@ -64,13 +70,13 @@ function SetupState() {
   )
 }
 
-function SessionError({ message }: Readonly<{ message: string }>) {
+function SessionError() {
   return (
     <div className="mx-auto w-[min(900px,calc(100%-2.5rem))] py-16 sm:py-24">
       <Surface className="p-8 sm:p-10" tone="elevated">
         <Eyebrow>Memória indisponível</Eyebrow>
         <SectionTitle className="mt-4">Não foi possível abrir esta sessão.</SectionTitle>
-        <BodyCopy className="mt-4 max-w-2xl">{message}</BodyCopy>
+        <BodyCopy className="mt-4 max-w-2xl">O arquivo não respondeu como esperado. Tente novamente em instantes.</BodyCopy>
         <div className="mt-7 flex flex-wrap gap-3">
           <ActionLink href="/sessoes" variant="secondary">Voltar ao arquivo</ActionLink>
         </div>
@@ -162,6 +168,6 @@ export default async function SessionSummaryPage({ params }: SessionPageProps) {
   const result = await loadSessionPage(sourceSessionId, accessToken)
 
   if (result.kind === 'notFound') notFound()
-  if (result.kind === 'error') return <SessionError message={result.message} />
+  if (result.kind === 'error') return <SessionError />
   return <SessionMemory data={result.data} />
 }

@@ -24,4 +24,17 @@ describe('security helpers', () => {
     expect(isSameOriginMutation(crossOrigin)).toBe(false)
     expect(isSameOriginMutation(missingOrigin)).toBe(false)
   })
+
+  it('does not trust spoofed forwarding headers as an allowed origin', () => {
+    const spoofed = new Request('https://scribe.example/auth/logout', {
+      method: 'POST',
+      headers: {
+        origin: 'https://evil.example',
+        'x-forwarded-host': 'evil.example',
+        'x-forwarded-proto': 'https',
+      },
+    })
+
+    expect(isSameOriginMutation(spoofed)).toBe(false)
+  })
 })
