@@ -14,6 +14,6 @@ test('hash legado da sessão abre a transcrição secundária', async ({ page })
 
   await expect(page).toHaveURL(/\/sessoes\/sessao-42\/transcricao$/)
   await expect(
-    page.getByRole('heading', { name: 'A transcrição depende do ambiente autenticado.' }),
+    page.getByRole('heading', { name: 'O acesso às transcrições ainda não está configurado neste ambiente.' }),
   ).toBeVisible()
 })
