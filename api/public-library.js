@@ -44,8 +44,7 @@ function publicSession(row, includeFullSummary = false) {
     summary: cleanText(row.summary_short, MAX_PUBLIC_SUMMARY_SHORT),
     hasSummary: row.has_summary === true || Boolean(cleanText(row.summary_full, MAX_PUBLIC_SUMMARY_FULL)),
     coverImageUrl: cleanText(row.cover_image_url, MAX_PUBLIC_IMAGE_URL),
-    heroImageUrl: cleanText(row.hero_image_url, MAX_PUBLIC_IMAGE_URL),
-    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ''
+    heroImageUrl: cleanText(row.hero_image_url, MAX_PUBLIC_IMAGE_URL)
   };
   if (includeFullSummary) session.summaryFull = cleanText(row.summary_full, MAX_PUBLIC_SUMMARY_FULL);
   return session;
@@ -84,8 +83,7 @@ select s.source_session_id, s.title, s.session_date, s.arc,
        left(s.summary_short, $3) summary_short,
        left(s.summary_full, $4 + 1) summary_full,
        coalesce(left(s.metadata->>'coverImageUrl', $5 + 1), '') cover_image_url,
-       coalesce(left(s.metadata->>'heroImageUrl', $5 + 1), '') hero_image_url,
-       s.updated_at
+       coalesce(left(s.metadata->>'heroImageUrl', $5 + 1), '') hero_image_url
 from sessions s
 join campaigns c on c.id = s.campaign_id
 where c.slug = $1
@@ -113,8 +111,7 @@ select s.source_session_id, s.title, s.session_date, s.arc,
        left(s.summary_short, $2 + 1) summary_short,
        nullif(trim(s.summary_full), '') is not null has_summary,
        coalesce(left(s.metadata->>'coverImageUrl', $3 + 1), '') cover_image_url,
-       coalesce(left(s.metadata->>'heroImageUrl', $3 + 1), '') hero_image_url,
-       s.updated_at
+       coalesce(left(s.metadata->>'heroImageUrl', $3 + 1), '') hero_image_url
 from sessions s
 join campaigns c on c.id = s.campaign_id
 where c.slug = $1
