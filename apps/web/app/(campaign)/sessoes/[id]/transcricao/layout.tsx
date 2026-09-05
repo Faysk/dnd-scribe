@@ -6,7 +6,7 @@ import { PendingAccess } from '@/components/auth/pending-access'
 import { Surface } from '@/components/ui/surface'
 import { BodyCopy, Eyebrow, SectionTitle } from '@/components/ui/typography'
 import { readPublicSupabaseConfig } from '@/lib/config'
-import { resolveAuthState } from '@/lib/auth/state'
+import { resolveAuthState, type AuthState } from '@/lib/auth/state'
 
 type TranscriptLayoutProps = Readonly<{
   children: ReactNode
@@ -33,17 +33,19 @@ export default async function TranscriptLayout({ children, params }: TranscriptL
 
   if (!readPublicSupabaseConfig()) return <AuthSetupState />
 
+  let state: AuthState
   try {
-    const state = await resolveAuthState()
-    if (state.kind === 'anonymous') {
-      redirect(`/login?next=${encodeURIComponent(transcriptHref)}`)
-    }
-    if (state.kind === 'pendingAccess') {
-      return <PendingAccess identity={state.identity} returnHref={returnHref} />
-    }
-    return children
+    state = await resolveAuthState()
   } catch (error) {
     console.error('[web-next] Falha ao validar acesso à transcrição.', error)
     return <AuthError message="Não foi possível validar seu acesso à transcrição agora. Tente novamente em instantes." />
   }
+
+  if (state.kind === 'anonymous') {
+    redirect(`/login?next=${encodeURIComponent(transcriptHref)}`)
+  }
+  if (state.kind === 'pendingAccess') {
+    return <PendingAccess identity={state.identity} returnHref={returnHref} />
+  }
+  return children
 }
