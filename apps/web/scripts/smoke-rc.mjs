@@ -69,14 +69,43 @@ await check('/api/web/endpoint-que-nao-existe', async (response) => {
 })
 
 await check('/', async (response) => {
-  const location = response.headers.get('location') || ''
-  const redirectedToLogin = response.status >= 300
-    && response.status < 400
-    && new URL(location, `${baseUrl}/`).pathname === '/login'
+  const body = await response.text()
   const secureHeaders = response.headers.get('x-content-type-options') === 'nosniff'
     && response.headers.get('x-frame-options') === 'DENY'
-  const ok = redirectedToLogin && secureHeaders
-  return { ok, note: ok ? 'campanha fecha sem sessão e redireciona para login' : 'boundary anônimo/configuração inesperada' }
+  const ok = response.status === 200
+    && secureHeaders
+    && body.includes('Onde paramos?')
+    && body.includes('Os resumos são públicos')
+    && !body.includes('Modernização — Preview técnico')
+  return { ok, note: ok ? 'Home pública disponível sem sessão' : 'Home pública ausente, insegura ou em modo técnico' }
+})
+
+await check('/sessoes', async (response) => {
+  const body = await response.text()
+  const ok = response.status === 200
+    && body.includes('Arquivo cronológico')
+    && body.includes('sessões públicas')
+  return { ok, note: ok ? 'arquivo público disponível' : 'arquivo público não comprovado' }
+})
+
+const publicSessionId = 'rmDsxh640RR4'
+await check(`/sessoes/${publicSessionId}`, async (response) => {
+  const body = await response.text()
+  const ok = response.status === 200
+    && body.includes('O Olho que Devora a Floresta')
+    && body.includes('Memória pública')
+    && body.includes('Resumo público')
+  return { ok, note: ok ? 'resumo completo acessível anonimamente' : 'memória pública real não comprovada' }
+})
+
+await check(`/sessoes/${publicSessionId}/transcricao`, async (response) => {
+  const location = response.headers.get('location') || ''
+  const target = new URL(location, `${baseUrl}/`)
+  const ok = response.status >= 300
+    && response.status < 400
+    && target.pathname === '/login'
+    && target.searchParams.get('next') === `/sessoes/${publicSessionId}/transcricao`
+  return { ok, note: ok ? 'transcrição anônima exige login e preserva retorno' : 'boundary privado da transcrição falhou' }
 })
 
 await check('/login', async (response) => {
@@ -84,14 +113,21 @@ await check('/login', async (response) => {
   const ok = response.status === 200
     && body.includes('Entrar com Discord')
     && body.includes('Entrar com Google')
+    && body.includes('Os resumos da campanha são públicos')
     && !body.includes('Auth ainda não está configurado neste Preview')
-  return { ok, note: ok ? 'login configurado e acessível' : 'login ausente ou runtime ainda em modo técnico' }
+  return { ok, note: ok ? 'login configurado e posicionado como acesso interno' : 'login ausente ou runtime ainda em modo técnico' }
 })
 
 if (process.env.DND_RC_EXPECT_GATEWAY === '1') {
   await check('/api/auth-config', async (response) => {
     const ok = response.status >= 200 && response.status < 500 && response.status !== 404
     return { ok, note: ok ? 'fallback /api alcançável' : 'fallback /api não comprovado' }
+  })
+
+  await check('/assets/sessions/2026-07-25/card.webp', async (response) => {
+    const contentType = response.headers.get('content-type') || ''
+    const ok = response.status === 200 && contentType.startsWith('image/')
+    return { ok, note: ok ? 'arte histórica preservada pelo gateway estreito' : 'fallback de arte histórica falhou' }
   })
 
   for (const pathname of ['/terms', '/privacy', '/docs/api']) {
