@@ -19,12 +19,16 @@ export function readPublicSupabaseConfig(
   url = process.env.NEXT_PUBLIC_SUPABASE_URL,
   publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 ): PublicSupabaseConfig | null {
-  if (!url || !publishableKey) return null
+  const key = String(publishableKey || '').trim()
+  if (!url || !key || key.length > 4_096) return null
 
   try {
     const parsed = new URL(url)
-    if (parsed.protocol !== 'https:' && !isLocalHostname(parsed.hostname)) return null
-    return { url: parsed.origin, publishableKey }
+    const secureOrigin = parsed.protocol === 'https:'
+    const localDevelopmentOrigin = parsed.protocol === 'http:' && isLocalHostname(parsed.hostname)
+    if (!secureOrigin && !localDevelopmentOrigin) return null
+    if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/') return null
+    return { url: parsed.origin, publishableKey: key }
   } catch {
     return null
   }
@@ -44,7 +48,7 @@ export function parseLegacyOrigin(value: string | undefined) {
     throw new Error('DND_LEGACY_ORIGIN precisa usar HTTPS.')
   }
   if (parsed.hostname.toLowerCase() === PUBLIC_LEGACY_HOSTNAME) {
-    throw new Error('DND_LEGACY_ORIGIN não pode usar o domínio público móvel.')
+    throw new Error('DND_LEGACY_ORIGIN não pode usar o domínio público de produção.')
   }
   if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/') {
     throw new Error('DND_LEGACY_ORIGIN deve conter somente a origem HTTPS.')

@@ -15,17 +15,26 @@ describe('campaign access contract', () => {
     expect(payload.capabilities?.canOpenEdit).toBe(true)
     expect(payload.campaignRole).toBe('player')
     expect(hasCampaignRole(payload.campaignRole)).toBe(true)
+    expect(hasCampaignRole('master')).toBe(true)
   })
 
-  it('normalizes absent roles and rejects malformed role shapes', () => {
+  it('accepts only membership roles that exist in the campaign contract', () => {
     expect(parseCampaignAccessPayload({ campaignRole: null }).campaignRole).toBeNull()
     expect(parseCampaignAccessPayload({ campaignRole: '' }).campaignRole).toBeNull()
     expect(() => parseCampaignAccessPayload({ campaignRole: {} })).toThrow('campaignRole')
     expect(() => parseCampaignAccessPayload({ campaignRole: ['player'] })).toThrow('campaignRole')
+    expect(() => parseCampaignAccessPayload({ campaignRole: 'viewer' })).toThrow('campaignRole')
     expect(hasCampaignRole({ role: 'player' })).toBe(false)
+    expect(hasCampaignRole('viewer')).toBe(false)
   })
 
-  it('rejects invalid canOpenEdit types', () => {
+  it('rejects oversized profile fields and invalid canOpenEdit types', () => {
+    expect(() => parseCampaignAccessPayload({ profile: { displayName: 'x'.repeat(201) } })).toThrow(
+      'profile.displayName',
+    )
+    expect(() => parseCampaignAccessPayload({ profile: { avatarUrl: `https://example.com/${'x'.repeat(2_100)}` } })).toThrow(
+      'profile.avatarUrl',
+    )
     expect(() => parseCampaignAccessPayload({ capabilities: { canOpenEdit: 'yes' } })).toThrow(
       'capabilities.canOpenEdit',
     )

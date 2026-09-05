@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from 'next/link'
 
 import { campaignRoleLabel, type AuthIdentity } from '@/lib/auth/state'
@@ -22,9 +23,6 @@ type UserMenuProps = Readonly<{
 
 export function UserMenu({ access, identity }: UserMenuProps) {
   const editUrl = access.capabilities?.canOpenEdit ? getLegacyEditUrl() : null
-  const avatarStyle = identity.avatarUrl
-    ? { backgroundImage: `url(${JSON.stringify(identity.avatarUrl).slice(1, -1)})` }
-    : undefined
 
   return (
     <details className="group relative">
@@ -34,10 +32,17 @@ export function UserMenu({ access, identity }: UserMenuProps) {
       >
         <span
           aria-hidden="true"
-          className="grid size-8 place-items-center rounded-full border border-accent/40 bg-accent-muted bg-cover bg-center text-xs font-bold text-accent-strong"
-          style={avatarStyle}
+          className="grid size-8 place-items-center overflow-hidden rounded-full border border-accent/40 bg-accent-muted text-xs font-bold text-accent-strong"
         >
-          {identity.avatarUrl ? null : initials(identity.displayName)}
+          {identity.avatarUrl ? (
+            <img
+              alt=""
+              className="size-full object-cover"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              src={identity.avatarUrl}
+            />
+          ) : initials(identity.displayName)}
         </span>
         <span aria-hidden="true" className="text-xs transition-transform group-open:rotate-180">⌄</span>
       </summary>

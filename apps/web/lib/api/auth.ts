@@ -3,6 +3,7 @@ import {
   parseCampaignAccessPayload,
   type CampaignAccessPayload,
 } from '@/lib/api/contracts/auth'
+import { readBoundedResponseJson } from '@/lib/http'
 
 export class LegacyAuthError extends Error {
   readonly status: number
@@ -15,6 +16,7 @@ export class LegacyAuthError extends Error {
 }
 
 const AUTH_TIMEOUT_MS = 12_000
+const AUTH_JSON_MAX_BYTES = 256 * 1024
 
 function logAuthFailure(status: number, startedAt: number) {
   console.warn('[dnd-scribe:auth]', {
@@ -53,11 +55,16 @@ export async function fetchCampaignAccess(accessToken: string): Promise<Campaign
     )
   }
 
-  const payload: unknown = await response.json().catch(() => null)
   if (!response.ok) {
     logAuthFailure(response.status, startedAt)
     throw new LegacyAuthError(`API legada recusou o acesso (${response.status}).`, response.status)
   }
 
-  return parseCampaignAccessPayload(payload)
+  try {
+    const payload = await readBoundedResponseJson(response, AUTH_JSON_MAX_BYTES)
+    return parseCampaignAccessPayload(payload)
+  } catch {
+    logAuthFailure(502, startedAt)
+    throw new LegacyAuthError('API legada retornou um payload de autenticação inválido ou excessivo.', 502)
+  }
 }

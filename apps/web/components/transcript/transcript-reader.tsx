@@ -18,7 +18,13 @@ type TranscriptReaderProps = Readonly<{
 
 function dedupeSegments(current: readonly TranscriptSegment[], incoming: readonly TranscriptSegment[]) {
   const seen = new Set(current.map((segment) => segment.id))
-  return [...current, ...incoming.filter((segment) => !seen.has(segment.id))]
+  const result = [...current]
+  for (const segment of incoming) {
+    if (seen.has(segment.id)) continue
+    seen.add(segment.id)
+    result.push(segment)
+  }
+  return result
 }
 
 function isAbortError(value: unknown) {
@@ -70,10 +76,13 @@ export function TranscriptReader({ initial }: TranscriptReaderProps) {
       const raw: unknown = await response.json().catch(() => null)
       if (!response.ok) throw new Error('A consulta da transcrição falhou.')
       const payload = parseTranscriptPayload(raw)
+      if (payload.session.sourceSessionId !== initial.session.sourceSessionId) {
+        throw new Error('A consulta retornou dados de outra sessão.')
+      }
 
       if (activeRequestRef.current !== controller || controller.signal.aborted) return
-      setSegments((current) => replace ? payload.segments : dedupeSegments(current, payload.segments))
-      setSpeakers(payload.speakers)
+      setSegments((current) => replace ? dedupeSegments([], payload.segments) : dedupeSegments(current, payload.segments))
+      setSpeakers([...new Set(payload.speakers)])
       setTotal(payload.total)
       setNextCursor(payload.nextCursor)
     } catch (cause) {

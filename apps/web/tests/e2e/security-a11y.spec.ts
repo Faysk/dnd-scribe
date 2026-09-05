@@ -10,14 +10,20 @@ test('envia headers de segurança básicos em todas as páginas', async ({ reque
   expect(response.headers()['cross-origin-opener-policy']).toBe('same-origin-allow-popups')
 })
 
-test('preserva Permissions-Policy de rede local em Edit/Central Local', async ({ request }) => {
+test('preserva a política base ao liberar rede local em Edit/Central Local', async ({ request }) => {
   const edit = await request.get('/edit', { maxRedirects: 0 })
   const central = await request.get('/central-local', { maxRedirects: 0 })
 
-  expect(edit.headers()['permissions-policy']).toContain('local-network=(self)')
-  expect(edit.headers()['permissions-policy']).toContain('loopback-network=(self)')
-  expect(central.headers()['permissions-policy']).toContain('local-network=(self)')
-  expect(central.headers()['permissions-policy']).toContain('loopback-network=(self)')
+  for (const response of [edit, central]) {
+    const policy = response.headers()['permissions-policy']
+    expect(policy).toContain('camera=()')
+    expect(policy).toContain('geolocation=()')
+    expect(policy).toContain('microphone=()')
+    expect(policy).toContain('payment=()')
+    expect(policy).toContain('usb=()')
+    expect(policy).toContain('local-network=(self)')
+    expect(policy).toContain('loopback-network=(self)')
+  }
 })
 
 test('namespace /api/web permanece integralmente local no Next', async ({ request }) => {
