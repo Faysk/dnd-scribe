@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next'
 
+import { DEFAULT_LEGACY_ORIGIN } from './lib/config'
 import { buildLegacyFallbackRewrites } from './lib/gateway'
 
 const basePermissionsPolicy = 'camera=(), geolocation=(), microphone=(), payment=(), usb=()'
@@ -62,7 +63,9 @@ const nextConfig: NextConfig = {
       // Fallback roda somente depois das rotas locais do Next. Assim /api/web/*
       // e qualquer outro handler moderno continuam locais; o restante segue para
       // o projeto legado durante coexistência/cutover.
-      fallback: [...buildLegacyFallbackRewrites(process.env.DND_LEGACY_ORIGIN)],
+      fallback: [
+        ...buildLegacyFallbackRewrites(process.env.DND_LEGACY_ORIGIN || DEFAULT_LEGACY_ORIGIN),
+      ],
     }
   },
 }
