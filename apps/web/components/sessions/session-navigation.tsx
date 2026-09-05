@@ -28,7 +28,7 @@ export function SessionNavigation({ active, sourceSessionId }: SessionNavigation
         href={`/sessoes/${encoded}/transcricao`}
         prefetch={false}
       >
-        Transcrição
+        Transcrição <span className="text-[11px] font-normal text-foreground-muted">· membros</span>
       </Link>
     </nav>
   )
