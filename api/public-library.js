@@ -2,7 +2,10 @@ const { Pool } = require('pg');
 
 const DEFAULT_CAMPAIGN = 'yuhara-main';
 const MAX_SOURCE_SESSION_ID = 220;
-const MAX_PUBLIC_SESSIONS = 1000;
+const MAX_PUBLIC_SESSIONS = 500;
+const MAX_PUBLIC_SUMMARY_SHORT = 4000;
+const MAX_PUBLIC_SUMMARY_FULL = 1000000;
+const MAX_PUBLIC_IMAGE_URL = 2048;
 
 let pool;
 
@@ -38,13 +41,13 @@ function publicSession(row, includeFullSummary = false) {
     title: cleanText(row.title, 500),
     sessionDate: dateOnly(row.session_date),
     arc: cleanText(row.arc, 300),
-    summary: cleanText(row.summary_short, 20000),
-    hasSummary: Boolean(cleanText(row.summary_full, 1000000)),
-    coverImageUrl: cleanText(row.cover_image_url, 4096),
-    heroImageUrl: cleanText(row.hero_image_url, 4096),
+    summary: cleanText(row.summary_short, MAX_PUBLIC_SUMMARY_SHORT),
+    hasSummary: row.has_summary === true || Boolean(cleanText(row.summary_full, MAX_PUBLIC_SUMMARY_FULL)),
+    coverImageUrl: cleanText(row.cover_image_url, MAX_PUBLIC_IMAGE_URL),
+    heroImageUrl: cleanText(row.hero_image_url, MAX_PUBLIC_IMAGE_URL),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ''
   };
-  if (includeFullSummary) session.summaryFull = cleanText(row.summary_full, 1000000);
+  if (includeFullSummary) session.summaryFull = cleanText(row.summary_full, MAX_PUBLIC_SUMMARY_FULL);
   return session;
 }
 
@@ -78,9 +81,10 @@ module.exports = async function publicLibrary(req, res) {
       const result = await getPool().query(
         `
 select s.source_session_id, s.title, s.session_date, s.arc,
-       s.summary_short, s.summary_full,
-       coalesce(s.metadata->>'coverImageUrl', '') cover_image_url,
-       coalesce(s.metadata->>'heroImageUrl', '') hero_image_url,
+       left(s.summary_short, $3) summary_short,
+       left(s.summary_full, $4 + 1) summary_full,
+       coalesce(left(s.metadata->>'coverImageUrl', $5 + 1), '') cover_image_url,
+       coalesce(left(s.metadata->>'heroImageUrl', $5 + 1), '') hero_image_url,
        s.updated_at
 from sessions s
 join campaigns c on c.id = s.campaign_id
@@ -88,7 +92,7 @@ where c.slug = $1
   and s.source_session_id = $2
   and s.status = 'published'
 limit 1;`,
-        [campaignSlug, sourceSessionId]
+        [campaignSlug, sourceSessionId, MAX_PUBLIC_SUMMARY_SHORT + 1, MAX_PUBLIC_SUMMARY_FULL, MAX_PUBLIC_IMAGE_URL]
       );
 
       if (!result.rows.length) {
@@ -106,17 +110,18 @@ limit 1;`,
     const result = await getPool().query(
       `
 select s.source_session_id, s.title, s.session_date, s.arc,
-       s.summary_short, s.summary_full,
-       coalesce(s.metadata->>'coverImageUrl', '') cover_image_url,
-       coalesce(s.metadata->>'heroImageUrl', '') hero_image_url,
+       left(s.summary_short, $2 + 1) summary_short,
+       nullif(trim(s.summary_full), '') is not null has_summary,
+       coalesce(left(s.metadata->>'coverImageUrl', $3 + 1), '') cover_image_url,
+       coalesce(left(s.metadata->>'heroImageUrl', $3 + 1), '') hero_image_url,
        s.updated_at
 from sessions s
 join campaigns c on c.id = s.campaign_id
 where c.slug = $1
   and s.status = 'published'
 order by s.session_date desc nulls last, s.created_at desc
-limit $2;`,
-      [campaignSlug, MAX_PUBLIC_SESSIONS]
+limit $4;`,
+      [campaignSlug, MAX_PUBLIC_SUMMARY_SHORT, MAX_PUBLIC_IMAGE_URL, MAX_PUBLIC_SESSIONS]
     );
 
     return sendJson(
