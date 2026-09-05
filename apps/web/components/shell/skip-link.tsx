@@ -11,13 +11,13 @@ export function SkipLink() {
 
     event.preventDefault()
 
-    target.focus({ preventScroll: true })
-    target.scrollIntoView({ block: 'start' })
-
     const hash = `#${CONTENT_ID}`
     if (window.location.hash !== hash) {
       window.history.replaceState(window.history.state, '', hash)
     }
+
+    target.scrollIntoView({ block: 'start' })
+    target.focus({ preventScroll: true })
   }
 
   return (
