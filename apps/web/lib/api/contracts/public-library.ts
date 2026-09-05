@@ -11,7 +11,6 @@ export type PublicSession = Readonly<{
   hasSummary: boolean
   coverImageUrl: string
   heroImageUrl: string
-  updatedAt: string
 }>
 
 export type PublicSessionDetail = PublicSession & Readonly<{
@@ -63,7 +62,6 @@ function parsePublicSession(value: unknown): PublicSession {
     hasSummary: item.hasSummary === true,
     coverImageUrl: normalizeArtworkUrl(item.coverImageUrl),
     heroImageUrl: normalizeArtworkUrl(item.heroImageUrl),
-    updatedAt: bounded(item.updatedAt, 80, 'updatedAt'),
   }
 }
 
