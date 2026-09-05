@@ -8,53 +8,35 @@ import { ActionLink } from '@/components/ui/action'
 import { StatusPill } from '@/components/ui/status'
 import { Surface } from '@/components/ui/surface'
 import { BodyCopy, DisplayTitle, Eyebrow, MetaText, SectionTitle } from '@/components/ui/typography'
-import type { LibrarySession } from '@/lib/api/contracts/library'
-import type { SessionSummary } from '@/lib/api/contracts/summary'
-import { fetchLibrarySessions, fetchSessionSummary } from '@/lib/api/library'
-import { readAuthenticatedAccessToken } from '@/lib/auth/access-token'
-import { readPublicSupabaseConfig } from '@/lib/config'
-import { displaySessionTitle, formatCount, formatDuration, formatSessionDate } from '@/lib/formatters'
+import type { PublicSessionDetail } from '@/lib/api/contracts/public-library'
+import { LegacyApiError } from '@/lib/api/legacy'
+import { fetchPublicSession } from '@/lib/api/public-library'
+import { canRenderUnconfiguredPreview, hasConfiguredLegacyOrigin } from '@/lib/config'
+import { displaySessionTitle, formatSessionDate } from '@/lib/formatters'
 
 export const metadata: Metadata = {
   title: 'Sessão',
-  description: 'Resumo e memória publicada da sessão.',
+  description: 'Resumo público e memória publicada da sessão.',
 }
 
 type SessionPageProps = Readonly<{
   params: Promise<{ id: string }>
 }>
 
-type SessionPageData = Readonly<{
-  session: LibrarySession
-  summary: SessionSummary | null
-}>
-
 type LoadResult =
-  | Readonly<{ kind: 'data'; data: SessionPageData }>
+  | Readonly<{ kind: 'data'; session: PublicSessionDetail }>
   | Readonly<{ kind: 'notFound' }>
   | Readonly<{ kind: 'error' }>
 
-async function loadSessionPage(sourceSessionId: string, accessToken: string): Promise<LoadResult> {
-  const [libraryResult, summaryResult] = await Promise.allSettled([
-    fetchLibrarySessions(accessToken),
-    fetchSessionSummary(accessToken, sourceSessionId),
-  ])
-
-  if (libraryResult.status === 'rejected') {
-    console.error('[web-next] Falha ao carregar o catálogo para a sessão.', libraryResult.reason)
+async function loadSessionPage(sourceSessionId: string): Promise<LoadResult> {
+  try {
+    const payload = await fetchPublicSession(sourceSessionId)
+    return { kind: 'data', session: payload.session }
+  } catch (error) {
+    if (error instanceof LegacyApiError && error.status === 404) return { kind: 'notFound' }
+    console.error('[web-next] Falha ao carregar memória pública da sessão.', error)
     return { kind: 'error' }
   }
-
-  const session = libraryResult.value.sessions.find((item) => item.sourceSessionId === sourceSessionId)
-  if (!session) return { kind: 'notFound' }
-  if (!session.hasSummary) return { kind: 'data', data: { session, summary: null } }
-
-  if (summaryResult.status === 'rejected') {
-    console.error('[web-next] Falha ao carregar o resumo completo da sessão.', summaryResult.reason)
-    return { kind: 'error' }
-  }
-
-  return { kind: 'data', data: { session, summary: summaryResult.value.session } }
 }
 
 function SetupState() {
@@ -62,8 +44,8 @@ function SetupState() {
     <div className="mx-auto w-[min(900px,calc(100%-2.5rem))] py-16 sm:py-24">
       <Surface className="p-8 sm:p-10" tone="elevated">
         <Eyebrow>Preview técnico</Eyebrow>
-        <SectionTitle className="mt-4">O detalhe real depende do ambiente autenticado.</SectionTitle>
-        <BodyCopy className="mt-4 max-w-2xl">Configure os envs do Preview para abrir uma memória privada da campanha.</BodyCopy>
+        <SectionTitle className="mt-4">A memória pública aguarda a origem de dados do Preview.</SectionTitle>
+        <BodyCopy className="mt-4 max-w-2xl">Configure a origem legada estável para abrir os resumos publicados.</BodyCopy>
         <div className="mt-7"><ActionLink href="/sessoes" variant="tertiary">Voltar às sessões</ActionLink></div>
       </Surface>
     </div>
@@ -76,7 +58,7 @@ function SessionError() {
       <Surface className="p-8 sm:p-10" tone="elevated">
         <Eyebrow>Memória indisponível</Eyebrow>
         <SectionTitle className="mt-4">Não foi possível abrir esta sessão.</SectionTitle>
-        <BodyCopy className="mt-4 max-w-2xl">O arquivo não respondeu como esperado. Tente novamente em instantes.</BodyCopy>
+        <BodyCopy className="mt-4 max-w-2xl">O arquivo público não respondeu como esperado. Tente novamente em instantes.</BodyCopy>
         <div className="mt-7 flex flex-wrap gap-3">
           <ActionLink href="/sessoes" variant="secondary">Voltar ao arquivo</ActionLink>
         </div>
@@ -85,9 +67,9 @@ function SessionError() {
   )
 }
 
-function SessionHero({ session, summary }: SessionPageData) {
-  const title = displaySessionTitle(summary?.title || session.title, summary?.sessionDate || session.sessionDate)
-  const art = summary?.heroImageUrl || session.heroImageUrl || summary?.coverImageUrl || session.coverImageUrl
+function SessionHero({ session }: Readonly<{ session: PublicSessionDetail }>) {
+  const title = displaySessionTitle(session.title, session.sessionDate)
+  const art = session.heroImageUrl || session.coverImageUrl
 
   return (
     <header>
@@ -112,42 +94,38 @@ function SessionHero({ session, summary }: SessionPageData) {
 
       <div className="mx-auto max-w-4xl py-8 sm:py-10">
         <div className="flex flex-wrap items-center gap-3">
-          <Eyebrow>Memória da sessão</Eyebrow>
-          {(summary?.arc || session.arc) ? <StatusPill tone="accent">{summary?.arc || session.arc}</StatusPill> : null}
+          <Eyebrow>Memória pública</Eyebrow>
+          {session.arc ? <StatusPill tone="accent">{session.arc}</StatusPill> : null}
         </div>
         <DisplayTitle className="mt-4">{title}</DisplayTitle>
         <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2">
-          <MetaText>{formatSessionDate(summary?.sessionDate || session.sessionDate)}</MetaText>
-          <MetaText>{formatDuration(session.durationMs)}</MetaText>
-          <MetaText>{formatCount(session.segments)} falas</MetaText>
-          <MetaText>{formatCount(session.participants)} participantes</MetaText>
+          <MetaText>{formatSessionDate(session.sessionDate)}</MetaText>
+          <MetaText>Resumo público</MetaText>
         </div>
-        {(summary?.summary || session.summary) ? (
-          <BodyCopy className="mt-6 max-w-3xl">{summary?.summary || session.summary}</BodyCopy>
-        ) : null}
+        {session.summary ? <BodyCopy className="mt-6 max-w-3xl">{session.summary}</BodyCopy> : null}
       </div>
     </header>
   )
 }
 
-function SessionMemory({ data }: Readonly<{ data: SessionPageData }>) {
+function SessionMemory({ session }: Readonly<{ session: PublicSessionDetail }>) {
   return (
     <div className="mx-auto w-[min(1180px,calc(100%-2.5rem))] py-8 sm:py-12">
-      <SessionHero session={data.session} summary={data.summary} />
+      <SessionHero session={session} />
 
       <div className="mx-auto max-w-4xl">
-        <SessionNavigation active="summary" sourceSessionId={data.session.sourceSessionId} />
+        <SessionNavigation active="summary" sourceSessionId={session.sourceSessionId} />
 
         <article className="mx-auto max-w-[760px] pb-20 pt-8 sm:pt-10">
-          {data.summary?.summaryFull ? (
-            <MarkdownContent markdown={data.summary.summaryFull} />
+          {session.summaryFull ? (
+            <MarkdownContent markdown={session.summaryFull} />
           ) : (
             <Surface className="p-6 sm:p-8" tone="subtle">
               <Eyebrow>Resumo em preparação</Eyebrow>
               <SectionTitle className="mt-3">A memória completa ainda não foi publicada.</SectionTitle>
-              <BodyCopy className="mt-4">A sessão já existe no arquivo e a transcrição continua disponível; o recap completo entra aqui assim que for aprovado.</BodyCopy>
+              <BodyCopy className="mt-4">A sessão já existe no arquivo. A transcrição permanece reservada aos membros da campanha enquanto o recap completo é preparado.</BodyCopy>
               <div className="mt-6">
-                <ActionLink href={`/sessoes/${encodeURIComponent(data.session.sourceSessionId)}/transcricao`} variant="secondary">Abrir transcrição</ActionLink>
+                <ActionLink href={`/sessoes/${encodeURIComponent(session.sourceSessionId)}/transcricao`} variant="secondary">Acessar área da mesa</ActionLink>
               </div>
             </Surface>
           )}
@@ -158,16 +136,15 @@ function SessionMemory({ data }: Readonly<{ data: SessionPageData }>) {
 }
 
 export default async function SessionSummaryPage({ params }: SessionPageProps) {
-  if (!readPublicSupabaseConfig()) return <SetupState />
+  if (!hasConfiguredLegacyOrigin() && canRenderUnconfiguredPreview()) return <SetupState />
 
   const { id } = await params
   const sourceSessionId = String(id || '').trim()
   if (!sourceSessionId || sourceSessionId.length > 220) notFound()
 
-  const accessToken = await readAuthenticatedAccessToken()
-  const result = await loadSessionPage(sourceSessionId, accessToken)
+  const result = await loadSessionPage(sourceSessionId)
 
   if (result.kind === 'notFound') notFound()
   if (result.kind === 'error') return <SessionError />
-  return <SessionMemory data={result.data} />
+  return <SessionMemory session={result.session} />
 }
