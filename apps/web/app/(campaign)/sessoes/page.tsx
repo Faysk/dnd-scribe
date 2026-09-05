@@ -14,6 +14,10 @@ export const metadata: Metadata = {
   description: 'Arquivo público e cronológico das memórias da campanha.',
 }
 
+// O catálogo é uma visão viva das sessões publicadas. Mantê-lo dinâmico evita consultar
+// a API legada durante o build e não prende novas memórias ao ciclo de deploy do frontend.
+export const dynamic = 'force-dynamic'
+
 function ordered<T extends { sessionDate: string; updatedAt: string }>(sessions: readonly T[]) {
   return [...sessions].sort((a, b) => (b.sessionDate || b.updatedAt).localeCompare(a.sessionDate || a.updatedAt))
 }
