@@ -35,8 +35,8 @@ describe('contrato da memória pública', () => {
       hasSummary: true,
       coverImageUrl: 'https://dnd.faysk.dev/assets/sessions/cover.webp',
       heroImageUrl: 'https://dnd.faysk.dev/assets/sessions/hero.webp',
-      updatedAt: '2026-09-02T10:00:00Z',
     })
+    expect(payload.sessions[0]).not.toHaveProperty('updatedAt')
     expect(payload.sessions[0]).not.toHaveProperty('segments')
     expect(payload.sessions[0]).not.toHaveProperty('participants')
     expect(payload.sessions[0]).not.toHaveProperty('durationMs')
@@ -61,6 +61,7 @@ describe('contrato da memória pública', () => {
     })
 
     expect(payload.session.summaryFull).toContain('Memória')
+    expect(payload.session).not.toHaveProperty('updatedAt')
   })
 
   it('rejeita envelopes, ids e resumos fora do contrato', () => {
