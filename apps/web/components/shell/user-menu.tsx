@@ -18,11 +18,12 @@ function initials(name: string) {
 
 type UserMenuProps = Readonly<{
   identity: AuthIdentity
-  access: CampaignAccessPayload
+  access?: CampaignAccessPayload | null
 }>
 
-export function UserMenu({ access, identity }: UserMenuProps) {
-  const editUrl = access.capabilities?.canOpenEdit ? getLegacyEditUrl() : null
+export function UserMenu({ access = null, identity }: UserMenuProps) {
+  const editUrl = access?.capabilities?.canOpenEdit ? getLegacyEditUrl() : null
+  const accessLabel = access ? campaignRoleLabel(access.campaignRole) : 'Acesso interno pendente'
 
   return (
     <details className="group relative">
@@ -50,7 +51,7 @@ export function UserMenu({ access, identity }: UserMenuProps) {
       <div className="absolute right-0 z-30 mt-2 grid min-w-56 rounded-md border border-border bg-surface-elevated p-2 shadow-elevated">
         <div className="border-b border-border-subtle px-3 py-2">
           <strong className="block max-w-48 truncate text-sm text-foreground">{identity.displayName}</strong>
-          <span className="mt-1 block text-[11px] text-foreground-muted">{campaignRoleLabel(access.campaignRole)}</span>
+          <span className="mt-1 block text-[11px] text-foreground-muted">{accessLabel}</span>
         </div>
         <Link className="mt-1 rounded-sm px-3 py-2 text-sm text-foreground-soft no-underline hover:bg-surface hover:text-foreground" href="/">Início</Link>
         <Link className="rounded-sm px-3 py-2 text-sm text-foreground-soft no-underline hover:bg-surface hover:text-foreground" href="/sessoes">Sessões</Link>
