@@ -67,14 +67,36 @@ describe('contrato da memória pública', () => {
   it('rejeita envelopes, ids e resumos fora do contrato', () => {
     expect(() => parsePublicSessionsPayload({ ok: false, campaignSlug: 'yuhara-main', sessions: [] })).toThrow(/inválida/i)
     expect(() => parsePublicSessionsPayload({ ok: true, campaignSlug: 'yuhara-main', sessions: [{ title: 'Sem id' }] })).toThrow(/identificador/i)
+    expect(() => parsePublicSessionsPayload({
+      ok: true,
+      campaignSlug: 'yuhara-main',
+      sessions: [{
+        sourceSessionId: 'sessao-1',
+        title: 'A ponte',
+        summary: 'x'.repeat(4_001),
+      }],
+    })).toThrow(/resumo/i)
     expect(() => parsePublicSessionPayload({
       ok: true,
       campaignSlug: 'yuhara-main',
       session: {
         sourceSessionId: 'sessao-1',
         title: 'A ponte',
-        summaryFull: 'x'.repeat(1_000_001),
+        summaryFull: 'x'.repeat(200_001),
       },
     })).toThrow(/resumo completo/i)
+  })
+
+  it('rejeita catálogos acima do limite público', () => {
+    const sessions = Array.from({ length: 501 }, (_, index) => ({
+      sourceSessionId: `sessao-${index}`,
+      title: `Sessão ${index}`,
+    }))
+
+    expect(() => parsePublicSessionsPayload({
+      ok: true,
+      campaignSlug: 'yuhara-main',
+      sessions,
+    })).toThrow(/limite de sessões/i)
   })
 })
