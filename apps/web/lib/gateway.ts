@@ -24,6 +24,10 @@ export function buildLegacyFallbackRewrites(value: string | undefined): readonly
   if (!origin) return []
 
   return [
+    // Algumas sessões publicadas ainda apontam suas capas para
+    // https://dnd.faysk.dev/assets/sessions/*. Após o cutover esse hostname
+    // será o Next; somente esse namespace histórico é encaminhado ao legado.
+    { source: '/assets/sessions/:path*', destination: `${origin}/assets/sessions/:path*` },
     { source: '/api/:path*', destination: `${origin}/api/:path*` },
     { source: '/edit', destination: `${origin}/edit` },
     { source: '/edit/:path*', destination: `${origin}/edit/:path*` },
