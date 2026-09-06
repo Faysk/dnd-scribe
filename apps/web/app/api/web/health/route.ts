@@ -14,7 +14,12 @@ export function GET() {
     {
       ok: true,
       ready,
-      surface: 'dnd-scribe-web-next',
+      surface: 'tda-web',
+      deployment: {
+        commitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
+        commitRef: process.env.VERCEL_GIT_COMMIT_REF || null,
+        environment: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
+      },
       runtime: {
         supabaseConfigured,
         legacyOriginConfigured,
