@@ -1,8 +1,7 @@
 'use client'
 
 /* eslint-disable @next/next/no-img-element */
-import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { CampaignAccessPayload } from '@/lib/api/contracts/auth'
 import type { AuthIdentity } from '@/lib/auth/state'
@@ -67,23 +66,23 @@ export function UserMenu({ access = null, identity }: UserMenuProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function clearCloseTimer() {
+  const clearCloseTimer = useCallback(() => {
     if (!closeTimerRef.current) return
     clearTimeout(closeTimerRef.current)
     closeTimerRef.current = null
-  }
+  }, [])
+
+  const closeMenu = useCallback((restoreFocus = false) => {
+    setOpen(false)
+    clearCloseTimer()
+    closeTimerRef.current = setTimeout(() => setMounted(false), CLOSE_ANIMATION_MS)
+    if (restoreFocus) window.requestAnimationFrame(() => triggerRef.current?.focus())
+  }, [clearCloseTimer])
 
   function openMenu() {
     clearCloseTimer()
     setMounted(true)
     window.requestAnimationFrame(() => setOpen(true))
-  }
-
-  function closeMenu(restoreFocus = false) {
-    setOpen(false)
-    clearCloseTimer()
-    closeTimerRef.current = setTimeout(() => setMounted(false), CLOSE_ANIMATION_MS)
-    if (restoreFocus) window.requestAnimationFrame(() => triggerRef.current?.focus())
   }
 
   function toggleMenu() {
@@ -113,9 +112,11 @@ export function UserMenu({ access = null, identity }: UserMenuProps) {
       document.removeEventListener('pointerdown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [open])
+  }, [closeMenu, open])
 
-  useEffect(() => () => clearCloseTimer(), [])
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+  }, [])
 
   return (
     <div className="relative">
