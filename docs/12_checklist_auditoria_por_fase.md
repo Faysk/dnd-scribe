@@ -1,3 +1,5 @@
+> **Referência histórica — direção substituída em 2026-09-06.** O [reboot TDA](reboot/README.md) define o plano vigente. Este documento preserva decisões/evidências do escopo anterior; versões, fases e declarações de conclusão abaixo não certificam o estado do reboot. Revalidar requisitos antes de reutilizá-los.
+
 # Checklist de auditoria pós-fase
 
 Use este checklist **depois de cada fase**, antes de iniciar a próxima.

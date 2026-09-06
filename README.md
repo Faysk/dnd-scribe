@@ -2,6 +2,17 @@
 
 Site, arquivo e ferramentas da campanha de D&D.
 
+## Reboot — direção vigente
+
+O proprietário definiu um reboot por entregas, preservando os dados: primeiro Home, sessões e resumos; depois Edit integrado e operação completa; novas funcionalidades por último.
+
+- [Documentação e índice do reboot](docs/reboot/README.md)
+- [Roadmap e critérios de aceite](docs/reboot/10-roadmap-e-aceite.md)
+- [Política de versões mais recentes](docs/reboot/03-stack-e-atualizacoes.md)
+- [Estado, riscos e decisões abertas](docs/reboot/11-estado-riscos-e-decisoes.md)
+
+As seções abaixo descrevem a estrutura atual e regras anteriores compatíveis. A arquitetura alvo e a ordem de execução são definidas no reboot. Configuração de Preview, migração e publicação ainda não foram realizadas por esta entrega documental.
+
 > **Regra principal: `main = produção`.**
 >
 > Tudo que está em `main` é a versão final. Não mantemos uma segunda versão pública do frontend dentro do repositório.

@@ -1,3 +1,5 @@
+> **Referência histórica — direção substituída em 2026-09-06.** O [reboot TDA](reboot/README.md) define o plano vigente. Este documento preserva decisões/evidências do escopo anterior; versões, fases e declarações de conclusão abaixo não certificam o estado do reboot. Revalidar requisitos antes de reutilizá-los.
+
 # Stack alvo — 2026
 
 A meta não é usar versões `current`/preview por vaidade. O padrão é **stable/LTS recente com suporte ativo e CI verde**.

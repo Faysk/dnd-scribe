@@ -1,8 +1,16 @@
 # Documentação do DnD Scribe
 
+## Direção vigente — reboot TDA
+
+O plano ativo está em [Reboot TDA](reboot/README.md). Ele consolida as decisões do proprietário sobre dados preservados, tecnologias nas versões mais recentes, main/Production, Preview, site público primeiro e Edit integrado depois.
+
+Comece pelo [roadmap](reboot/10-roadmap-e-aceite.md), pela [política de versões](reboot/03-stack-e-atualizacoes.md) e pelo [estado atual](reboot/11-estado-riscos-e-decisoes.md).
+
+**As seções seguintes são o índice histórico anterior. Seus estados de execução não definem o reboot.** A modernização pública 0–15 e a modernização total anterior tinham escopos diferentes; nenhum encerramento anterior representa conclusão do plano novo.
+
 Este índice aponta para o que deve ser lido agora. Documentos antigos continuam no repositório como histórico, mas não definem automaticamente a arquitetura atual.
 
-## Roadmap ativo — modernização do app público
+## Histórico — modernização do app público
 
 Estado atual: **blocos não-Vercel preparados até a Fase 15; release candidate/homologação/cutover permanecem em standby de plataforma**.
 

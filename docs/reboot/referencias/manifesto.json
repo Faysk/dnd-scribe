@@ -1,0 +1,29 @@
+{
+  "date": "2026-09-06",
+  "files": [
+    {
+      "file": "tda-brand-pack-official.zip",
+      "originalName": "tda-brand-pack (official).zip",
+      "bytes": 3730753,
+      "sha256": "a56c89cc4d34888548168b87b71f3f369c686d46381c92b1a823169ed68e0cab"
+    },
+    {
+      "file": "TDA-Design-System-v1.0.zip",
+      "originalName": "TDA-Design-System-v1.0.zip",
+      "bytes": 35113,
+      "sha256": "fed119482a2854431691ef7e9073c984090c1c6dd810e77bd174be4b0a2b1ad2"
+    },
+    {
+      "file": "referencia-escura.png",
+      "originalName": "codex-clipboard-e8b93655-935d-4a0e-bd30-eee788f02cd9.png",
+      "bytes": 2563833,
+      "sha256": "ce48ad2a4ebadab31e15cd5828b7aef57513d3b55e6019755e28716fffb28ca3"
+    },
+    {
+      "file": "referencia-clara.png",
+      "originalName": "codex-clipboard-83bbe105-ca55-43ef-87de-0738cf23ecf7.png",
+      "bytes": 2139635,
+      "sha256": "c92822aa01598d2499987936afd02ef8f7479673418fbd46e2c232ef0e39cc5b"
+    }
+  ]
+}

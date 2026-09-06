@@ -1,3 +1,5 @@
+> **Referência histórica — direção substituída em 2026-09-06.** O [reboot TDA](reboot/README.md) define o plano vigente. Este documento preserva decisões/evidências do escopo anterior; versões, fases e declarações de conclusão abaixo não certificam o estado do reboot. Revalidar requisitos antes de reutilizá-los.
+
 # 35 — Roadmap das Proximas 10 Etapas
 
 > Estado em 26/07/2026: a expansão cloud-first deste roadmap está pausada para

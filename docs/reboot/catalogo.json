@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "reviewedAt": "2026-09-06",
+  "documents": [
+    {
+      "file": "01-produto-e-escopo.md",
+      "title": "Produto e escopo do reboot"
+    },
+    {
+      "file": "02-arquitetura-e-transcricao.md",
+      "title": "Arquitetura alvo e transcrição"
+    },
+    {
+      "file": "03-stack-e-atualizacoes.md",
+      "title": "Stack e política de versões mais recentes"
+    },
+    {
+      "file": "04-git-ambientes-e-publicacao.md",
+      "title": "Git, ambientes e publicação"
+    },
+    {
+      "file": "05-dados-migracao-e-recuperacao.md",
+      "title": "Preservação dos dados, migração e recuperação"
+    },
+    {
+      "file": "06-identidade-e-site-publico.md",
+      "title": "Identidade e primeira entrega pública"
+    },
+    {
+      "file": "07-edit-e-paridade.md",
+      "title": "Edit integrado e inventário de paridade"
+    },
+    {
+      "file": "08-qualidade-seguranca-e-operacao.md",
+      "title": "Qualidade, segurança e operação"
+    },
+    {
+      "file": "09-lore-temporaria-e-expansao.md",
+      "title": "Lore temporária e expansão futura"
+    },
+    {
+      "file": "10-roadmap-e-aceite.md",
+      "title": "Roadmap de execução e critérios de aceite"
+    },
+    {
+      "file": "11-estado-riscos-e-decisoes.md",
+      "title": "Estado, riscos e decisões abertas"
+    },
+    {
+      "file": "12-governanca-documental.md",
+      "title": "Governança documental e substituição dos planos antigos"
+    }
+  ]
+}
