@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import { AuthError } from '@/components/auth/auth-error'
 import { PendingAccess } from '@/components/auth/pending-access'
+import { ActionLink } from '@/components/ui/action'
 import { Surface } from '@/components/ui/surface'
 import { BodyCopy, Eyebrow, SectionTitle } from '@/components/ui/typography'
 import { readPublicSupabaseConfig } from '@/lib/config'
@@ -20,6 +21,23 @@ function AuthSetupState() {
         <Eyebrow>Área reservada</Eyebrow>
         <SectionTitle className="mt-4">O acesso às transcrições ainda não está configurado neste ambiente.</SectionTitle>
         <BodyCopy className="mt-4 max-w-2xl">Os resumos públicos continuam disponíveis normalmente.</BodyCopy>
+      </Surface>
+    </div>
+  )
+}
+
+function TranscriptDeniedState({ returnHref }: Readonly<{ returnHref: string }>) {
+  return (
+    <div className="mx-auto w-[min(900px,calc(100%-2.5rem))] py-16 sm:py-24">
+      <Surface className="p-8 sm:p-10" tone="elevated">
+        <Eyebrow>Permissão necessária</Eyebrow>
+        <SectionTitle className="mt-4">Sua conta não pode visualizar esta transcrição.</SectionTitle>
+        <BodyCopy className="mt-4 max-w-2xl">
+          O resumo da sessão continua público. O acesso ao material bruto é liberado separadamente pelo responsável pelas permissões da campanha.
+        </BodyCopy>
+        <div className="mt-7">
+          <ActionLink href={returnHref} variant="secondary">Voltar ao resumo</ActionLink>
+        </div>
       </Surface>
     </div>
   )
@@ -46,6 +64,9 @@ export default async function TranscriptLayout({ children, params }: TranscriptL
   }
   if (state.kind === 'pendingAccess') {
     return <PendingAccess identity={state.identity} returnHref={returnHref} />
+  }
+  if (!state.access.capabilities?.canReadTranscript) {
+    return <TranscriptDeniedState returnHref={returnHref} />
   }
   return children
 }
