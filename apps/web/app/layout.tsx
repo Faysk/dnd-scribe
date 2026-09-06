@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/brand/tda-icon-duck-black.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: light)' },
-      { url: '/brand/tda-icon-duck-black.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: dark)' },
+      { url: '/brand/tda-icon-duck-white.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: dark)' },
     ],
     shortcut: '/brand/tda-icon-duck-black.svg',
   },
