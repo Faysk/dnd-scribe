@@ -43,7 +43,7 @@ jobs:
           if ($tray.ExitCode -ne 0) { throw "Tray verification failed with exit code $($tray.ExitCode)." }
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dnd-scribe-companion-windows
           path: |
