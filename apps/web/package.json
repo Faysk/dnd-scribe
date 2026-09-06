@@ -3,14 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "engines": {
-    "node": "24.x"
+    "node": "26.x"
   },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
@@ -19,8 +19,8 @@
     "measure:client-bundle": "node scripts/measure-client-bundle.mjs"
   },
   "dependencies": {
-    "@supabase/ssr": "0.12.5",
-    "@supabase/supabase-js": "2.114.0",
+    "@supabase/ssr": "0.12.6",
+    "@supabase/supabase-js": "2.115.0",
     "marked": "18.0.11",
     "next": "16.3.4",
     "react": "19.2.8",
@@ -29,14 +29,12 @@
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "4.3.3",
-    "@types/node": "^24.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@typescript/native": "npm:typescript@7.0.2",
-    "eslint": "^9.0.0",
-    "eslint-config-next": "16.3.4",
+    "@types/node": "26.4.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
     "tailwindcss": "4.3.3",
-    "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "5.0.0"
+    "typescript": "7.0.2",
+    "vitest": "5.0.0",
+    "@biomejs/biome": "2.5.12"
   }
 }

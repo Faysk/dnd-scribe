@@ -14,17 +14,19 @@ export function GET() {
     {
       ok: true,
       ready,
+      readinessMode: 'configuration-only',
       surface: 'tda-web',
       // Compatibilidade com o antigo GET /api/health durante a Fase 2.
       // Esses campos podem ser removidos somente depois do cutover estrutural da #48.
       app: 'dnd-scribe-vercel',
       campaignSlug: CAMPAIGN_SLUG,
       deployment: {
-        commitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
-        commitRef: process.env.VERCEL_GIT_COMMIT_REF || null,
-        environment: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
+        commitSha: process.env.APP_COMMIT_SHA || process.env.RENDER_GIT_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || null,
+        commitRef: process.env.APP_COMMIT_REF || process.env.RENDER_GIT_BRANCH || process.env.VERCEL_GIT_COMMIT_REF || null,
+        environment: process.env.APP_ENV || process.env.VERCEL_ENV || process.env.NODE_ENV || null,
       },
       runtime: {
+        node: process.versions.node,
         supabaseConfigured,
         legacyOriginConfigured,
       },

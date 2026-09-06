@@ -1,11 +1,13 @@
 import { ImageResponse } from 'next/og'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 
 export const size = { width: 180, height: 180 }
 export const contentType = 'image/png'
 
-const DUCK_ICON = 'https://dnd.faysk.dev/brand/tda-icon-duck-white.svg'
-
-export default function AppleIcon() {
+export default async function AppleIcon() {
+  const icon = await readFile(path.join(process.cwd(), 'public/brand/tda-icon-duck-white.svg'))
+  const duckIcon = `data:image/svg+xml;base64,${icon.toString('base64')}`
   return new ImageResponse(
     (
       <div
@@ -19,7 +21,8 @@ export default function AppleIcon() {
           borderRadius: 36,
         }}
       >
-        <img alt="" height="132" src={DUCK_ICON} width="132" />
+        {/* biome-ignore lint/performance/noImgElement: ImageResponse renders SVG markup, not a browser image. */}
+        <img alt="" height={132} src={duckIcon} width={132} />
       </div>
     ),
     size,

@@ -46,7 +46,8 @@ export function SessionShareActions({ title, description }: SessionShareActionsP
   }
 
   return (
-    <div className="mt-6 flex flex-wrap gap-2" aria-label="Compartilhar sessão">
+    // biome-ignore lint/a11y/useSemanticElements: This group contains sharing actions, not form fields.
+    <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Compartilhar sessão">
       <Button onClick={share} size="sm" variant="secondary">
         {copied ? 'Link copiado' : 'Compartilhar sessão'}
       </Button>

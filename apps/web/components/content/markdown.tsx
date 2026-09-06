@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noArrayIndexKey: Stateless server-rendered Markdown positions represent immutable document nodes.
 import type { ReactNode } from 'react'
 import { marked } from 'marked'
 
@@ -111,7 +112,7 @@ function renderToken(token: MarkdownToken, key: string): ReactNode {
       if (!src) return token.text ? <span key={key}>[{token.text}]</span> : null
       return (
         // Summary images use the same audited allowlist as session artwork.
-        // eslint-disable-next-line @next/next/no-img-element
+        // biome-ignore lint/performance/noImgElement: Allowlisted Markdown artwork has no known dimensions; preserve natural ratio.
         <img alt={token.text || 'Imagem do resumo da sessão'} className="my-8 h-auto max-h-[720px] w-full rounded-lg border border-border-subtle object-contain" loading="lazy" referrerPolicy="no-referrer" src={src} title={token.title || undefined} key={key} />
       )
     }

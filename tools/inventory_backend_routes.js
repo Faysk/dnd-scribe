@@ -55,7 +55,7 @@ function buildInventory() {
     .map((file) => ({
       file: path.relative(ROOT, file).replaceAll(path.sep, '/'),
       route: routeFromEntrypoint(file),
-      bytes: fs.statSync(file).size,
+      bytes: Buffer.byteLength(fs.readFileSync(file, 'utf8').replaceAll('\r\n', '\n')),
     }))
     .filter((item) => item.route)
     .sort((a, b) => a.route.localeCompare(b.route));
@@ -71,7 +71,8 @@ function buildInventory() {
     generatedAt: new Date().toISOString(),
     monolith: {
       file: 'api/[...path].js',
-      bytes: fs.statSync(MONOLITH).size,
+      // Compare canonical LF bytes so Windows checkout conversion is not growth.
+      bytes: Buffer.byteLength(monolithSource.replaceAll('\r\n', '\n')),
       baselineBytes: MONOLITH_BASELINE_BYTES,
       literalRoutes: monolithRoutes,
       literalRouteCount: monolithRoutes.length,

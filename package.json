@@ -2,12 +2,12 @@
   "name": "dnd-scribe",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@11.25.0",
-  "description": "TDA operator/backend service and monorepo root.",
+  "packageManager": "pnpm@12.3.4",
+  "description": "TDA reboot workspace: public web, integrated API and local processing.",
   "scripts": {
-    "build": "node scripts/sync-public.js",
+    "build": "pnpm web:build",
     "sync:lore-runtime": "node scripts/sync-lore-runtime.js",
-    "check": "pnpm run check:layout && pnpm run check:backend-inventory && pnpm run check:web && pnpm run check:api && pnpm run check:workers && pnpm run check:roll20 && pnpm run check:monitoring && pnpm run check:summary-api && pnpm run check:companion",
+    "check": "pnpm check:docs && pnpm run check:layout && pnpm run check:backend-inventory && pnpm run check:web && pnpm run check:api && pnpm run check:workers && pnpm run check:roll20 && pnpm run check:monitoring && pnpm run check:summary-api && pnpm run check:companion",
     "check:layout": "node scripts/check-canonical-layout.js",
     "check:backend-inventory": "node tools/inventory_backend_routes.js --check",
     "check:web": "node --check web/auth-fetch.js && node --check web/roll20.js && node --check web/roll20-bridge.js && node --check web/roll20-bridge-page.js && node --check web/theme.js && node --check web/central-local/app.js && node --check web/central-local/processing-v04.js",
@@ -31,16 +31,21 @@
     "audit:session": "node tools/audit_production_session.js",
     "smoke:routes": "node scripts/smoke-production-routes.js",
     "check:session-images": "node tools/check_session_image_storage.js",
-    "release:companion": "node tools/publish_companion_release.js"
+    "release:companion": "node tools/publish_companion_release.js",
+    "operator:build": "node scripts/sync-public.js",
+    "dev": "pnpm --filter @dnd-scribe/web dev",
+    "start": "pnpm --filter @dnd-scribe/web start",
+    "check:docs": "node tools/reboot_docs.mjs --check",
+    "check:versions": "node tools/check_web_versions.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "2.114.0",
-    "dompurify": "3.4.14",
+    "@supabase/supabase-js": "2.115.0",
+    "dompurify": "3.4.15",
     "marked": "18.0.11",
     "pg": "8.23.0"
   },
   "engines": {
-    "node": "24.x",
-    "pnpm": "11.x"
+    "pnpm": "12.x",
+    "node": "26.x"
   }
 }

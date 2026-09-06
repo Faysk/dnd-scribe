@@ -39,7 +39,7 @@ function bounded(value: unknown, maxLength: number, field: string) {
 export function parseSessionSummaryPayload(value: unknown): SessionSummaryPayload {
   const payload = record(value)
   const item = record(payload?.session)
-  if (!payload || payload.ok !== true || !item) throw new Error('Resposta inválida do resumo da sessão.')
+  if (payload?.ok !== true || !item) throw new Error('Resposta inválida do resumo da sessão.')
 
   const sourceSessionId = bounded(item.sourceSessionId, 220, 'identificador')
   const title = bounded(item.title, 500, 'título')

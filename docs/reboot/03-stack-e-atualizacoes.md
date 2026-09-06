@@ -12,7 +12,9 @@ Uma versão estável mais nova pode existir fora da linha LTS. Não manter autom
 
 Beta, RC, nightly e experimental ficam fora da proposta padrão. O usuário pode decidir incluí-las; registrar os riscos e os testes nesse caso.
 
-## Seleção inicial: pendente de R0
+## Seleção inicial e limites da atualização
+
+A fundação web foi atualizada em 2026-09-06. Consultar [versões verificadas](registros/versoes.md) e [evidência da fundação](registros/fundacao-web.md). A tabela abaixo ainda orienta as camadas não migradas, em especial banco gerenciado, Python, GPU e companion. Elas não estão certificadas como atualizadas por esta entrega.
 | Camada | Candidato baseado no projeto existente | Verificação necessária |
 | --- | --- | --- |
 | Linguagem web | TypeScript | Release estável oficial, suporte do framework e ferramentas |
@@ -26,7 +28,7 @@ Beta, RC, nightly e experimental ficam fora da proposta padrão. O usuário pode
 | Qualidade | Ferramentas de lint, tipos, unitários e navegador | Últimas estáveis com cobertura útil |
 | Infraestrutura | Projeto web com Production e Preview | Suporte aos runtimes selecionados, limites e custos |
 
-Nenhum número deste documento é uma versão atual certificada. Versões presentes no código ou nos ZIPs são snapshots, não escolhas automáticas para o reboot. Selecionar primeiro as necessidades, depois o menor conjunto de tecnologias que as atende.
+Versões presentes nos ZIPs são referências históricas, não escolhas automáticas. Node 26 também é requisito no destino de produção por decisão explícita do proprietário; não reduzir para Node 24 para caber na Vercel.
 
 ## Registro obrigatório de versão
 Usar [registro de versões](registros/versoes.md). Por componente:

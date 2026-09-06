@@ -75,7 +75,7 @@ function parseCampaignSlug(value: unknown) {
 
 export function parsePublicSessionsPayload(value: unknown): PublicSessionsPayload {
   const payload = record(value)
-  if (!payload || payload.ok !== true || !Array.isArray(payload.sessions)) {
+  if (payload?.ok !== true || !Array.isArray(payload.sessions)) {
     throw new Error('Resposta inválida da memória pública.')
   }
   if (payload.sessions.length > PUBLIC_LIBRARY_MAX_SESSIONS) {
@@ -91,7 +91,7 @@ export function parsePublicSessionsPayload(value: unknown): PublicSessionsPayloa
 
 export function parsePublicSessionPayload(value: unknown): PublicSessionPayload {
   const payload = record(value)
-  if (!payload || payload.ok !== true) throw new Error('Resposta inválida da memória pública.')
+  if (payload?.ok !== true) throw new Error('Resposta inválida da memória pública.')
 
   const base = parsePublicSession(payload.session)
   const sessionRecord = record(payload.session)

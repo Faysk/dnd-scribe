@@ -82,7 +82,7 @@ function parseSession(value: unknown): LibrarySession {
 
 export function parseLibrarySessionsPayload(value: unknown): LibrarySessionsPayload {
   const payload = record(value)
-  if (!payload || payload.ok !== true || !Array.isArray(payload.sessions)) {
+  if (payload?.ok !== true || !Array.isArray(payload.sessions)) {
     throw new Error('Resposta inválida da biblioteca de sessões.')
   }
   if (payload.sessions.length > LIBRARY_MAX_SESSIONS) {

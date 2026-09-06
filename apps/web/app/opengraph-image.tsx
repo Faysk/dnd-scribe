@@ -1,12 +1,14 @@
 import { ImageResponse } from 'next/og'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 
 export const alt = 'TDA — Tem Dado Aqui — Rolamos dados. Guardamos os dados.'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
-const BRAND_MARK = 'https://dnd.faysk.dev/brand/tda-mark-black.svg'
-
-export default function OpenGraphImage() {
+export default async function OpenGraphImage() {
+  const mark = await readFile(path.join(process.cwd(), 'public/brand/tda-mark-black.svg'))
+  const brandMark = `data:image/svg+xml;base64,${mark.toString('base64')}`
   return new ImageResponse(
     (
       <div
@@ -22,7 +24,8 @@ export default function OpenGraphImage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 64 }}>
-          <img alt="" height="330" src={BRAND_MARK} width="330" />
+          {/* biome-ignore lint/performance/noImgElement: ImageResponse renders SVG markup, not a browser image. */}
+          <img alt="" height={330} src={brandMark} width={330} />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 132, fontWeight: 800, letterSpacing: '-0.05em', lineHeight: 0.9 }}>TDA</div>
             <div style={{ marginTop: 24, fontSize: 46, fontWeight: 600 }}>Tem Dado Aqui</div>

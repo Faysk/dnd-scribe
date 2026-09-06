@@ -11,7 +11,7 @@ O proprietário definiu um reboot por entregas, preservando os dados: primeiro H
 - [Política de versões mais recentes](docs/reboot/03-stack-e-atualizacoes.md)
 - [Estado, riscos e decisões abertas](docs/reboot/11-estado-riscos-e-decisoes.md)
 
-As seções abaixo descrevem a estrutura atual e regras anteriores compatíveis. A arquitetura alvo e a ordem de execução são definidas no reboot. Configuração de Preview, migração e publicação ainda não foram realizadas por esta entrega documental.
+As seções abaixo descrevem a estrutura atual e regras anteriores compatíveis. A fundação web usa Node 26 e contêiner de produção. Migração de dados, novo hosting e cutover de domínio continuam pendentes; veja [operação da base](docs/reboot/registros/fundacao-web.md).
 
 > **Regra principal: `main = produção`.**
 >

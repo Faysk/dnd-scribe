@@ -3,3 +3,6 @@ packages:
 
 allowBuilds:
   unrs-resolver: false
+
+minimumReleaseAgeExclude:
+  - dompurify@3.4.15

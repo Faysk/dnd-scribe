@@ -1,10 +1,17 @@
 version: 2
 updates:
+  - package-ecosystem: docker
+    directory: /
+    target-branch: Preview
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "build(deps)"
   - package-ecosystem: npm
     directory: /
+    target-branch: Preview
     schedule:
-      interval: weekly
-      day: monday
+      interval: daily
       time: "06:00"
       timezone: Europe/Lisbon
     open-pull-requests-limit: 5
@@ -16,19 +23,15 @@ updates:
         update-types:
           - minor
           - patch
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - version-update:semver-major
     commit-message:
-      prefix: "deps"
+      prefix: "chore(deps)"
       include: scope
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: Preview
     schedule:
-      interval: weekly
-      day: monday
+      interval: daily
       time: "06:15"
       timezone: Europe/Lisbon
     open-pull-requests-limit: 5
@@ -39,9 +42,5 @@ updates:
         update-types:
           - minor
           - patch
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - version-update:semver-major
     commit-message:
-      prefix: "deps(actions)"
+      prefix: "ci(deps)"

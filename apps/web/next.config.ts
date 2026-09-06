@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { fileURLToPath } from 'node:url'
 
 import { DEFAULT_LEGACY_ORIGIN } from './lib/config'
 import { buildLegacyFallbackRewrites } from './lib/gateway'
@@ -25,6 +26,8 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
+  outputFileTracingRoot: fileURLToPath(new URL('../../', import.meta.url)),
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'dmrqnbdvbkfqzctcerbx.supabase.co' },

@@ -1,5 +1,6 @@
 {
-  "buildCommand": "npm run build",
+  "git": { "deploymentEnabled": false },
+  "buildCommand": "npm run operator:build",
   "outputDirectory": "public",
   "redirects": [
     {

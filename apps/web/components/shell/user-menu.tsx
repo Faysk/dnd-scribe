@@ -132,6 +132,7 @@ export function UserMenu({ access = null, identity }: UserMenuProps) {
       >
         <span className="grid size-full place-items-center overflow-hidden rounded-full bg-accent-muted text-xs font-bold text-accent-strong">
           {identity.avatarUrl ? (
+            // biome-ignore lint/performance/noImgElement: Provider avatar is fetched by the browser, not proxied through the app image server.
             <img
               alt=""
               className="size-full object-cover"
@@ -165,6 +166,7 @@ export function UserMenu({ access = null, identity }: UserMenuProps) {
             <div className="flex items-center gap-3.5">
               <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full border border-accent/40 bg-accent-muted text-base font-bold text-accent-strong">
                 {identity.avatarUrl ? (
+                  // biome-ignore lint/performance/noImgElement: Provider avatar is fetched by the browser, not proxied through the app image server.
                   <img
                     alt=""
                     className="size-full object-cover"

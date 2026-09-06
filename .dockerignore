@@ -1,0 +1,16 @@
+# Allowlist: private lore, audio, credentials and tools never enter the context.
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!vercel.json
+!apps
+!apps/web
+!apps/web/**
+apps/web/**/node_modules
+apps/web/.next
+apps/web/.env*
+apps/web/.vercel
+apps/web/test-results
+apps/web/playwright-report
+apps/web/**/*.tsbuildinfo

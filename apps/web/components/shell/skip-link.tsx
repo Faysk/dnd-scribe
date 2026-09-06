@@ -21,6 +21,7 @@ export function SkipLink() {
   }
 
   return (
+    // biome-ignore lint/a11y/useValidAnchor: Real fragment navigation with an explicit focus fix for keyboard users.
     <a
       className="fixed left-3 top-3 z-50 -translate-y-24 rounded-sm bg-accent-strong px-3 py-2 text-sm font-semibold text-accent-contrast transition-transform focus:translate-y-0"
       href="#content"

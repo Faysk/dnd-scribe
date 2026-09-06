@@ -22,7 +22,9 @@ O nome `Preview` é sensível a maiúsculas. Não criar outra branch `preview`, 
 8. Realinhar Preview com main preservando a ancestralidade; evitar squash recorrente na promoção que deixe as branches divergindo artificialmente.
 9. Remover branches temporárias após confirmar integração ou abandono e preservar a referência do PR.
 
-Durante o bootstrap documental ainda não existe confirmação de Preview configurada. A branch temporária da documentação parte de main e será reconciliada com a criação de Preview em R0. Essa exceção não cria um terceiro ambiente permanente.
+Exceção autorizada em 2026-09-06: o proprietário pediu implementação da fundação diretamente em main durante a pausa de uso. A documentação foi integrada por fast-forward e a base é validada antes do push. Esta autorização vale para o bootstrap; o fluxo normal acima continua sendo a regra depois dele. A existência da branch Preview não comprova ambiente isolado implantado.
+
+O novo runtime exige Node 26. Os deployments automáticos Vercel foram desabilitados nos arquivos de configuração durante a transição, pois o provider oferece até Node 24. Isso preserva os deployments já existentes. A configuração de destino gratuita está em [fundação web](registros/fundacao-web.md); nenhum domínio deve ser trocado antes do aceite do ambiente novo.
 
 ## Hotfix
 Branch temporária nasce de main, recebe validação adequada e é promovida para produção. O mesmo ajuste é integrado imediatamente em Preview. Não manter correções exclusivas de um ambiente.

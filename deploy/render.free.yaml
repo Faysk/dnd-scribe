@@ -1,0 +1,17 @@
+# Candidate only. Import explicitly after reviewing free-plan limits.
+# Keep the existing database and storage; do not create expiring free databases.
+services:
+  - type: web
+    name: tda-web
+    runtime: docker
+    plan: free
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: off
+    healthCheckPath: /api/live
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DND_LEGACY_ORIGIN
+        value: https://dnd-scribe-amber.vercel.app

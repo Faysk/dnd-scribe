@@ -3,6 +3,7 @@
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
+  --ds-brand-filter: invert(1);
   --ds-canvas: #0a0c0f;
   --ds-canvas-subtle: #101419;
   --ds-surface: #151a20;
@@ -38,6 +39,7 @@
 :root[data-theme="light"],
 [data-theme="light"] {
   color-scheme: light;
+  --ds-brand-filter: none;
   --ds-canvas: #f3efe7;
   --ds-canvas-subtle: #fffdf8;
   --ds-surface: #e9e3d8;
@@ -66,6 +68,7 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
     color-scheme: light;
+    --ds-brand-filter: none;
     --ds-canvas: #f3efe7;
     --ds-canvas-subtle: #fffdf8;
     --ds-surface: #e9e3d8;
@@ -197,9 +200,13 @@ textarea:focus-visible {
   *,
   *::before,
   *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override component motion. */
     scroll-behavior: auto !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override component motion. */
     transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override component motion. */
     animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override component motion. */
     animation-iteration-count: 1 !important;
   }
 }

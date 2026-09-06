@@ -106,7 +106,7 @@ function parseSegment(value: unknown): TranscriptSegment {
 
 export function parseTranscriptPayload(value: unknown): TranscriptPayload {
   const payload = record(value)
-  if (!payload || payload.ok !== true || !Array.isArray(payload.segments) || !Array.isArray(payload.speakers)) {
+  if (payload?.ok !== true || !Array.isArray(payload.segments) || !Array.isArray(payload.speakers)) {
     throw new Error('Resposta inválida da transcrição.')
   }
   if (payload.segments.length > TRANSCRIPT_PAGE_SIZE) {

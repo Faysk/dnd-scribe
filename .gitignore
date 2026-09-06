@@ -12,6 +12,8 @@ public/
 integrations/roll20/chrome-extension.zip
 coverage/
 node_modules/
+*.tsbuildinfo
+apps/web/next-env.d.ts
 .vercel/
 __pycache__/
 *.pyc

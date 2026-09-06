@@ -12,7 +12,7 @@ const check = (condition, message) => { if (!condition) errors.push(message); };
 const index = [
   '# Reboot TDA — documentação e roadmap',
   '',
-  '> Status: planejamento documentado; implementação pendente. Responsável: proprietário e implementador do TDA. Revisão: ' + catalog.reviewedAt + '.',
+  '> Status: fundação web implementada; migração e novo hosting pendentes. Responsável: proprietário e implementador do TDA. Revisão: ' + catalog.reviewedAt + '.',
   '',
   'Este é o ponto de entrada vigente para o reboot. Consolida as decisões do proprietário e substitui a sequência dos planos antigos, preservados como histórico. Não declara migração, backup, configuração de ambientes ou deploy concluídos.',
   '',
@@ -35,6 +35,7 @@ const index = [
   '- [Registro de versões](registros/versoes.md).',
   '- [Inventário e paridade](registros/inventario.md).',
   '- [Evidência da entrega documental](registros/entrega-documental.md).',
+  '- [Fundação web e hospedagem gratuita](registros/fundacao-web.md).',
   '- [Template de evidência](templates/evidencia.md).',
   '- [Template de decisão](templates/decisao.md).',
   '- [Pacotes oficiais e referências visuais](referencias/README.md).',
