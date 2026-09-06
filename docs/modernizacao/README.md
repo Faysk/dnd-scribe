@@ -1,162 +1,86 @@
 # Modernização do DnD Scribe — Roadmap mestre
 
-Status: **blocos não-Vercel preparados até a Fase 15; RC/homologação/cutover em standby de plataforma**  
-Data de referência: **2026-09-04**  
-Escopo: **modernização tecnológica e de UX sem novas features de domínio**
+Status: **MODERNIZAÇÃO: COMPLETA ✅**  
+Encerramento: **2026-09-06**  
+Escopo encerrado: **modernização tecnológica e de UX sem expansão de domínio**
 
-## Objetivo
+## Resultado
 
-Modernizar o app público do DnD Scribe preservando o que funciona hoje, sem iniciar ainda Pessoas/NPCs, lore editável, galerias, timeline, relações, grafo ou outro domínio novo.
-
-> Regra principal: primeiro modernizar a casa; depois ampliar a casa.
-
-## Estado atual
-
-```txt
-Fases 0–2   → fundação, arquitetura e contratos concluídos
-Fases 3–8   → app Next funcional implementado
-Fase 9      → qualidade/segurança/a11y: bloco técnico concluído
-Fase 10     → performance: bloco técnico concluído; benchmark autenticado pendente
-Fase 11     → bloco automatizado concluído; uso real autenticado pendente
-Fase 12     → roteiro/corpus/evidências preparados; execução no RC pendente
-Fase 13     → gateway/runbook/rollback preparados; domínio não movido
-Fase 14     → runbook de estabilização pronto; janela ainda não iniciada
-Fase 15     → relatório final factual pré-preenchido; declaração final bloqueada
-```
-
-A produção continua deliberadamente no legado:
+A modernização planejada nas Fases 0–15 foi concluída. O produto público está em produção em:
 
 ```txt
 https://dnd.faysk.dev
 ```
 
-Nenhum cutover foi realizado.
+O frontend público usa o app Next moderno. As superfícies operacionais que não faziam parte do escopo de modernização — Edit/Central Local, APIs legadas remanescentes, jobs, crons, integrações e companion local — foram deliberadamente preservadas atrás do mesmo domínio/gateway.
 
-## O que foi fechado enquanto a Vercel está em standby
+> Regra cumprida: primeiro modernizar a casa; depois ampliar a casa.
 
-Além da matriz multi-browser já verde, os blocos finais agora possuem preparação operacional concreta:
+Nenhuma feature futura de Pessoas/NPCs, lore editável, timeline, relações, grafo ou outro domínio novo foi incorporada ao roadmap de modernização.
 
-- corpus real de homologação;
-- matriz de paridade atualizada;
-- namespace BFF reservado em `/api/web/*`;
-- gateway legado preparado como fallback externo depois das rotas locais do Next;
-- proteção anti-self-loop para `DND_LEGACY_ORIGIN`;
-- preservação planejada de `/api/*`, `/edit*`, `/central-local*`, `/terms`, `/privacy`, `/linked-role` e `/docs/api*`;
-- `Permissions-Policy` específica da Central Local preparada;
-- smoke matrix de cutover congelada;
-- critérios de rollback congelados;
-- runbook de estabilização pronto;
-- relatório final pré-preenchido somente com fatos já provados.
-
-## Infra isolada do Next
-
-Um Preview técnico real já provou a existência/isolamento do segundo projeto:
+## Estado final das fases
 
 ```txt
-Project: dnd-scribe-web-next
-Project ID: prj_RVVEAucDhhftHY3UlE8PtoNxn6yl
-Deployment: dpl_Ha9etK6sk3e96qmqVxJTCmz6fLoQ
-Source commit: bf7ce242d083825cc65ee03354b3c638c95e87f0
-State: READY
+Fase 0  — Baseline e congelamento           ✅ concluída
+Fase 1  — Arquitetura alvo                  ✅ concluída
+Fase 2  — ADRs e contratos                  ✅ concluída
+Fase 3  — Bootstrap Next                    ✅ concluída
+Fase 4  — Design system                     ✅ concluída
+Fase 5  — Auth e shell                      ✅ concluída
+Fase 6  — Home e arquivo                    ✅ concluída
+Fase 7  — Resumo de sessão                  ✅ concluída
+Fase 8  — Transcrição                       ✅ concluída
+Fase 9  — Qualidade/security/a11y           ✅ concluída
+Fase 10 — Performance                       ✅ concluída
+Fase 11 — Paridade                          ✅ concluída
+Fase 12 — Homologação                       ✅ concluída
+Fase 13 — Cutover reversível                ✅ concluída
+Fase 14 — Estabilização                     ✅ encerrada por aceite do proprietário
+Fase 15 — Encerramento formal               ✅ concluída
 ```
 
-Esse deploy não é o RC final porque o código continuou avançando.
+O registro factual do encerramento está em [44 — Encerramento final da modernização](44-fase-15-encerramento-final.md).
 
-### Standby Vercel
-
-O próximo deployment precisa ser um candidato formal do SHA verde mais recente. O gate de plataforma permanece separado das evidências já concluídas em CI.
-
-Itens diretamente dependentes do RC/plataforma:
+## Topologia final de produção
 
 ```txt
-novo deployment READY
-URL final de homologação
-configuração final de redirects/OAuth atrelada à URL
-cookies HTTPS reais
-external rewrites reais
-headers reais do gateway
-Home/acervo autenticados
-transcrição/download reais
-benchmark autenticado
-homologação visual/manual
-movimento de dnd.faysk.dev
-observação pós-cutover
+dnd.faysk.dev
+├── /, /sessoes*, /login, /auth*, /_next/*
+│   └── frontend Next moderno
+├── /api/web/*
+│   └── BFF Next
+├── /edit*, /central-local*
+│   └── operação legada preservada no mesmo domínio
+└── /api/* restante, jobs, crons e integrações
+    └── backend legado preservado
 ```
 
-## Resultado automatizado consolidado
+O projeto Vercel separado `dnd-scribe-web-next` continua servindo o app Next, enquanto o projeto raiz `dnd-scribe` atua como gateway e mantém as superfícies operacionais legadas.
 
-Matriz atual:
+## Política de acesso final
 
 ```txt
-Desktop Chromium
-Desktop Firefox
-Desktop WebKit
-Mobile Chromium — Pixel 5
-Mobile WebKit — iPhone 13
+Memória publicada
+├── sessões publicadas       → público
+└── resumo completo          → público
+
+Material da mesa
+├── transcrição              → login + campaign.transcript.read
+├── download da transcrição  → login + campaign.transcript.read
+└── revisão de fala          → campaign.transcript.read + campaign.content.edit
 ```
 
-Gate consolidado da Fase 11:
+O painel Edit administra separadamente as capacidades de:
 
-```txt
-TypeScript strict        ✅
-ESLint                   ✅
-Vitest                   ✅
-Next production build    ✅
-Client bundle audit      ✅
-Bundle inventory         ✅
-Playwright multi-browser ✅ — 71 passed / 4 skips intencionais / 0 failed
-CI legado                ✅
-Companion regression     ✅
-Python syntax            ✅
-```
+- Ver Edit;
+- Editar conteúdo;
+- Ver transcrições;
+- Processar localmente;
+- Acessar áudio.
 
-Os skips são restritos a expectativas de foco/Tab em WebKit que dependem de Full Keyboard Access; semântica e ativação continuam cobertas.
+A leitura de transcrição deixou de ser consequência implícita de membership ou acesso ao Edit.
 
-## Escopo congelado
-
-### Entra
-
-- Next.js + React + TypeScript strict;
-- App Router e Server Components por padrão;
-- design system próprio;
-- dark/light de primeira classe;
-- Supabase Auth SSR/cookies;
-- Home reorganizada com dados existentes;
-- `/sessoes`;
-- resumo como página padrão;
-- transcrição secundária com busca/filtro/paginação/download;
-- testes/CI;
-- segurança, acessibilidade e performance;
-- homologação, cutover e estabilização.
-
-### Não entra
-
-- Pessoas/NPCs;
-- lore editável;
-- galerias;
-- coleções;
-- jornada/timeline;
-- mundo;
-- relações/grafo;
-- busca global;
-- novo modelo de canon;
-- modernização da Central Local/pipeline/Whisper;
-- migração completa do backend legado.
-
-## Princípios
-
-1. **Paridade antes de expansão**.
-2. **Preservar a identidade editorial**.
-3. **Dark e light são primeira classe**.
-4. **Local-first permanece**.
-5. **Supabase permanece**.
-6. **Server-first**.
-7. **TypeScript strict**.
-8. **Acessibilidade não é acabamento**.
-9. **Preview antes de produção**.
-10. **Sem “já que estamos aqui”**.
-
-## Stack operacional atual
+## Stack final
 
 | Camada | Versão/direção |
 | --- | --- |
@@ -171,117 +95,83 @@ Os skips são restritos a expectativas de foco/Tab em WebKit que dependem de Ful
 | E2E | Playwright 1.62.1 |
 | Package manager | pnpm 11.25.0 |
 | Banco | PostgreSQL / Supabase preservado |
-| Processamento pesado | local companion atual |
+| Processamento pesado | companion local preservado |
 
-## Topologia de coexistência
+## Evidência final de qualidade
 
-Durante homologação:
-
-```txt
-Browser
-→ Next
-→ BFF /api/web/*
-→ DND_LEGACY_ORIGIN
-→ projeto legado
-→ Supabase/PostgreSQL
-```
-
-Após cutover:
+O último hardening pré-encerramento foi o PR #42, com head `df80213c8ad47df156b5226c1eff6aab86a5a50c` e todos os gates verdes antes do merge:
 
 ```txt
-dnd.faysk.dev
-→ Next
-├── páginas modernas
-├── /api/web/* local
-└── fallback legado
-    ├── /api/* restante
-    ├── /edit*
-    ├── /central-local*
-    ├── /terms
-    ├── /privacy
-    ├── /linked-role
-    └── /docs/api*
-        → origem legada
+CI raiz                 ✅
+Companion regression    ✅
+TypeScript strict       ✅
+ESLint                  ✅
+Vitest                  ✅
+Next production build   ✅
+Client bundle audit     ✅
+Bundle inventory        ✅
+Playwright multi-browser✅
 ```
 
-API antiga, Central Local/Edit, jobs, integrações e crons podem permanecer no projeto legado deliberadamente.
+O PR foi mergeado no `main` em `91fa1f88316d68e421813ad227dac76e6eea83e8`.
 
-## Rotas do app público
+Deployment final validado do gateway:
 
 ```txt
-/                         → Home
-/sessoes                  → arquivo
-/sessoes/[id]             → resumo
-/sessoes/[id]/transcricao → transcrição
+dpl_2uGjfMAEWF1KpTdQGEbVKALYUjWN
+state: READY
+target: production
+main SHA: 91fa1f88316d68e421813ad227dac76e6eea83e8
 ```
 
-Compatibilidade histórica:
+Smoke final em produção confirmou:
 
-```txt
-#/sessao/:id        → /sessoes/:id/transcricao
-#/sessao/:id/resumo → /sessoes/:id
-```
-
-A bridge possui cobertura unitária e E2E.
-
-## Fases
-
-| Fase | Nome | Estado atual | Evidência |
-| --- | --- | --- | --- |
-| 0 | Baseline | **concluída** | docs 01, 10, 11, 16, 30 |
-| 1 | Arquitetura | **concluída** | doc 02 + ADRs |
-| 2 | ADRs/contratos | **concluída** | ADRs |
-| 3 | Bootstrap | **implementada/validada** | Next + CI + projeto isolado |
-| 4 | Design system | **implementada** | temas/tokens/componentes |
-| 5 | Auth/shell | **implementada; RC real pendente** | SSR auth |
-| 6 | Home/arquivo | **implementada; dados reais pendentes** | `/` + `/sessoes` |
-| 7 | Sessão | **implementada; dados reais pendentes** | `/sessoes/[id]` |
-| 8 | Transcrição | **implementada; dados reais pendentes** | reader/BFF |
-| 9 | Qualidade/security/a11y | **bloco técnico concluído** | execução Fase 9 |
-| 10 | Performance | **bloco técnico concluído** | doc 38 |
-| 11 | Paridade | **automação concluída; RC pendente** | docs 37, 39 + matriz |
-| 12 | Homologação | **preparada; execução RC pendente** | docs 26 e 40 |
-| 13 | Cutover | **readiness concluída; domínio em standby** | docs 27 e 41 |
-| 14 | Estabilização | **runbook pronto; aguarda produção** | docs 28 e 42 |
-| 15 | Encerramento | **rascunho final pronto; declaração bloqueada** | docs 29 e 43 |
-
-Preparar uma fase posterior não significa falsamente declarar seu gate cronológico concluído.
-
-## Corpus fixo
-
-Casos reais congelados em [39 — Corpus real de homologação](39-fase-11-corpus-homologacao.md), incluindo sessão mais recente, resumo longo, maior transcrição, transcrição histórica, duração ausente e ID manual longo.
+- Home pública moderna: 200;
+- arquivo `/sessoes`: 200 com 11 sessões públicas;
+- `/api/web/health`: `ready: true`;
+- login Discord/Google disponível;
+- transcrição anônima preserva destino e volta ao login;
+- APIs de transcrição e download retornam 401 sem sessão;
+- `/edit/`: 200;
+- `Permissions-Policy` completa no Edit, com exceções somente para rede local;
+- `/api/v1/health`: 200;
+- nenhum 5xx encontrado no deployment final durante a verificação.
 
 ## Definition of Done
 
-Já provado:
+- [x] arquitetura alvo implementada;
+- [x] stack moderna em produção;
+- [x] Home e arquivo modernos;
+- [x] resumo público;
+- [x] auth real funcionando;
+- [x] transcrição privada;
+- [x] RBAC/capabilities por pessoa;
+- [x] dark/light;
+- [x] desktop/mobile;
+- [x] testes unitários e E2E multi-browser;
+- [x] segurança e acessibilidade;
+- [x] performance/bundle gates;
+- [x] gateway e coexistência com legado;
+- [x] cutover em `dnd.faysk.dev`;
+- [x] rollback preservado;
+- [x] smoke real pós-cutover;
+- [x] estabilização aceita pelo proprietário;
+- [x] documentação final;
+- [x] **MODERNIZAÇÃO: COMPLETA**.
 
-- [x] TypeScript strict;
-- [x] lint/typecheck/unit/build;
-- [x] E2E multi-browser determinístico;
-- [x] client bundle sem marcadores server-only;
-- [x] bridge de links históricos;
-- [x] gateway preparado em código;
-- [x] runbooks de homologação/cutover/estabilização preparados;
-- [x] relatório final pré-preenchido sem inventar produção.
+## Dívidas aceitas — não bloqueiam o encerramento
 
-Ainda depende de RC/produção real:
-
-- [ ] nova stack em `dnd.faysk.dev`;
-- [ ] login/permissões homologados;
-- [ ] acervo real homologado;
-- [ ] resumo/transcrição reais homologados;
-- [ ] dark/light desktop/mobile aprovados;
-- [ ] benchmark autenticado;
-- [ ] cookies/OAuth HTTPS finais;
-- [ ] gateway real homologado;
-- [ ] rollback ensaiado na plataforma;
-- [ ] estabilização encerrada;
-- [ ] relatório final preenchido com produção;
-- [ ] `MODERNIZAÇÃO: COMPLETA`.
+- o projeto raiz está em **12/12 Node Functions** no limite Hobby da Vercel; novos endpoints devem consolidar functions ou exigir mudança de plano/arquitetura;
+- CSP completo com nonce/hash fica como hardening futuro;
+- revisão de privilégios de funções `SECURITY DEFINER` do Supabase fica como hardening dedicado;
+- proteção contra senhas vazadas deve ser revisitada se autenticação por senha entrar no produto; o fluxo atual é OAuth;
+- índices/FKs de performance devem ser ajustados com evidência de workload;
+- há warning de depreciação Node relacionado a `url.parse()` no legado, sem impacto funcional observado;
+- benchmark autenticado formal de performance fica como acompanhamento operacional, aceito pelo proprietário como não bloqueante após homologação real, gates de bundle e validação do produto em produção.
 
 ## Documentação principal
 
-### Fundação
+### Fundação e arquitetura
 
 - [00 — Escopo e princípios](00-escopo-e-principios.md)
 - [01 — Baseline](01-baseline-atual.md)
@@ -294,38 +184,21 @@ Ainda depende de RC/produção real:
 - [08 — Cutover/estabilização](08-cutover-estabilizacao.md)
 - [09 — Template final](09-relatorio-final-template.md)
 
-### Baseline/arquitetura
+### Execução final
 
-- [10 — Contratos legados](10-contratos-legado-app-publico.md)
-- [11 — Evidências Fase 0](11-fase-0-evidencias-e-checklist.md)
-- [12 — Deploy/dependências legado](12-inventario-deploy-e-dependencias-legado.md)
-- [13 — Supabase/fronteira de dados](13-inventario-supabase-e-fronteira-de-dados.md)
-- [14 — Topologia Vercel](14-topologia-preview-e-coexistencia-vercel.md)
-- [15 — Gates Fases 1/2](15-fases-1-2-gates.md)
-- [16 — Runbook baseline](16-fase-0-runbook-de-captura.md)
-- [30 — Encerramento Fase 0](30-fase-0-encerramento.md)
-
-### Execução/fases finais
-
-- [25 — Plano Fase 11](25-fase-11-paridade-total-plano-de-execucao.md)
-- [26 — Plano Fase 12](26-fase-12-homologacao-plano-de-execucao.md)
-- [27 — Plano Fase 13](27-fase-13-cutover-plano-de-execucao.md)
-- [28 — Plano Fase 14](28-fase-14-estabilizacao-plano-de-execucao.md)
-- [29 — Plano Fase 15](29-fase-15-encerramento-plano-de-execucao.md)
 - [37 — Execução Fase 11](37-fase-11-paridade-execucao.md)
 - [38 — Performance](38-fase-10-performance-execucao.md)
 - [39 — Corpus real](39-fase-11-corpus-homologacao.md)
 - [40 — Homologação preparada](40-fase-12-homologacao-preparada.md)
 - [41 — Cutover readiness](41-fase-13-cutover-readiness.md)
-- [42 — Runbook estabilização](42-fase-14-estabilizacao-runbook.md)
-- [43 — Relatório final draft](43-fase-15-relatorio-final-draft.md)
+- [42 — Runbook de estabilização](42-fase-14-estabilizacao-runbook.md)
+- [43 — Relatório final pré-cutover](43-fase-15-relatorio-final-draft.md)
+- [44 — Encerramento final](44-fase-15-encerramento-final.md)
 
-### ADRs
+Os documentos 40–43 preservam o estado histórico de preparação anterior ao cutover. O documento 44 é a fonte canônica do estado final.
 
-As decisões aceitas permanecem em [`adr/`](adr/README.md). Exceções incompatíveis exigem atualização/novo ADR, não alteração silenciosa.
+## Próximo ciclo
 
-## Próximo gate externo
+A modernização está encerrada. Qualquer expansão de domínio deve começar em **um novo roadmap separado**, sem reabrir artificialmente estas fases.
 
-O único avanço cronológico que não pode ser simulado por código/documentação é publicar o **release candidate final**, homologá-lo com sessão real e então executar o movimento do domínio.
-
-Até esse gate, a modernização fica em estado de **readiness máximo sem cutover**, com produção antiga preservada.
+Possíveis temas futuros já conhecidos, fora deste escopo: Pessoas/NPCs, lore, timeline, relações, galerias, busca e outras experiências da campanha.

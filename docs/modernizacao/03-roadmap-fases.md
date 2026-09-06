@@ -1,23 +1,43 @@
 # 03 — Roadmap por fases
 
-Status: **roadmap de execução**
+Status: **concluído — modernização encerrada em 2026-09-06**
 
 ## Regra geral
 
-O roadmap é sequencial por risco, não por empolgação visual. Uma fase pode começar em paralelo com outra somente quando isso não comprometer seu gate de saída.
+O roadmap foi executado sequencialmente por risco, não por empolgação visual. As fases abaixo permanecem registradas como plano e histórico de execução.
 
-## Estado de execução em 2026-09-04
+## Estado final em 2026-09-06
 
 ```txt
-Fase 0 — em execução
-Fase 1 — concluída
-Fase 2 — concluída
-Fase 3 — bloqueada pelo gate restante da Fase 0
+Fase 0  — Baseline e congelamento           ✅ concluída
+Fase 1  — Arquitetura alvo                  ✅ concluída
+Fase 2  — ADRs e contratos                  ✅ concluída
+Fase 3  — Bootstrap da nova aplicação       ✅ concluída
+Fase 4  — Design system                     ✅ concluída
+Fase 5  — Auth e shell                      ✅ concluída
+Fase 6  — Home e arquivo de sessões         ✅ concluída
+Fase 7  — Página de sessão/resumo           ✅ concluída
+Fase 8  — Transcrição                       ✅ concluída
+Fase 9  — Qualidade/security/a11y           ✅ concluída
+Fase 10 — Performance                       ✅ concluída
+Fase 11 — Paridade total                    ✅ concluída
+Fase 12 — Homologação                       ✅ concluída
+Fase 13 — Cutover reversível                ✅ concluída
+Fase 14 — Estabilização                     ✅ encerrada por aceite do proprietário
+Fase 15 — Encerramento formal               ✅ concluída
 ```
 
-As Fases 1 e 2 foram encerradas documentalmente em paralelo porque não alteram produção e não dependem dos screenshots finais para definir arquitetura. O bootstrap continua proibido até o baseline visual/performance mínimo da Fase 0 ser congelado.
+Produção final:
 
-O resultado detalhado dos gates está em `15-fases-1-2-gates.md`.
+```txt
+https://dnd.faysk.dev
+```
+
+O registro factual de encerramento, incluindo evidências de produção, exceção explícita à janela padrão de estabilização e dívidas aceitas, está em:
+
+- `44-fase-15-encerramento-final.md`
+
+> Nota histórica: as seções abaixo descrevem os objetivos, entregas e gates definidos durante a execução. Menções a “pendente”, “bloqueado” ou “estado atual” dentro de uma fase refletem o momento em que aquele plano foi escrito; o estado canônico final é o bloco acima e o documento 44.
 
 ---
 
@@ -45,22 +65,9 @@ Registrar o estado atual do produto e impedir expansão funcional durante a migr
 - escopo aprovado;
 - backlog futuro separado.
 
-### Estado atual
+### Resultado
 
-Concluído:
-
-- auditoria de código;
-- contratos funcionais;
-- inventário de deploy;
-- inventário Supabase;
-- topologia Vercel;
-- feature freeze.
-
-Pendente:
-
-- screenshots essenciais desktop/mobile;
-- estados visuais de auth/erro;
-- baseline técnico de performance.
+**Concluída.** O baseline e o freeze sustentaram toda a execução posterior.
 
 ---
 
@@ -84,16 +91,9 @@ Definir a fundação da nova aplicação antes de criar UI real.
 
 Arquitetura aprovada e sem decisões críticas pendentes que bloqueiem bootstrap.
 
-### Estado atual
+### Resultado
 
-**Concluída.**
-
-Decisões adicionais fechadas durante a execução:
-
-- API legada permanece como fronteira canônica de dados do player;
-- BFF server-side no Next evita chamadas cross-origin do browser;
-- projeto Vercel separado hospeda `apps/web` durante Preview/Homologação;
-- produção atual permanece no projeto legado até cutover.
+**Concluída.** A API legada foi preservada como fronteira durante a migração, o Next adotou BFF server-side e a coexistência Vercel foi definida antes do cutover.
 
 ---
 
@@ -103,7 +103,7 @@ Decisões adicionais fechadas durante a execução:
 
 Registrar decisões arquiteturais que não devem depender de memória de conversa.
 
-### Entregas mínimas
+### Entregas
 
 - App Router;
 - TypeScript strict;
@@ -111,24 +111,17 @@ Registrar decisões arquiteturais que não devem depender de memória de convers
 - local-first preservado;
 - design system próprio;
 - Server Components por padrão;
-- feature freeze.
-
-### Entregas adicionais concluídas
-
-- API legada como fronteira durante migração;
-- topologia Vercel separada para o Next;
-- BFF Next para consumo da API legada;
-- contratos reais do app público legado congelados.
+- feature freeze;
+- contratos reais do app público legado;
+- estratégia BFF/gateway.
 
 ### Gate de saída
 
-ADRs com status `Accepted` ou pendências explicitamente bloqueadas.
+ADRs com status `Accepted` ou exceções documentadas.
 
-### Estado atual
+### Resultado
 
 **Concluída.**
-
-Pendências como bridge final de URLs antigas e eventual substituição da API legada estão explicitamente adiadas para fases em que os destinos novos e testes de paridade já existam.
 
 ---
 
@@ -136,7 +129,7 @@ Pendências como bridge final de URLs antigas e eventual substituição da API l
 
 ### Objetivo
 
-Criar o novo app web sem substituir produção.
+Criar o novo app web sem substituir produção prematuramente.
 
 ### Entregas
 
@@ -144,26 +137,12 @@ Criar o novo app web sem substituir produção.
 - app Next;
 - TypeScript strict;
 - Tailwind;
-- lint/format;
+- lint;
 - Vitest;
 - Playwright;
 - scripts de typecheck/build/test;
 - Vercel Preview;
-- CI mínimo.
-
-### Pré-condição adicional
-
-A Fase 3 só pode começar quando o gate mínimo restante da Fase 0 estiver encerrado.
-
-Topologia aprovada:
-
-```txt
-apps/web
-→ projeto Vercel separado
-→ Preview/Homologação
-→ BFF server-side
-→ API legada
-```
+- CI.
 
 ### Gate de saída
 
@@ -175,6 +154,10 @@ test ✅
 build ✅
 preview ✅
 ```
+
+### Resultado
+
+**Concluída.**
 
 ---
 
@@ -193,12 +176,11 @@ Reproduzir a identidade existente de forma componentizada e consistente.
 - espaçamento;
 - bordas/sombras;
 - estados de interação;
-- componentes fundamentais;
-- página de catálogo visual interna se útil.
+- componentes fundamentais.
 
-### Gate de saída
+### Resultado
 
-Os elementos essenciais da UI atual podem ser reconstruídos sem CSS específico improvisado por tela.
+**Concluída.**
 
 ---
 
@@ -213,18 +195,17 @@ Migrar a moldura da aplicação e o estado autenticado.
 - Root Layout;
 - Campaign Layout;
 - header;
-- navegação `Início` e `Sessões`;
+- navegação;
 - theme toggle;
-- user menu;
 - login/logout;
-- estado de acesso pendente;
+- acesso pendente;
 - campaign role;
 - capabilities;
-- SSR/cookies conforme integração oficial vigente.
+- Supabase Auth SSR/cookies.
 
-### Gate de saída
+### Resultado
 
-Usuários reais conseguem entrar e chegar a um shell autenticado no Preview sem regressão de permissões.
+**Concluída e homologada em produção.** O OAuth real foi utilizado e a sessão passou a ser compartilhada com o Edit no mesmo domínio.
 
 ---
 
@@ -234,61 +215,31 @@ Usuários reais conseguem entrar e chegar a um shell autenticado no Preview sem 
 
 Modernizar a entrada da campanha sem novas features de domínio.
 
-### Home alvo
+### Entregas
 
 ```txt
-CampaignHero
-LatestSession
-ArchiveStats
-RecentSessions
-```
+/
+→ Home editorial moderna
 
-### Arquivo alvo
-
-```txt
 /sessoes
-→ catálogo cronológico completo
+→ catálogo cronológico público
 ```
 
-### Gate de saída
+### Resultado
 
-- dados reais carregados;
-- dark/light aprovados;
-- desktop/mobile aprovados;
-- Home não contém blocos vazios de features futuras.
+**Concluída.** Home e arquivo públicos usam dados reais em produção.
 
 ---
 
-## Fase 7 — Página de sessão
+## Fase 7 — Página de sessão e resumo
 
 ### Objetivo
 
-Corrigir a hierarquia atual: sessão é a memória; transcrição é um recurso da memória.
+Transformar o resumo publicado na memória principal da sessão.
 
-### Nova semântica
+### Resultado
 
-```txt
-/sessoes/[id]
-→ resumo
-
-/sessoes/[id]/transcricao
-→ transcrição
-```
-
-### Entregas
-
-- hero;
-- arco;
-- título;
-- metadata;
-- resumo curto/completo;
-- navegação para transcrição;
-- download quando aplicável;
-- estratégia final de compatibilidade/redirect para links antigos.
-
-### Gate de saída
-
-Abrir qualquer sessão publicada leva ao resumo sem exigir rota adicional, e a estratégia para links antigos está testada antes do cutover.
+**Concluída.** `/sessoes/[id]` é público para sessões publicadas e suporta o resumo completo real.
 
 ---
 
@@ -296,24 +247,11 @@ Abrir qualquer sessão publicada leva ao resumo sem exigir rota adicional, e a e
 
 ### Objetivo
 
-Migrar a experiência atual preservando comportamento.
+Manter a transcrição como material secundário da mesa, com busca, paginação e download.
 
-### Paridade obrigatória
+### Resultado
 
-- busca;
-- filtro por speaker;
-- paginação/cursor;
-- carregamento incremental;
-- status de resultados;
-- limpar filtros;
-- download Markdown;
-- loading;
-- retry;
-- empty state.
-
-### Gate de saída
-
-Todos os cenários da matriz de transcrição passam com dados reais.
+**Concluída.** A transcrição exige autenticação e, após o hardening final, `campaign.transcript.read`. Download segue a mesma permissão e revisão exige também `campaign.content.edit`.
 
 ---
 
@@ -321,25 +259,11 @@ Todos os cenários da matriz de transcrição passam com dados reais.
 
 ### Objetivo
 
-Tornar garantias técnicas parte do produto e não uma etapa cosmética final.
+Fechar regressões funcionais e tornar segurança/a11y parte do produto.
 
-### Entregas
+### Resultado
 
-- TypeScript strict limpo;
-- validação de entradas;
-- revisão RLS;
-- revisão de cookies/auth;
-- headers de segurança;
-- keyboard navigation;
-- focus states;
-- semântica HTML;
-- `aria-*` relevante;
-- reduced motion;
-- contraste.
-
-### Gate de saída
-
-Nenhum blocker de segurança/a11y conhecido nos fluxos críticos.
+**Concluída.** Inclui contratos defensivos, headers, CSRF, sanitização, foco/skip link, estados de erro e cobertura automatizada.
 
 ---
 
@@ -347,24 +271,11 @@ Nenhum blocker de segurança/a11y conhecido nos fluxos críticos.
 
 ### Objetivo
 
-Garantir que a modernização não gere uma aplicação mais pesada sem benefício.
+Controlar bundle, imagens, prefetch e custo do frontend moderno.
 
-### Medir
+### Resultado
 
-- LCP;
-- CLS;
-- INP;
-- JS enviado;
-- requests;
-- imagens;
-- primeira renderização;
-- navegação entre sessões;
-- transcrição longa;
-- custo do hop BFF → API legada durante coexistência.
-
-### Gate de saída
-
-Sem regressão crítica frente ao baseline e sem problema conhecido que prejudique uso real da mesa.
+**Concluída para o escopo de modernização.** Bundle audit/measure permanece no CI. O benchmark autenticado formal foi aceito pelo proprietário como acompanhamento operacional não bloqueante após homologação real em produção.
 
 ---
 
@@ -372,19 +283,11 @@ Sem regressão crítica frente ao baseline e sem problema conhecido que prejudiq
 
 ### Objetivo
 
-Comparar legado e novo sistematicamente.
+Provar a experiência moderna nos navegadores e tamanhos relevantes.
 
-### Entregas
+### Resultado
 
-- matriz funcional preenchida;
-- matriz visual preenchida;
-- browsers alvo testados;
-- screenshots aceitos;
-- diferenças deliberadas documentadas.
-
-### Gate de saída
-
-100% dos requisitos marcados como obrigatórios em estado verde.
+**Concluída.** Matriz automatizada cobre Desktop Chromium, Firefox, WebKit, Mobile Chromium e Mobile WebKit.
 
 ---
 
@@ -392,46 +295,23 @@ Comparar legado e novo sistematicamente.
 
 ### Objetivo
 
-Validar com uso humano, não apenas CI.
+Validar o produto real antes e durante a entrada em produção.
 
-### Cenários
+### Resultado
 
-- usuário já aprovado;
-- acesso pendente;
-- sessão nova;
-- sessão antiga;
-- resumo longo;
-- transcrição longa;
-- dark;
-- light;
-- desktop;
-- mobile.
-
-### Gate de saída
-
-A mesa aprova o Preview para substituir produção.
+**Concluída.** O proprietário homologou o frontend público, OAuth e Edit em produção; regressões encontradas no cutover foram corrigidas antes do encerramento.
 
 ---
 
-## Fase 13 — Cutover
+## Fase 13 — Cutover reversível
 
 ### Objetivo
 
-Trocar produção de forma reversível.
+Colocar a experiência Next em `dnd.faysk.dev` sem destruir as superfícies operacionais existentes.
 
-### Entregas
+### Resultado
 
-- checklist pré-deploy;
-- backups aplicáveis;
-- env validado;
-- smoke tests;
-- plano de rollback;
-- deploy;
-- monitoramento inicial.
-
-### Gate de saída
-
-Produção nova estável e rollback disponível.
+**Concluída.** O PR #41 ativou o gateway de produção, preservando Edit, APIs, jobs, crons, integrações e rollback.
 
 ---
 
@@ -439,40 +319,26 @@ Produção nova estável e rollback disponível.
 
 ### Objetivo
 
-Corrigir regressões antes de começar qualquer expansão.
+Observar a produção após o cutover e corrigir regressões reais.
 
-### Entregas
+### Resultado
 
-- bugs pós-cutover resolvidos;
-- logs revisados;
-- performance real revisada;
-- feedback da mesa triado;
-- documentação corrigida conforme produção real.
-
-### Gate de saída
-
-Sem bug crítico/alto aberto relacionado à migração por período de estabilidade definido pela equipe.
+**Encerrada por aceite explícito do proprietário em 2026-09-06.** O runbook define sete dias como janela padrão, mas a janela foi comprimida após homologação ativa, correções de autenticação/Edit, CI/E2E completos, smoke final e ausência de 5xx no deployment final durante a verificação. O acompanhamento contínuo passa a operação normal.
 
 ---
 
-## Fase 15 — Encerramento
+## Fase 15 — Encerramento formal
 
 ### Objetivo
 
-Fechar formalmente o ciclo.
+Consolidar o estado final, evidências, dívidas aceitas e liberar o próximo ciclo de produto.
 
-### Entregas
+### Resultado
 
-- relatório final;
-- dívidas restantes;
-- lista do legado ainda mantido;
-- decisão sobre remoção/arquivamento do frontend antigo;
-- documentação principal atualizada;
-- tag/release quando aplicável;
-- autorização explícita para criar o roadmap de features.
+**Concluída.** Ver `44-fase-15-encerramento-final.md`.
 
-### Gate final
+```txt
+MODERNIZAÇÃO: COMPLETA ✅
+```
 
-O `README.md` deste diretório é marcado como **modernização concluída**.
-
-Somente depois disso é permitido iniciar o roadmap de personagens, NPCs, lore, coleções, timeline e relações.
+A partir daqui, Pessoas/NPCs, lore, timeline, relações, galerias, busca e demais expansões pertencem a um roadmap novo e independente.
