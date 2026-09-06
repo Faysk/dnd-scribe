@@ -35,17 +35,18 @@ jobs:
       - name: Run quality gate
         run: npm run check
 
-      - name: Build static frontend
+      - name: Build operator surface
         run: npm run build
 
-      - name: Verify public output
+      - name: Verify operator-only public output
         run: |
-          test -s public/index.html
-          test -s public/app.js
-          test -s public/jobs.js
-          test -s public/costs.js
-          test -s public/monitoring.js
-          test -s public/monitoring.css
+          test ! -e public/index.html
+          test -s public/central-local/index.html
+          test -s public/central-local/app.js
+          test -s public/central-local/styles.css
+          test -s public/roll20.html
+          test -s public/api-docs.html
+          test -s public/theme.js
 
   python-syntax:
     name: Python syntax
