@@ -18,14 +18,13 @@ export type HealthPayload = {
   }
 }
 
-export type HealthEnvironment = Pick<
-  NodeJS.ProcessEnv,
-  | 'DND_LEGACY_ORIGIN'
-  | 'VERCEL_GIT_COMMIT_SHA'
-  | 'VERCEL_GIT_COMMIT_REF'
-  | 'VERCEL_ENV'
-  | 'NODE_ENV'
->
+export type HealthEnvironment = {
+  DND_LEGACY_ORIGIN?: string
+  VERCEL_GIT_COMMIT_SHA?: string
+  VERCEL_GIT_COMMIT_REF?: string
+  VERCEL_ENV?: string
+  NODE_ENV?: string
+}
 
 export function buildHealthPayload(env: HealthEnvironment = process.env): HealthPayload {
   const supabaseConfigured = Boolean(readPublicSupabaseConfig())
