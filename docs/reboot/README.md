@@ -4,7 +4,7 @@
 
 Este é o ponto de entrada vigente para o reboot. Consolida as decisões do proprietário e substitui a sequência dos planos antigos, preservados como histórico. Não declara migração, backup, configuração de ambientes ou deploy concluídos.
 
-**Direção:** destino final 100% cloud com PC desligado; apoio local somente temporário; transcrição como origem; dados preservados; últimas versões estáveis com exceções aprovadas; main = Production; Preview = homologação; outras branches temporárias; Home/sessões/resumos antes do Edit integrado; novas funcionalidades depois da base completa.
+**Direção:** site e Edit em cloud; transcrição pesada no PC, modernizando o fluxo que funciona; dados preservados; tecnologias na última versão estável verificada, com exceção Node 24 aprovada para hosting gratuito; main = Production; Preview = homologação; outras branches temporárias; Home/sessões/resumos antes do Edit integrado; novas funcionalidades depois da base completa.
 
 ## Comece por aqui
 
@@ -36,7 +36,7 @@ Este é o ponto de entrada vigente para o reboot. Consolida as decisões do prop
 - [Evidência da entrega documental](registros/entrega-documental.md).
 - [Fundação web e hospedagem gratuita](registros/fundacao-web.md).
 - [Exceção Node 24 para hospedagem gratuita](registros/node24-gratuito.md).
-- [Destino final: operação integral em cloud](registros/operacao-cloud.md).
+- [Site em cloud, transcrição pesada no PC](registros/operacao-cloud.md).
 - [Template de evidência](templates/evidencia.md).
 - [Template de decisão](templates/decisao.md).
 - [Pacotes oficiais e referências visuais](referencias/README.md).
@@ -44,7 +44,7 @@ Este é o ponto de entrada vigente para o reboot. Consolida as decisões do prop
 
 ## Próxima execução
 
-Concluir R0: inventário de dados/fluxos, viabilidade de transcrição e armazenamento cloud gratuitos, versões oficiais, backup/restauração isolada e configuração de Preview. A localização de lore/pipipi permanece pendente para sua publicação auxiliar.
+Concluir R0: inventário de dados e fluxos, baseline da transcrição local, consulta de versões oficiais, backup/restauração isolada e isolamento dos dados de Preview. A localização de lore/pipipi permanece pendente para sua publicação auxiliar.
 
 ## Manutenção
 

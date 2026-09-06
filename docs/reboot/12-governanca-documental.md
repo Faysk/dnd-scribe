@@ -25,7 +25,7 @@ Este reboot substitui a ordem de execução do roadmap de modernização total e
 
 - Roadmap total antigo: referência histórica; não executar suas oito fases automaticamente.
 - Modernização pública 0–15: marco de escopo anterior, sem validade como conclusão do reboot.
-- Plano local-first antigo: fonte histórica de comportamentos/dados; sua arquitetura foi substituída pelo destino 100% cloud. O recorte novo está no roadmap R0–R5 e na [decisão cloud](registros/operacao-cloud.md).
+- Plano local-first antigo: fonte de comportamentos/requisitos; o recorte novo está no roadmap R0–R5.
 - Contrato main/prod e stack antigos: substituídos pelas políticas específicas deste diretório.
 - Design system existente: referência compatível, complementada pelos pacotes oficiais enviados.
 

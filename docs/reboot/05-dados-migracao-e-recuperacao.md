@@ -5,8 +5,6 @@
 ## Regra
 A reconstrução da aplicação não autoriza apagar dados. Manter fontes originais intactas até que a migração, a restauração e a nova operação estejam verificadas.
 
-No destino final, todos os dados necessários à operação e à recuperação têm cópias duráveis em cloud. O acervo local é fonte de migração, não armazenamento operacional permanente. Inventariar e transferir áudio, transcrição original, revisões, catálogos e artefatos privados com autorização e reconciliação; a decisão cloud não torna esses dados públicos.
-
 ## Inventário obrigatório em R0
 | Conjunto | Cobertura a levantar |
 | --- | --- |
@@ -22,6 +20,8 @@ No destino final, todos os dados necessários à operação e à recuperação t
 Inventário por provider/localização, com contagem, bytes, responsável, estratégia de cópia e lacunas. Segredos e conteúdo privado não são anexados ao repositório público. Credenciais entram por referência de configuração, nunca por valor.
 
 ## Backup verificável
+Separar recuperação do site cloud e da operação local: dados necessários à web devem ser recuperáveis sem o PC; originais, modelos, configurações e trabalhos locais têm cópias e recuperação próprias. Não é obrigatório enviar todo áudio bruto para cloud. Resultado só é tratado como sincronizado após envio e reconciliação verificáveis.
+
 1. Definir escopo e ponto de consistência do banco e arquivos.
 2. Preservar cópia independente dos originais, com retenção e acesso definidos.
 3. Gerar manifesto de arquivos (caminho lógico, bytes, hash) e relatório de banco.
@@ -31,8 +31,6 @@ Inventário por provider/localização, com contagem, bytes, responsável, estra
 7. Registrar duração, evidência da restauração e responsável.
 
 A existência de dump ou botão de backup não prova recuperação. Definir RPO/RTO com o proprietário em R0; ainda não há metas numéricas aprovadas.
-
-O ensaio final de restauração usa um ambiente cloud isolado com o PC desligado. Backup, configuração ou credencial exclusivamente locais não satisfazem recuperação independente. Cópias locais opcionais não substituem esse gate.
 
 ## Estratégia preferida
 Começar lendo dados existentes por contratos estreitos. Mudar esquema apenas quando a nova aplicação exigir e houver mapeamento claro. Preservar IDs/URLs ou fornecer tabela de equivalência e redirecionamentos.

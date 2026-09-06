@@ -1,52 +1,36 @@
-# Destino final: operação integral em cloud
+# Site em cloud, transcrição pesada no PC
 
-> Status: direção aprovada; implementação e viabilidade de custo pendentes. Responsável: proprietário e implementador. Revisão: 2026-09-06.
+> Status: direção esclarecida e aprovada; modernização local pendente. Responsável: proprietário e implementador. Revisão: 2026-09-06.
 
-## Decisão vigente
+## Correção de escopo
 
-O projeto final deve funcionar 100% online, com o PC do proprietário desligado. O PC pode ajudar temporariamente com processos pesados e repetitivos; depois da conclusão, não permanece como dependência operacional. Esta decisão substitui a orientação local-first anterior, inclusive para áudio e transcrição. Ela não autoriza apagar dados nem executar agora upload/migração indiscriminados.
+“Site 100% em cloud” não significa mover a transcrição pesada para cloud. A interpretação anterior foi excessiva e está substituída por este registro. O proprietário confirmou que o processamento local é rápido e o fluxo atual funciona; a intenção é modernizar sua tecnologia, preservando essa capacidade.
 
-## O que precisa ficar em cloud
-
-| Capacidade | Destino obrigatório |
+| Parte | Destino e comportamento |
 | --- | --- |
-| Home, sessões e resumos | Aplicação web publicada |
-| Login, Edit, revisão e publicação | Mesma aplicação e autorização, sem companion obrigatório |
-| Áudio original, transcrições, artes e histórico | Storage/banco duráveis, com visibilidade por recurso |
-| Transcrição e outros processos longos | Executor cloud, estado de job persistente e retomada |
-| Agendamentos, integrações e automações | Execução cloud sem agente pessoal conectado |
-| Build e deploy de mudanças | Pipeline cloud; WSL somente auxiliar temporário |
-| Backup, restauração e operação | Cópias e configuração recuperáveis sem o PC |
+| Home, sessões, resumos, login e permissões | Cloud; disponíveis com o PC desligado |
+| Edit, revisão e publicação de conteúdo sincronizado | Mesma aplicação cloud, sem segundo site/cadastro/editor |
+| Dados necessários ao site | Banco/storage cloud, com visibilidade e recuperação independentes do PC |
+| Transcrição pesada, modelos, GPU/CPU e arquivos de trabalho | PC/companion local; exige a máquina ligada para executar |
+| Envio de resultados | Integração autenticada local -> cloud; retomável e sem duplicação |
+| Migrações, saneamento e outros lotes auxiliares | Apoio local temporário quando útil |
 
-Cloud não significa público: áudio, transcrição e material interno continuam privados conforme as permissões. Um repositório e uma interface canônica podem usar mais de um serviço de infraestrutura. Um worker não é outro site ou outro Edit.
+O companion permanece como componente especializado do produto. Não será retirado por ser local nem substituído por worker cloud obrigatório. Apoio temporário a outras tarefas não deve ser confundido com essa capacidade permanente de transcrição local.
 
-## Uso temporário da máquina
+## Com o PC desligado
 
-Migração de acervo, conversão, saneamento, geração de derivados ou reprocessamento em lote podem usar o PC. Registrar responsável, tarefa delimitada, checkpoint, hashes de entradas/saídas, destino cloud e condição de encerramento. Resultados só contam como entregues após upload autorizado, reconciliação e leitura pelo sistema cloud.
+O site permite ler, revisar e publicar conteúdo que já está em cloud. Novas transcrições locais ficam indisponíveis ou aguardam o executor, com estado claro; não há promessa de processamento offline nem fallback pago automático em cloud. Resultados ainda não enviados e áudio somente local não são apresentados como conteúdo cloud pronto.
 
-O plano de retirada inclui remover a dependência de caminhos locais, localhost, rede doméstica, túneis e runners pessoais. O processamento de novas sessões e retries deve funcionar em cloud, mesmo depois que o lote histórico terminar. Não usar o PC como fallback silencioso quando uma franquia cloud acabar.
+## Modernizar preservando o que funciona
 
-Fontes locais não são apagadas por esta decisão. Preservá-las até confirmar cópia, restauração e operação cloud; qualquer limpeza posterior é uma ação separada. Cópias opcionais de segurança/desenvolvimento locais não podem ser necessárias para operar ou recuperar o produto.
+Registrar a instalação, modelo, parâmetros, diretórios e integrações atuais como baseline. Levantar versões recentes de Python, motor, bibliotecas e componentes CPU/GPU, validar compatibilidade e atualizar em ambiente isolado. Preservar originais, configurações e resultados anteriores recuperáveis.
 
-## Gratuidade e viabilidade
+Comparar o mesmo corpus autorizado antes/depois: qualidade, falantes/timestamps, tempo, memória e estabilidade. Validar interrupção, retomada, cancelamento, reenvio e integração com o Edit. O funcionamento atual é confirmado pelo proprietário; a versão modernizada exige teste prático próprio. Não trocar motor ou reinventar o pipeline apenas por ser reboot.
 
-A meta de custo zero continua. Node 24 é uma [exceção já aceita](node24-gratuito.md). Não presumir que hospedagem web gratuita também cubra horas de transcrição, memória/GPU, storage, tráfego e retenção de backups.
+## Dados, custo e encerramento
 
-R0 precisa medir o corpus, frequência de sessões, tempo de processamento e armazenamento, e consultar ofertas/limites vigentes antes de escolher o executor. Créditos promocionais que expiram não comprovam operação gratuita sustentável. Não foi escolhido nem provisionado um novo serviço de transcrição por esta documentação.
+Dados necessários ao site ficam em cloud e têm recuperação independente do PC. Originais, modelos e trabalho pesado podem permanecer locais, com preservação e backup próprios. A política de áudio bruto cloud depende de necessidade, permissões e volume; esta decisão não exige upload de todo o acervo nem autoriza apagar fontes.
 
-Se o volume necessário não couber gratuitamente em cloud, registrar o bloqueio concreto e opções de quota, fila, desempenho ou custo para decisão do proprietário. Não assumir plano pago, excluir recursos essenciais ou transformar execução local em arquitetura definitiva. O planejamento de viabilidade vem agora; a implementação integral segue a sequência pública -> Edit -> operação.
+Gratuidade e a exceção [Node 24](node24-gratuito.md) continuam válidas. Não há requisito de contratar transcrição cloud. Build/deploy podem usar CI cloud e apoio WSL temporário; isso é separado do companion permanente de transcrição.
 
-## Aceite obrigatório de R4
-
-Com PC/WSL/companion do proprietário desligados e sem acesso à rede doméstica:
-
-1. De outro dispositivo, importar uma nova sessão autorizada para storage privado.
-2. Iniciar transcrição, acompanhar progresso real e receber o resultado em cloud.
-3. Interromper/reiniciar um executor e verificar recuperação sem perda nem publicação duplicada.
-4. Revisar texto/falantes, ouvir a fonte permitida, gerar os derivados previstos e publicar pelo Edit.
-5. Conferir acesso público e privado, revogação e integridade de IDs/hashes/proveniência.
-6. Executar integrações/agendamentos obrigatórios e um build/deploy sem runner pessoal.
-7. Restaurar dados em ambiente cloud isolado e verificar conteúdo recuperado.
-8. Registrar uso/custos, limites e comportamento quando a franquia é atingida; nenhum gasto ou fallback local automático.
-
-Aprovação desse conjunto é necessária para dizer que o reboot funciona 100% em cloud. Site acessível, contêiner aprovado ou importação de resultados feitos no PC não fecham o gate isoladamente.
+R4 exige duas provas: **site/Edit operando com o PC desligado** sobre conteúdo sincronizado; e **transcrição modernizada no PC ligado**, seguida de envio verificável e revisão/publicação cloud. A sequência Home/sessões/resumos -> Edit -> operação completa -> novas features permanece.

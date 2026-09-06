@@ -13,7 +13,8 @@
 | Acessibilidade | Teclado, foco, nomes, hierarquia, contraste e movimento reduzido |
 | Auth | Visitante, permitido, negado, revogado e sessão expirada |
 | Dados | Restauração, reconciliação e preservação da proveniência |
-| Cloud | Nova sessão completa, interrupção/retomada de worker, automações e restauração com PC desligado |
+| Local | Instalação limpa, upgrade, GPU/CPU, interrupção e comparação de qualidade/desempenho com o fluxo atual |
+| Fronteira local/cloud | Site/Edit com PC desligado sobre conteúdo sincronizado; transcrição com PC ligado, envio retomável e sem duplicação |
 | Deploy | SHA/ref/ambiente, deployment terminal e smoke no domínio |
 
 Testes devem provar comportamentos; não adicionar testes que apenas repetem constantes de implementação. Testes ignorados devem ter motivo e impacto explícitos.
@@ -36,12 +37,8 @@ Usar paginação, payloads limitados e cache adequado à visibilidade. Não faze
 
 Definir budgets numéricos de bundle, latência, egress e processamento após baseline R0/R1; não inventar metas já aprovadas. Toda medição registra dispositivo/rede/dado/versão para permitir comparação.
 
-A meta é operação gratuita integral em cloud. Medir também áudio armazenado, duração/frequência de transcrições, memória e tentativas. Limites de fila, concorrência e retry precisam impedir consumo descontrolado; uma quota esgotada deve produzir estado visível e recuperável, sem acionar pagamento ou PC automaticamente. Validar viabilidade antes de contratar/provisionar.
-
 ## Evidência por entrega
 Usar [template de evidência](templates/evidencia.md). Identificar SHA exato, ambiente, testes, contagens, skips, screenshots e limitações. “Código existe”, “CI passou”, “publicado” e “confirmado pelo usuário” são estados diferentes.
 
 ## Condições para não promover
 Perda de dados inexplicada, exposição de conteúdo privado, auth inconsistente, falha de fluxo essencial, versão antiga sem decisão registrada, SHA desconhecido, ausência de recuperação praticável ou build Preview diferente estruturalmente do de produção.
-
-Para encerrar R4, também impede promoção final qualquer dependência obrigatória do PC, WSL, companion, túnel doméstico ou cópia exclusiva local. Isso não impede a entrega pública intermediária de R2, cujo escopo e limitações permanecem explícitos.

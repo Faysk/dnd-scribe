@@ -47,7 +47,7 @@ PR obrigatório, checks obrigatórios, impedimento de force-push/eliminação de
 Mesma estrutura não significa mesmas credenciais ou mesmo banco. Copiar produção inteira para testes não é requisito; preferir fixtures sintéticas e amostras autorizadas com conteúdo privado controlado.
 
 ## Aplicação única
-Home, sessões, resumos, login, Edit e API HTTP convergem para um projeto web. Ambientes e workers cloud especializados não são sites concorrentes. Recursos de dados isolados para Preview são infraestrutura de teste, não uma segunda aplicação pública. Build/deploy finais devem funcionar por pipeline cloud sem runner pessoal obrigatório.
+Home, sessões, resumos, login, Edit e API HTTP convergem para um projeto web. Ambientes e um serviço local especializado não são sites concorrentes. Recursos de dados isolados para Preview são infraestrutura de teste, não uma segunda aplicação pública.
 
 ## Transição e deploy
 O roteamento operacional antigo só permanece durante janela documentada. A fase pública pode ser promovida antes do Edit novo desde que o acesso operacional existente seja preservado e testado. Depois da migração do Edit, retirar suas rotas e assets antigos.

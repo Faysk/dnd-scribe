@@ -21,7 +21,7 @@ Esses são resultados pontuais da auditoria, não monitoramento atual nem valida
 | Item | Estado |
 | --- | --- |
 | Direção do proprietário | Registrada |
-| Destino integral cloud | Aprovado; substitui local-first; [decisão](registros/operacao-cloud.md) |
+| Divisão local/cloud | Site/Edit cloud; transcrição pesada local permanente, com modernização pendente; [decisão](registros/operacao-cloud.md) |
 | Documentação/roadmap | Produzidos; validação registrada na entrega |
 | Referências visuais e pacotes | Cópias preservadas com manifesto |
 | Stack mais recente | Web verificada e fixada; Python/GPU/banco ainda pendentes |
@@ -46,8 +46,8 @@ Esses são resultados pontuais da auditoria, não monitoramento atual nem valida
 | RSK-09 | Documentos contraditórios | Índice ativo e avisos de substituição | Toda entrega |
 | RSK-10 | Abandonar trabalho útil em branches | Inventário antes de exclusão | R0 |
 | RSK-11 | Pacote visual conter propostas ainda não implementadas | Separar base, propostas e aceite visual | R1/R2 |
-| RSK-12 | Transcrição/storage não caberem nas franquias gratuitas | Medir corpus/uso e comprovar viabilidade; não assumir gasto ou PC permanente | R0/R4 |
-| RSK-13 | Apoio local temporário virar dependência definitiva | Inventário de dependências e aceite completo com PC desligado | R3/R4 |
+| RSK-12 | Atualização quebrar a transcrição local que funciona | Baseline, comparação no mesmo corpus, instalação isolada e recuperação da versão anterior | R4 |
+| RSK-13 | Site depender do PC para conteúdo já sincronizado | Testar leitura, revisão e publicação cloud com companion desligado | R2/R3/R4 |
 
 ## Decisões abertas
 | ID | Questão | Encaminhamento |
@@ -59,7 +59,6 @@ Esses são resultados pontuais da auditoria, não monitoramento atual nem valida
 | DEC-05 | Fluxos atuais realmente necessários | Validar matriz de paridade com operador |
 | DEC-06 | Marca/composição final da primeira Home | Revisar composição com os assets fornecidos |
 | DEC-07 | Destino dos PRs/épico antigos | Classificar trabalho reaproveitável; não fechar automaticamente |
-| DEC-08 | Executor, storage e recuperação 100% cloud dentro do custo zero | Levantar volume/frequência, ensaiar lote e verificar cotas antes de escolher providers |
 
 ## Como atualizar
 Mudou código, ambiente, versão, escopo ou dado? Atualizar o módulo correspondente e este registro, incluindo data/evidência. Uma validação pendente permanece pendente até existir resultado. Nunca transportar “100% concluído” de um roadmap anterior para este reboot.

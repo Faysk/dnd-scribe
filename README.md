@@ -6,7 +6,7 @@ Site, arquivo e ferramentas da campanha de D&D.
 
 O proprietário definiu um reboot por entregas, preservando os dados: primeiro Home, sessões e resumos; depois Edit integrado e operação completa; novas funcionalidades por último.
 
-**Destino final: 100% cloud, com o PC do proprietário desligado**, incluindo transcrição, Edit, dados, jobs e recuperação. A máquina pessoal só pode ajudar temporariamente em lotes pesados/repetitivos. Essa direção substitui o plano local-first anterior: [decisão e aceite](docs/reboot/registros/operacao-cloud.md).
+**Site e Edit em cloud; transcrição pesada no PC.** Modernizar o companion e o fluxo local que já funciona. O site opera com o PC desligado sobre conteúdo sincronizado; novas transcrições dependem dele ligado. [Divisão e aceite](docs/reboot/registros/operacao-cloud.md).
 
 - [Documentação e índice do reboot](docs/reboot/README.md)
 - [Roadmap e critérios de aceite](docs/reboot/10-roadmap-e-aceite.md)
@@ -27,7 +27,7 @@ api/                APIs e jobs de backend ainda hospedados no serviço operacio
 lib/                domínio/backend compartilhado
 web/central-local/  Edit/operador temporário, não é frontend público
 web/assets/sessions/arte histórica das sessões enquanto o storage não for unificado
-local-companion/    legado local temporário; será substituído por operação cloud
+local-companion/    companion de processamento local
 integrations/       integrações externas (Roll20 etc.)
 supabase/           migrations e configuração de dados
 docs/               documentação atual

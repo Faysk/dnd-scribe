@@ -13,7 +13,7 @@ A presença de código/documentação histórica é evidência de implementaçã
 | Gestão de permissões | Implementação e documentação anteriores | Matriz real, papéis e recursos |
 | Listar/editar sessão | Fluxos existentes | Campos, validação, conflitos e persistência |
 | Importar ZIP Craig | Companion e documentação | Importação real, cópia verificada e recuperação |
-| Processar transcrição | Companion legado como referência | Executor cloud, qualidade, progresso, custo e retomada sem PC |
+| Processar transcrição | Companion | Windows, GPU, CPU, qualidade e progresso |
 | Revisar texto/falante | Código de revisão | Preservar original, timestamps e autoria |
 | Gerir artes | Implementação existente | Otimização, acesso, URLs e persistência |
 | Publicar resumos/conteúdo | APIs e ferramentas | Aprovação, idempotência, retirada e histórico |
@@ -28,14 +28,16 @@ Em R0, cada linha vira registro de paridade: IDs de rotas/telas, consumidor, dad
 1. Shell do Edit, sessão única e capacidade de entrada.
 2. Catálogo e metadados de sessão.
 3. Revisão de conteúdo e resumos, imagens e publicação.
-4. Interface canônica para upload privado, processamento cloud e acompanhamento de jobs.
+4. Interface canônica para processamento local e acompanhamento de jobs.
 5. Revisão de transcrição e acesso autorizado à fonte.
 6. Integrações que o inventário confirmar como necessárias.
 
 Essa sequência detalha R3/R4 e pode mudar conforme dependências descobertas. Não iniciar antes do aceite de Home/sessões/resumos.
 
 ## Contrato de autenticação
-Mesma sessão entre público e Edit; autorização no servidor por campanha/recurso/ação; logout encerra o acesso web; revogação tem efeito verificável. Separar “entrar no Edit” de “editar”, “publicar”, “ler transcrição”, “iniciar processamento cloud” e “ouvir áudio”.
+O Edit é cloud. Ler, revisar e publicar conteúdo já sincronizado não depende do PC. Controles de transcrição mostram conexão e disponibilidade do companion; execução pesada permanece local. Resultados pendentes de envio não são apresentados como disponíveis em cloud. A atualização tecnológica deve preservar o fluxo atual e comparar qualidade/desempenho antes e depois, conforme a [divisão vigente](registros/operacao-cloud.md).
+
+Mesma sessão entre público e Edit; autorização no servidor por campanha/recurso/ação; logout encerra o acesso web; revogação tem efeito verificável. Separar “entrar no Edit” de “editar”, “publicar”, “ler transcrição”, “processar localmente” e “ouvir áudio”.
 
 Definir precedência e escopos das capacidades antes da migração. Não inferir privilégio de metadados editáveis do usuário. Não assumir que o login de uma pessoa prova o isolamento entre duas contas.
 
@@ -46,5 +48,3 @@ Rascunho não é publicação. Salvar revisão não muda conteúdo público sem 
 Cada fluxo novo só substitui o antigo depois de paridade, segurança e smoke no ambiente publicado. Registrar caminho antigo, replacement, consumidores, dados, rollback e evidência de remoção. No fechamento de R3, o Edit antigo deixa de ser servido; no fechamento de R4, retirar os adapters operacionais que não tiverem consumidor.
 
 Não copiar a estrutura do monólito para TypeScript sem mudar responsabilidades. Não manter central-local, Edit novo e companion com três interfaces editoriais concorrentes.
-
-O companion pode apoiar a transição, mas R4 exige retirar sua obrigatoriedade e validar todo o ciclo com o PC desligado. Não recriar instalador Windows como requisito do produto final.
