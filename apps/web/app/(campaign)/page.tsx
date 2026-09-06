@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 
-import { ArchiveStats } from '@/components/sessions/archive-stats'
 import { LatestSession } from '@/components/sessions/latest-session'
 import { SessionCard } from '@/components/sessions/session-card'
 import { ActionLink } from '@/components/ui/action'
@@ -71,8 +70,6 @@ function CampaignHome({ sessions }: Readonly<{ sessions: readonly PublicSession[
           <BodyCopy className="mt-4">Quando a primeira memória for publicada, ela aparece aqui automaticamente.</BodyCopy>
         </Surface>
       )}
-
-      <div className="mt-10 sm:mt-12"><ArchiveStats sessions={sessions} /></div>
 
       {recent.length ? (
         <section aria-labelledby="recent-title" className="mt-12 sm:mt-16">
