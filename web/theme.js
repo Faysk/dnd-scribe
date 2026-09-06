@@ -197,6 +197,15 @@
     document.head.appendChild(style);
   }
 
+  async function refreshRbac() {
+    const response = await fetch("/api/rbac?campaignSlug=yuhara-main", {
+      headers: { Authorization: lastAuthorization },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Erro HTTP ${response.status}`);
+    latestRbac = payload;
+  }
+
   async function changeTranscriptPermission(input) {
     const profileId = input.dataset.profileId;
     const enabled = input.checked;
@@ -208,34 +217,21 @@
     input.disabled = true;
     input.dataset.busy = "1";
     try {
-      const assignment = activeTranscriptAssignment(profileId);
-      const endpoint = enabled ? "/api/rbac/assign" : "/api/rbac/revoke";
-      const body = enabled
-        ? {
-            campaignSlug: "yuhara-main",
-            profileId,
-            roleSlug: TRANSCRIPT_ROLE,
-            scopeType: "campaign",
-            scopeId: "yuhara-main",
-            reason: "Permissão de transcrição alterada no Edit.",
-          }
-        : {
-            campaignSlug: "yuhara-main",
-            assignmentId: assignment?.id,
-            reason: "Permissão de transcrição alterada no Edit.",
-          };
-      if (!enabled && !assignment?.id) return;
-      const response = await fetch(endpoint, {
+      const response = await fetch("/api/transcript-permission", {
         method: "POST",
         headers: {
           Authorization: lastAuthorization,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          campaignSlug: "yuhara-main",
+          profileId,
+          enabled,
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || `Erro HTTP ${response.status}`);
-      latestRbac = payload.rbac || latestRbac;
+      await refreshRbac();
     } catch (error) {
       input.checked = !enabled;
       window.alert(error.message || String(error));
