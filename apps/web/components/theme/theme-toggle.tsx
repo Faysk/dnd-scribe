@@ -41,15 +41,13 @@ export function ThemeToggle() {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const stored = readStoredTheme()
 
-    if (stored) {
-      document.documentElement.dataset.theme = stored
-      setTheme(stored)
-    } else {
-      document.documentElement.removeAttribute('data-theme')
-      setTheme(resolveSystemTheme(media))
-    }
+    if (stored) document.documentElement.dataset.theme = stored
+    else document.documentElement.removeAttribute('data-theme')
 
-    setReady(true)
+    const frame = window.requestAnimationFrame(() => {
+      setTheme(stored || resolveSystemTheme(media))
+      setReady(true)
+    })
 
     function handleSystemChange() {
       if (readStoredTheme()) return
@@ -57,7 +55,10 @@ export function ThemeToggle() {
     }
 
     media.addEventListener('change', handleSystemChange)
-    return () => media.removeEventListener('change', handleSystemChange)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      media.removeEventListener('change', handleSystemChange)
+    }
   }, [])
 
   function toggleTheme() {
