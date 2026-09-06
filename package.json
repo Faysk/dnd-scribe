@@ -7,7 +7,7 @@
   "scripts": {
     "build": "node scripts/sync-public.js",
     "sync:lore-runtime": "node scripts/sync-lore-runtime.js",
-    "check": "npm run check:layout && npm run check:web && npm run check:api && npm run check:workers && npm run check:roll20 && npm run check:monitoring && npm run check:summary-api && npm run check:companion",
+    "check": "pnpm run check:layout && pnpm run check:web && pnpm run check:api && pnpm run check:workers && pnpm run check:roll20 && pnpm run check:monitoring && pnpm run check:summary-api && pnpm run check:companion",
     "check:layout": "node scripts/check-canonical-layout.js",
     "check:web": "node --check web/auth-fetch.js && node --check web/roll20.js && node --check web/roll20-bridge.js && node --check web/roll20-bridge-page.js && node --check web/theme.js && node --check web/central-local/app.js && node --check web/central-local/processing-v04.js",
     "check:api": "node --check lib/discord.js && node --check lib/discord-interactions.js && node --check lib/pipeline-recovery.js && node --check lib/roll20-commands.js && node --check lib/monitoring.js && node --check lib/job-steps.js && node --check lib/companion-release.js && node --check lib/feature-auth.js && node --check api/[...path].js && node --check api/public-library.js && node --check api/ai-cost.js && node --check api/library-transcript.js && node --check api/session-download.js && node --check api/editor-segment.js && node --check api/transcript-permission.js && node --check scripts/register-discord-commands.js && node --check scripts/smoke-production-routes.js && node --check tools/audit_production_session.js && node --check tools/publish_local_text.js && node --check tools/publish_companion_release.js",
@@ -30,6 +30,7 @@
     "pg": "8.16.3"
   },
   "engines": {
-    "node": "24.x"
+    "node": "24.x",
+    "pnpm": "11.x"
   }
 }
