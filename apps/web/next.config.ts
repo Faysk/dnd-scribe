@@ -26,7 +26,9 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  // Vercel packages its own functions; standalone is for Docker/self-hosting.
+  // Next 16.3's adapter path cannot also emit the standalone server trace.
+  ...(process.env.VERCEL === '1' ? {} : { output: 'standalone' as const }),
   outputFileTracingRoot: fileURLToPath(new URL('../../', import.meta.url)),
   images: {
     remotePatterns: [
