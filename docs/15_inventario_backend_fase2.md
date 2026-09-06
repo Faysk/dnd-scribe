@@ -66,6 +66,20 @@ No slice inicial:
 
 A implementação dentro de `api/[...path].js` **permanece temporariamente ativa no projeto raiz**. Ela só pode ser removida depois que o projeto `dnd-scribe-web-next` estiver executando um build da `main` que contenha `/api/health`, e um smoke do replacement confirmar status, cache e contrato. Essa exceção é uma janela de migração explícita exigida pela #48; não autoriza criar novas dependências do endpoint legado.
 
+## Segunda janela de migração — auth-config
+
+O próximo contrato auxiliar selecionado é `GET /api/auth-config`. Apesar do nome, ele não autentica usuário nem decide permissão: apenas expõe os valores públicos necessários para inicializar o cliente Supabase e a lista de providers suportados.
+
+No replacement em `apps/web`:
+
+- a configuração pública vem do helper canônico `readPublicSupabaseConfig()` já usado pelo cliente Supabase do Next;
+- o contrato preserva `mode`, `primaryProvider`, `providers`, `supabaseUrl` e `publishableKey` do endpoint legado;
+- a resposta é `no-store` e inclui `X-Content-Type-Options: nosniff`;
+- configuração pública inválida retorna `503` em vez de inicializar o cliente com valores vazios;
+- Playwright valida status, cache, providers e formato dos valores públicos.
+
+Este slice **não altera a sessão nem a autorização** e não antecipa a Fase 3. A implementação antiga em `api/[...path].js` permanece temporariamente enquanto o projeto Web separado ainda estiver preso a build antigo. O branch legado só pode ser removido depois de um build da `main` com `/api/auth-config` estar efetivamente publicado no replacement e o smoke confirmar o contrato.
+
 ## Bloqueio de infraestrutura atual
 
 A #48 continua aberta porque `dnd-scribe-web-next` ainda é um projeto separado sem Git Integration. O projeto raiz `dnd-scribe` mantém `dnd.faysk.dev` e faz rewrites para esse projeto intermediário. A inspeção em 2026-09-06 confirmou que o deployment de produção do projeto Web ainda foi criado por bootstrap e clonou um SHA antigo da `main`, portanto não serve como replacement seguro para código novo da Fase 2.
