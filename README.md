@@ -1,152 +1,85 @@
-# DnD Scribe
+# TDA — Tem Dado Aqui
 
-Projeto para capturar, transcrever, revisar e publicar memoria de campanha de DnD com auditoria.
+Site, arquivo e ferramentas da campanha de D&D.
 
-## Reformulacao local-first
+> **Regra principal: `main = produção`.**
+>
+> Tudo que está em `main` é a versão final. Não mantemos uma segunda versão pública do frontend dentro do repositório.
 
-O projeto esta sendo reformulado para processar e guardar audio no PC do
-operador, usando a nuvem apenas para autenticacao e conteudo pequeno que
-precisa ser compartilhado.
+## Estrutura canônica
 
-- Arquitetura proposta: `docs/64-arquitetura-local-first.md`
-- Plano por fases: `docs/65-plano-migracao-local-first.md`
-- Resultado da Fase 1: `docs/66-resultado-fase-1-local-first.md`
-- Resultado da Fase 2A: `docs/67-resultado-fase-2a-central-local.md`
-- Central Local em producao: `docs/68-deploy-central-local-producao.md`
-- Indice da documentacao: `docs/README.md`
+```text
+apps/web/           ÚNICO frontend público (Next.js)
+api/                APIs e jobs de backend ainda hospedados no serviço operacional
+lib/                domínio/backend compartilhado
+web/central-local/  Edit/operador temporário, não é frontend público
+web/assets/sessions/arte histórica das sessões enquanto o storage não for unificado
+local-companion/    companion de processamento local
+integrations/       integrações externas (Roll20 etc.)
+supabase/           migrations e configuração de dados
+docs/               documentação atual
+```
 
-## App local real
+## O que NÃO existe mais
 
-O front funcional atual roda localmente com backend Python, usando Supabase real sem expor chave sensivel no navegador.
+Foram removidas as antigas demos/frontends estáticos da raiz e o antigo `web/index.html`.
+
+Não recrie:
+
+- `index.html`, `pitch.html`, `app.js`, `data.js` ou `styles.css` na raiz;
+- `css/`, `js/` ou `assets/` da antiga demo;
+- `web/index.html` ou os módulos do antigo frontend público.
+
+O CI executa `scripts/check-canonical-layout.js` e falha se uma dessas superfícies antigas voltar.
+
+## Frontend público
+
+O produto público é somente:
+
+```text
+apps/web
+```
+
+Comandos:
 
 ```bash
-python3 tools/serve_frontend.py --port 8787
+pnpm --dir apps/web dev
+pnpm --dir apps/web typecheck
+pnpm --dir apps/web lint
+pnpm --dir apps/web test
+pnpm --dir apps/web build
 ```
 
-Abra:
+A identidade atual é **TDA — Tem Dado Aqui**.
 
-```txt
-http://127.0.0.1:8787
+## Edit / operador
+
+Enquanto o Edit ainda não foi migrado para Next, a superfície operacional permanece isolada em:
+
+```text
+web/central-local/
 ```
 
-Esse app permite:
+Ela existe apenas para edição, processamento local, integrações e permissões. Não deve ganhar páginas públicas novas.
 
-- listar sessoes reais;
-- criar e editar sessoes planejadas;
-- enviar ZIP Craig pelo front local para ingestao inicial;
-- acompanhar jobs locais de ingestao na aba Operacao;
-- revisar o mapa Craig/Discord pela UI local;
-- importar eventos `[DND_EVENT]` do Roll20 por parser local;
-- importar historico Markdown antigo de forma conservadora;
-- preparar canon consolidado a partir de candidatos aprovados pelo DM;
-- abrir Review Board com dados do Supabase;
-- revisar segmentos;
-- manter rascunho local por sessao;
-- ouvir a faixa original no timestamp do segmento via URL assinada R2;
-- decidir candidatos de canon/fala/bastidor;
-- aplicar decisoes pelo backend local;
-- regenerar publicacoes;
-- baixar template de revisao do DM.
-- ouvir a playlist publica do Dandelion em um mini-player flutuante, via embed oficial do YouTube.
+## Deploy
 
-## Companheiro local-first
+Contrato de produção: `docs/09_contrato_main_prod.md`.
 
-O código versionado do companheiro de transcrição, catálogo SQLite e revisão
-local está em `local-companion/`. A instalação operacional atual continua em
-`E:\Project\craig-to-text`.
+Resumo:
 
-```powershell
-cd E:\Project\craig-to-text
-.\run.ps1
-```
+1. `main` é a única branch de produção.
+2. o frontend público deve ser construído diretamente de `apps/web` na `main`;
+3. o serviço operacional deve ser construído da mesma `main`;
+4. nenhum domínio público pode apontar para build manual ou commit antigo;
+5. rollback é feito por commit/revert, nunca mantendo duas versões concorrentes no código.
 
-Interface hospedada:
-
-```txt
-https://dnd.faysk.dev/central-local/
-```
-
-## App Vercel operador
-
-URL de producao:
-
-```txt
-https://dnd.faysk.dev
-https://dnd-scribe-amber.vercel.app
-```
-
-A API publicada esta aberta temporariamente para teste. Antes de abrir para jogadores ou dados mais sensiveis, voltar para Auth/RLS ou outra trava de acesso.
-
-Login Google via Supabase Auth ja aparece no painel lateral. O app consulta `/api/auth/me` para mostrar o perfil da mesa vinculado; por enquanto esse login e opcional e nao fecha as rotas da API.
-
-Deploy:
+## Validação geral
 
 ```bash
-npm run build
-vercel build --prod --yes
-vercel deploy --prebuilt --prod --yes
+npm run check
+pnpm --dir apps/web typecheck
+pnpm --dir apps/web lint
+pnpm --dir apps/web test
+pnpm --dir apps/web build
 ```
-
-No ambiente atual, prefira gerar o prebuilt em `/tmp` para evitar arquivos truncados no drive montado.
-
-## Demo visual v3
-
-Demo visual e clicável do projeto **DnD Scribe**, feita em HTML, CSS e JS puro.
-
-## Objetivo
-
-Validar com a mesa a experiência visual e funcional antes de construir o backend real.
-
-A demo simula:
-
-- Login Google por usuário.
-- DM Yuhara.
-- Renan como Dandelion.
-- Arthur como Astel e dono do Roll20 Pro.
-- Fernanda como Screacky.
-- Segredos por player/personagem.
-- Diário pessoal visível para dono e DM/lore admin, mas não para outros jogadores.
-- Segredos com DM, compartilhados e DM-only.
-- Separação entre “quem vê no sistema” e “quem sabe na ficção”.
-- Revisão de transcrição com canon candidato, bastidor, segredo e fala marcante.
-- Matriz “Quem sabe o quê”.
-- Pipeline de captura/transcrição/auditoria/publicação.
-
-## Como abrir a demo estática
-
-Abra `index.html` no navegador.
-
-Ou suba a pasta em qualquer hosting estático:
-
-- Vercel
-- Netlify
-- Cloudflare Pages
-- GitHub Pages
-
-## Arquivos principais
-
-```txt
-web/                App local real
-tools/serve_frontend.py Backend local seguro
-index.html          Demo clicável
-pitch.html          Tela de apresentação para a mesa
-css/styles.css      Visual completo
-js/data.js          Dados mockados da campanha, usuários e permissões
-js/app.js           Renderização e interações
-docs/               Documentação do conceito
-examples/           Exemplos técnicos para implementação real
-```
-
-## Regra central
-
-> Nem toda verdade pertence a todos.
-
-## Regra operacional
-
-> Segredo sem DM é diário. Segredo com DM é munição narrativa.
-
-No MVP alinhado, o DM tem acesso completo como guardião da lore. Diário pessoal não é canon automático, mas fica disponível para organização narrativa.
-
-## Aviso
-
-Esta demo não tem backend nem autenticação real. O “login Google” é simulado via localStorage.

@@ -32,7 +32,7 @@ test('namespace /api/web permanece integralmente local no Next', async ({ reques
   expect(health.status()).toBe(200)
   expect(healthPayload).toMatchObject({
     ok: true,
-    surface: 'dnd-scribe-web-next',
+    surface: 'tda-web',
     ready: true,
     runtime: {
       supabaseConfigured: true,
