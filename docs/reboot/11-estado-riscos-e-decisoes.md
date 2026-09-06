@@ -26,7 +26,7 @@ Esses são resultados pontuais da auditoria, não monitoramento atual nem valida
 | Stack mais recente | Web verificada e fixada; Python/GPU/banco ainda pendentes |
 | Preview | Branch acompanha a fundação; ambiente externo e dados isolados pendentes |
 | Backup/restore | Não executados |
-| Reboot de código | Fundação web Node 26 e contêiner implementados; [evidência](registros/fundacao-web.md) |
+| Reboot de código | Fundação web Node 24 e contêiner implementados; [evidência](registros/fundacao-web.md) |
 | Publicação pipipi | Fonte não localizada |
 | Limpeza de branches | Não executada |
 | Publicação/merge desta documentação | Integrada localmente em main por autorização; consultar commit remoto e CI |
@@ -51,7 +51,7 @@ Esses são resultados pontuais da auditoria, não monitoramento atual nem valida
 | --- | --- | --- |
 | DEC-01 | Localização exata de pipipi | Proprietário informa fonte; investigar caminhos indicados |
 | DEC-02 | Versões e combinação final da stack | Web definida/verificada; demais camadas ainda em R0/R4 |
-| DEC-03 | Recursos/custos de Preview e isolamento de dados | Somente serviços gratuitos; Render candidato e isolamento de Preview pendente |
+| DEC-03 | Recursos/custos de Preview e isolamento de dados | Somente serviços gratuitos; Vercel preferida com exceção Node 24; isolamento de Preview pendente |
 | DEC-04 | RPO/RTO e retenção de backups | Proposta após medir volume/restore |
 | DEC-05 | Fluxos atuais realmente necessários | Validar matriz de paridade com operador |
 | DEC-06 | Marca/composição final da primeira Home | Revisar composição com os assets fornecidos |

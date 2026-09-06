@@ -28,7 +28,7 @@ A fundação web foi atualizada em 2026-09-06. Consultar [versões verificadas](
 | Qualidade | Ferramentas de lint, tipos, unitários e navegador | Últimas estáveis com cobertura útil |
 | Infraestrutura | Projeto web com Production e Preview | Suporte aos runtimes selecionados, limites e custos |
 
-Versões presentes nos ZIPs são referências históricas, não escolhas automáticas. Node 26 também é requisito no destino de produção por decisão explícita do proprietário; não reduzir para Node 24 para caber na Vercel.
+Versões presentes nos ZIPs são referências históricas, não escolhas automáticas. O proprietário aceitou Node 24 para manter a hospedagem gratuita, substituindo a exigência anterior de Node 26: [exceção vigente](registros/node24-gratuito.md). As demais tecnologias continuam seguindo a política de últimas versões.
 
 ## Registro obrigatório de versão
 Usar [registro de versões](registros/versoes.md). Por componente:

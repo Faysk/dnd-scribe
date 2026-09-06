@@ -2,11 +2,11 @@
 
 > Status: fundação web verificada; demais camadas pendentes. Responsável: implementador. Revisão: 2026-09-06.
 
-Consulta oficial em **2026-09-06 17:03:18 UTC**: `node tools/check_web_versions.mjs`. Todas as 19 versões abaixo coincidiram com o valor fixado. O lockfile preserva dependências transitivas compatíveis; não forçamos transitivas fora dos intervalos dos mantenedores.
+Consulta inicial do bootstrap em **2026-09-06 17:03:18 UTC**: `node tools/check_web_versions.mjs`. O levantamento inicial coincidia com as últimas versões. Depois, Node e seus tipos foram ajustados pela [exceção gratuita](node24-gratuito.md); as outras escolhas permanecem. O lockfile preserva dependências transitivas compatíveis; não forçamos transitivas fora dos intervalos dos mantenedores.
 
-| Tecnologia | Última estável/fixada | Fonte |
+| Tecnologia | Fixada (última salvo exceção) | Fonte |
 | --- | --- | --- |
-| Node.js | 26.8.1 | [Oficial](https://nodejs.org/dist/index.json) |
+| Node.js | 24.20.0 (exceção; upstream 26.8.1) | [Oficial](https://nodejs.org/dist/index.json) |
 | pnpm | 12.3.4 | [npm](https://registry.npmjs.org/pnpm/latest) |
 | Next.js | 16.3.4 | [npm](https://registry.npmjs.org/next/latest) |
 | React | 19.2.8 | [npm](https://registry.npmjs.org/react/latest) |
@@ -19,7 +19,7 @@ Consulta oficial em **2026-09-06 17:03:18 UTC**: `node tools/check_web_versions.
 | Biome | 2.5.12 | [npm](https://registry.npmjs.org/@biomejs%2fbiome/latest) |
 | Vitest | 5.0.0 | [npm](https://registry.npmjs.org/vitest/latest) |
 | Playwright Test | 1.63.0 | [npm](https://registry.npmjs.org/@playwright%2ftest/latest) |
-| Tipos Node | 26.4.1 | [npm](https://registry.npmjs.org/@types%2fnode/latest) |
+| Tipos Node | 24.13.3 (linha do runtime) | [npm](https://registry.npmjs.org/@types%2fnode/latest) |
 | Tipos React | 19.2.18 | [npm](https://registry.npmjs.org/@types%2freact/latest) |
 | Tipos React DOM | 19.2.7 | [npm](https://registry.npmjs.org/@types%2freact-dom/latest) |
 | Marked | 18.0.11 | [npm](https://registry.npmjs.org/marked/latest) |
@@ -32,7 +32,7 @@ DOMPurify 3.4.15 estava recém-publicado e recebeu exceção exata na quarentena
 
 Tipos, lint, 51 unitários e build passaram no Windows e no contêiner Linux Node 26. O Next instalado documenta suporte ao TypeScript 7 pelo `tsc` local por padrão; não foi necessário ativar experimental nem ignorar erros. ESLint foi substituído por Biome, pois typescript-eslint 8.69.0 declara TypeScript `<6.1.0`. [Parser](https://registry.npmjs.org/@typescript-eslint%2fparser/latest).
 
-A Vercel documenta suporte até Node 24. O proprietário escolheu exigir 26 no destino novo. O contêiner usa `node:26.8.1-trixie-slim`; digest multiarch observado: `sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146`. Deployment externo Node 26 pendente. [Versões Vercel](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions).
+A Vercel oferece Node 24 e o proprietário aceitou essa limitação para preservar a gratuidade. Local/CI/Docker usam 24.20.0; os patches de Functions são geridos pela plataforma. A exigência anterior de Node 26 está substituída pela [decisão vigente](node24-gratuito.md).
 
 ## Ainda não certificado
 

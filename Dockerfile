@@ -1,4 +1,4 @@
-FROM node:26.8.1-trixie-slim AS build
+FROM node:24.20.0-trixie-slim AS build
 WORKDIR /workspace
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm install --global pnpm@12.3.4
@@ -8,7 +8,7 @@ RUN pnpm install --frozen-lockfile
 COPY apps/web ./apps/web
 RUN pnpm web:typecheck && pnpm web:lint && pnpm web:test && pnpm web:build
 
-FROM node:26.8.1-trixie-slim AS runtime
+FROM node:24.20.0-trixie-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=build --chown=node:node /workspace/apps/web/.next/standalone ./

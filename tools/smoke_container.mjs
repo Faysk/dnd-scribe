@@ -17,7 +17,7 @@ assert.equal((await live.json()).surface, 'tda-web')
 const health = await get('/api/web/health')
 assert.equal(health.status, 200)
 const status = await health.json()
-assert.match(status.runtime.node, /^26\./)
+assert.match(status.runtime.node, /^24\./)
 assert.equal(status.readinessMode, 'configuration-only')
 assert.equal(status.deployment.environment, 'production')
 for (const route of ['/', '/sessoes', '/login', '/brand/tda-mark-black.svg']) {

@@ -1,5 +1,5 @@
 {
-  "git": { "deploymentEnabled": false },
+  "git": { "deploymentEnabled": { "main": true, "Preview": true, "*": false } },
   "buildCommand": "npm run operator:build",
   "outputDirectory": "public",
   "redirects": [

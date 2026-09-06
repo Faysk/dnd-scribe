@@ -24,7 +24,7 @@ O nome `Preview` é sensível a maiúsculas. Não criar outra branch `preview`, 
 
 Exceção autorizada em 2026-09-06: o proprietário pediu implementação da fundação diretamente em main durante a pausa de uso. A documentação foi integrada por fast-forward e a base é validada antes do push. Esta autorização vale para o bootstrap; o fluxo normal acima continua sendo a regra depois dele. A existência da branch Preview não comprova ambiente isolado implantado.
 
-O novo runtime exige Node 26. Os deployments automáticos Vercel foram desabilitados nos arquivos de configuração durante a transição, pois o provider oferece até Node 24. Isso preserva os deployments já existentes. A configuração de destino gratuita está em [fundação web](registros/fundacao-web.md); nenhum domínio deve ser trocado antes do aceite do ambiente novo.
+Node 24 foi aceito pelo proprietário para manter a hospedagem gratuita. Deploys Vercel por Git voltam a ser permitidos para main e Preview; branches temporárias permanecem sem deploy automático. A configuração não resolve por si só a integração ainda pendente do frontend: ver [decisão vigente](registros/node24-gratuito.md).
 
 ## Hotfix
 Branch temporária nasce de main, recebe validação adequada e é promovida para produção. O mesmo ajuste é integrado imediatamente em Preview. Não manter correções exclusivas de um ambiente.

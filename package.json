@@ -46,6 +46,6 @@
   },
   "engines": {
     "pnpm": "12.x",
-    "node": "26.x"
+    "node": "24.x"
   }
 }
