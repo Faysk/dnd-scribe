@@ -3,6 +3,8 @@
 > Status: levantamento pendente. Responsável: implementador e operador. Revisão: 2026-09-06.
 
 ## Fontes de dados
+Para cada fonte local, registrar destino cloud, hash/contagem, transferência verificada e restauração sem PC. Para cada fluxo, identificar dependências de localhost, diretórios pessoais, companion, WSL, túnel, credenciais e backups exclusivos locais, com responsável e condição de retirada. Nenhuma capacidade obrigatória final pode ter o PC como executor permanente.
+
 | ID | Provider/localização | Tipo | Contagem/bytes | Visibilidade | Backup/restore | Destino | Lacuna |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | DATA-001 | A levantar | A levantar | Não medido | A classificar | Não executado | A decidir | Inventário pendente |

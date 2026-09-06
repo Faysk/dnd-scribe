@@ -4,6 +4,8 @@
 
 ## Decisões desta entrega
 
+Atualização de direção: o destino final é [operação integral cloud](operacao-cloud.md), inclusive processamento e recuperação. As referências a companion/WSL nesta evidência de fundação só representam legado ou auxílio temporário; não definem dependência final do produto.
+
 O proprietário autorizou alterações diretamente em main para iniciar o reboot. Inicialmente exigiu Node 26, mas depois aceitou Node 24 para preservar a hospedagem gratuita. A [exceção vigente](node24-gratuito.md) substitui essa exigência. Um runner local no WSL pode ser usado se necessário. Nenhum plano pago, recurso externo novo ou mudança de DNS faz parte desta entrega.
 
 O projeto continua único: `apps/web` é a aplicação pública e o futuro Edit integrado. A fundação preserva as rotas existentes e a ponte temporária para a API/operador antigo. Não confundir o contêiner pronto com a remoção do legado: ainda é preciso portar os domínios de backend e o Edit por fluxo.

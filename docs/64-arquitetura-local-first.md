@@ -1,5 +1,7 @@
 # 64 — Proposta de arquitetura local-first
 
+> **Histórico — direção substituída em 2026-09-06.** O destino final agora é [100% cloud com o PC desligado](reboot/registros/operacao-cloud.md), incluindo transcrição, dados e recuperação. Este documento preserva a proposta antiga; não define a arquitetura do reboot.
+
 Status: proposta recomendada para a reformulação de 26/07/2026.
 
 Implementação: pendente.

@@ -36,6 +36,8 @@ A Vercel oferece Node 24 e o proprietário aceitou essa limitação para preserv
 
 ## Ainda não certificado
 
+A nova direção exige executor cloud. Python/motor atuais são candidatos a reaproveitamento, não obrigação de manter companion ou instalador Windows. A escolha e as versões do processamento definitivo dependem da [viabilidade cloud](operacao-cloud.md).
+
 Python, FastAPI, motores/GPU, instalador do companion e Postgres gerenciado permanecem na implementação anterior até sua fase de migração e compatibilidade. A atualização web não certifica todo o legado. Reexecutar a consulta antes da próxima promoção: “mais recente” é uma condição verificada em uma data, não uma propriedade permanente do lockfile.
 
 Política: [stack e atualizações](../03-stack-e-atualizacoes.md).

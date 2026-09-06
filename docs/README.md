@@ -4,6 +4,8 @@
 
 O plano ativo está em [Reboot TDA](reboot/README.md). Ele consolida as decisões do proprietário sobre dados preservados, tecnologias nas versões mais recentes, main/Production, Preview, site público primeiro e Edit integrado depois.
 
+O destino final é [operação 100% cloud](reboot/registros/operacao-cloud.md). PC/WSL/companion só podem apoiar tarefas temporárias; o plano local-first abaixo é histórico.
+
 Comece pelo [roadmap](reboot/10-roadmap-e-aceite.md), pela [política de versões](reboot/03-stack-e-atualizacoes.md) e pelo [estado atual](reboot/11-estado-riscos-e-decisoes.md).
 
 **As seções seguintes são o índice histórico anterior. Seus estados de execução não definem o reboot.** A modernização pública 0–15 e a modernização total anterior tinham escopos diferentes; nenhum encerramento anterior representa conclusão do plano novo.
@@ -41,12 +43,12 @@ Estado atual: **blocos não-Vercel preparados até a Fase 15; release candidate/
 
 Enquanto este roadmap estiver ativo, não entram personagens, NPCs, lore editável, galerias, coleções, timeline, relações ou grafo. A expansão funcional terá roadmap próprio somente após a modernização ser marcada como concluída.
 
-## Fundação atual preservada
+## Histórico — fundação preservada para migração
 
 | Documento | Status | Uso |
 | --- | --- | --- |
-| [64 — Arquitetura local-first](64-arquitetura-local-first.md) | proposta recomendada | limites PC/nuvem |
-| [65 — Plano de migração](65-plano-migracao-local-first.md) | em execução | fases e critérios |
+| [64 — Arquitetura local-first](64-arquitetura-local-first.md) | substituída | referência histórica de fluxos/dados |
+| [65 — Plano de migração](65-plano-migracao-local-first.md) | substituído | fases do escopo anterior |
 | [66 — Resultado da Fase 1](66-resultado-fase-1-local-first.md) | concluída | fundação local validada |
 | [67 — Resultado da Fase 2A](67-resultado-fase-2a-central-local.md) | concluída | catálogo/fila/revisão local |
 | [68 — Central Local em produção](68-deploy-central-local-producao.md) | publicada | interface Vercel conectada ao PC |

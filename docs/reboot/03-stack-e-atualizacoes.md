@@ -23,8 +23,8 @@ A fundação web foi atualizada em 2026-09-06. Consultar [versões verificadas](
 | Estilos | CSS + Tailwind, se justificar | Release oficial e aplicação dos tokens TDA |
 | Dependências | pnpm com lockfile único | Versão oficial e instalação reproduzível |
 | Banco/Auth/Storage | Supabase/PostgreSQL existentes | Versão oferecida pelo serviço e estratégia de atualização |
-| Processamento local | Python + FastAPI + motor de transcrição existente | Últimas estáveis, instalação Windows, GPU e CPU |
-| Instalador | Implementação a avaliar | SDK/runtime, upgrade e preservação de diretórios |
+| Processamento cloud | Executor/serviço a escolher; motor existente é candidato | Últimas estáveis, duração, memória/CPU/GPU, cotas, custo e retomada |
+| Companion/instalador legado | Apoio temporário à migração | Preservar dados e retirar dependência; não é entrega obrigatória final |
 | Qualidade | Ferramentas de lint, tipos, unitários e navegador | Últimas estáveis com cobertura útil |
 | Infraestrutura | Projeto web com Production e Preview | Suporte aos runtimes selecionados, limites e custos |
 

@@ -5,21 +5,25 @@
 ## Estado desta proposta
 A separação de responsabilidades abaixo orienta o reboot. A seleção final de tecnologias e versões passa pelo levantamento da fase R0. Este documento não declara que a arquitetura já foi implementada.
 
+A direção vigente é [100% cloud](registros/operacao-cloud.md), incluindo transcrição. Substitui a arquitetura local-first anterior. O companion atual é legado de transição, não parte obrigatória do destino final.
+
 ## Estrutura pretendida
 ```text
 Um repositório TDA
 ├── apps/web           Home, sessões, resumos, Edit, sessão web e API HTTP
-├── local-companion    processamento pesado local e persistência operacional
+├── processamento     módulo/worker cloud de tarefas longas (localização a definir)
+├── local-companion   legado temporário até substituir seus fluxos
 ├── integrations       adaptadores externos que continuarem necessários
 ├── supabase           migrações e contratos de dados, se mantido após R0
 └── docs/reboot        decisões, plano, evidências e índice vigente
 
-Navegador -> aplicação web única -> conteúdo compartilhado e autorização
-Operador  -> companion local     -> áudio, transcrição e revisão operacional
-Companion -> publicação autorizada de artefatos necessários -> aplicação web
+Navegador -> aplicação web única -> autorização, leitura, Edit e publicação
+Upload autorizado -> storage privado cloud -> job persistente
+Executor cloud -> transcrição/derivados -> storage e banco cloud -> revisão no Edit
+PC temporário -> lote autorizado -> importação verificada -> retirada do executor local
 ```
 
-O companion é um componente especializado do mesmo produto. Não justifica outro site, outro cadastro ou outro editor concorrente. O local exato das telas de revisão será definido no inventário: o Edit é a interface canônica e o companion fornece capacidades locais.
+Web, banco, storage e processamento podem usar serviços distintos da mesma aplicação, no mesmo repositório e com contratos integrados. Isso não cria outro site, cadastro ou editor. O Edit é a interface canônica; a execução de tarefas longas não depende da conexão do navegador nem de uma máquina pessoal.
 
 ## Modelo conceitual mínimo
 | Conceito | Papel | Informação que deve sobreviver |
@@ -51,10 +55,17 @@ A aplicação web separa HTTP, autorização, regras editoriais e acesso a dados
 
 Processamentos longos usam jobs persistentes com ID, progresso real, erro acionável, cancelamento quando suportado, retry e deduplicação. Uma falha de rede ou repetição de clique não pode publicar duas vezes ou perder progresso silenciosamente.
 
-## Fronteira local
-Catálogo, áudio e modelos usam diretórios configuráveis. Não embutir `E:/Project/craig-to-text` como requisito universal. O acesso do site ao companion requer contrato explícito de origem, autorização e diagnóstico. CORS e permissões de rede local não serão considerados resolvidos pelo simples uso de localhost.
+## Persistência e execução cloud
+Banco guarda estados, permissões e proveniência; storage privado guarda fontes, transcrições, revisões e artefatos. Discos temporários e caches de executores são descartáveis. Backups e credenciais necessários à recuperação não podem existir exclusivamente no PC.
 
-A leitura pública continua disponível com o companion desligado. Não exigir upload de áudio bruto para viabilizar Home ou resumos.
+Jobs longos rodam em executor cloud adequado a duração, CPU/GPU, memória e limites do lote. A camada HTTP agenda e acompanha; não precisa manter uma requisição aberta durante a transcrição. O provider e o modelo serão escolhidos após medir um lote representativo, cotas e custo, sem presumir que Functions web ofereçam recursos suficientes.
+
+Uma fila/registro persistente deve permitir retomar trabalho após reinício, expiração ou indisponibilidade do executor, com tentativas limitadas, deduplicação, checkpoint quando suportado e publicação somente de resultados completos. Os arquivos preservados e o estado durável ficam fora da máquina de execução.
+
+## Apoio local temporário
+Permitido para migração, saneamento, compilação e reprocessamento de lotes. Cada uso registra tarefa, entradas/saídas com hashes, autorização, responsável e condição de retirada. O resultado é transferido e reconciliado em cloud antes de considerar o lote concluído. Não expor a máquina por túnel nem torná-la um worker permanente para contornar custo.
+
+No estado final, nenhum fluxo obrigatório chama localhost, rede doméstica, companion ou runner WSL. Desenvolvimento local continua possível; operação e recuperação do produto não dependem dele. A primeira fase pública pode usar resumos existentes sem antecipar a migração de todo o áudio, mas R4 exige concluir os fluxos cloud.
 
 ## Compatibilidade durante a troca
 A aplicação nova assume capacidades em etapas. Adaptadores necessários entram no [inventário de paridade](07-edit-e-paridade.md) com consumidores, responsável e condição de retirada. Nenhuma remoção operacional antecede a validação da substituição.
