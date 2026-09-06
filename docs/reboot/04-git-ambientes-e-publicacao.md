@@ -15,16 +15,27 @@ O nome `Preview` é sensível a maiúsculas. Não criar outra branch `preview`, 
 1. Criar branch temporária a partir de Preview atualizada.
 2. Implementar um recorte e abrir PR para Preview.
 3. Executar checks e revisar o resultado.
-4. Integrar e homologar o estado completo de Preview.
+4. Integrar o estado completo de Preview; publicar para homologação somente após fechar e validar a entrega candidata.
 5. Abrir PR de promoção Preview -> main.
-6. Revalidar o commit resultante em main e aguardar deployment terminal.
+6. Revalidar o commit resultante em main; iniciar publicação deliberada da release pronta e aguardar deployment terminal.
 7. Fazer smoke no domínio e conferir o SHA publicado.
 8. Realinhar Preview com main preservando a ancestralidade; evitar squash recorrente na promoção que deixe as branches divergindo artificialmente.
 9. Remover branches temporárias após confirmar integração ou abandono e preservar a referência do PR.
 
 Exceção autorizada em 2026-09-06: o proprietário pediu implementação da fundação diretamente em main durante a pausa de uso. A documentação foi integrada por fast-forward e a base é validada antes do push. Esta autorização vale para o bootstrap; o fluxo normal acima continua sendo a regra depois dele. A existência da branch Preview não comprova ambiente isolado implantado.
 
-Node 24 foi aceito pelo proprietário para manter a hospedagem gratuita. Deploys Vercel por Git voltam a ser permitidos para main e Preview; branches temporárias permanecem sem deploy automático. A configuração não resolve por si só a integração ainda pendente do frontend: ver [decisão vigente](registros/node24-gratuito.md).
+Node 24 foi aceito pelo proprietário para manter a hospedagem gratuita. Por decisão posterior em 2026-09-06, deployments automáticos por Git ficam desativados em todas as branches e nos dois projetos DnD. Commit, push, merge e CI não são pedidos de publicação.
+
+## Publicar somente uma entrega pronta
+Trabalhar e validar o máximo possível antes de consumir uma publicação. “100%” significa cumprir o escopo e os critérios de aceite da entrega, não concluir todas as fases futuras do reboot.
+
+- Agrupar mudanças; não publicar commits intermediários, documentação isolada ou cada ajuste de dependência.
+- Antes de publicar: escopo fechado, revisão concluída, checks pertinentes aprovados no SHA candidato, build de produção, navegação e visual verificados localmente, dados/permissões preservados e rollback definido.
+- Manter CI automático para detectar regressões, sem etapa de deploy. PC/WSL podem compilar/testar, mas enviar um artefato precompilado ainda consome deployment.
+- Só iniciar deployment deliberado quando todos os itens verificáveis antes da publicação estiverem aprovados e houver autorização para a entrega. A solicitação anterior da Home fica adiada até esse gate; liberar cota não dispara nova tentativa.
+- Validar em cloud o que depende do hosting, promover o artefato validado quando compatível e conferir domínio/SHA. Falha exige diagnóstico e correção antes de outra tentativa; não usar deployments sucessivos como ciclo de desenvolvimento.
+
+Configuração versionada: `git.deploymentEnabled: false` nos dois `vercel.json`, conforme a [documentação Vercel](https://vercel.com/docs/project-configuration/git-configuration). O vínculo Git do projeto operacional também é desconectado para impedir gatilhos vindos de branches antigas. Isso preserva repositório, projetos, domínio e deployment servido. Reativação requer decisão explícita, não faz parte de atualizações de runtime.
 
 ## Hotfix
 Branch temporária nasce de main, recebe validação adequada e é promovida para produção. O mesmo ajuste é integrado imediatamente em Preview. Não manter correções exclusivas de um ambiente.
@@ -52,7 +63,7 @@ Home, sessões, resumos, login, Edit e API HTTP convergem para um projeto web. A
 ## Transição e deploy
 O roteamento operacional antigo só permanece durante janela documentada. A fase pública pode ser promovida antes do Edit novo desde que o acesso operacional existente seja preservado e testado. Depois da migração do Edit, retirar suas rotas e assets antigos.
 
-Não publicar build manual antigo no domínio para marcar etapa como concluída. O aceite requer deployment automático associado ao commit promovido.
+Não publicar build manual antigo no domínio para marcar etapa como concluída. O aceite requer publicação deliberada rastreável ao commit validado; não exige deploy automático por push.
 
 ## Rollback
 Reverter código por PR/commit e aguardar novo deploy verificado. Migrações devem manter compatibilidade com a versão anterior durante a janela de troca. Reverter aplicação não reverte dados: usar o runbook de dados quando necessário. Depois de um rollback, integrar a decisão em Preview.

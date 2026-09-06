@@ -15,7 +15,7 @@ O proprietário aceitou Node 24 se necessário para manter produção gratuita. 
 
 `.node-version`, `.nvmrc`, engines dos dois pacotes, Docker e smoke usam a linha 24. O CI lê `.node-version`. O verificador de versões exige a última release 24.x, reporta a exceção e continua mostrando a última upstream; não oculta a existência do Node 26. Dependabot ainda pode propor mudança de major, mas promoção além de 24 exige rever o suporte gratuito.
 
-Deploys por Git foram reabilitados somente para main e Preview nas configurações Vercel. Isso não cria novos projetos nem muda DNS. Na inspeção atual, `dnd-scribe` está ligado ao GitHub, mas `dnd-scribe-web-next` ainda está sem vínculo Git. A unificação da publicação do frontend permanece um item do reboot; reabilitar a integração do projeto raiz não certifica que todo o frontend novo esteja no domínio.
+Registro histórico: deploys por Git foram reabilitados para main e Preview nesta etapa, mas a decisão posterior de [publicação controlada](../04-git-ambientes-e-publicacao.md) os desativa em todas as branches. Isso não cria novos projetos nem muda DNS. Na inspeção atual, `dnd-scribe` está ligado ao GitHub, mas `dnd-scribe-web-next` ainda está sem vínculo Git. A unificação da publicação do frontend permanece um item do reboot; reabilitar a integração do projeto raiz não certifica que todo o frontend novo esteja no domínio.
 
 Render/Docker permanecem alternativas portáteis; não há necessidade de mudar de hosting apenas para usar Node 26. A proposta Render anterior não foi provisionada. Não criamos plano pago nem runner WSL. Gratuidade depende também de respeitar franquias do provider, independentemente do runtime.
 
