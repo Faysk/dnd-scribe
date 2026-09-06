@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { cache } from 'react'
 
 import { MarkdownContent } from '@/components/content/markdown'
 import { ArtworkImage } from '@/components/media/artwork-image'
 import { SessionNavigation } from '@/components/sessions/session-navigation'
+import { SessionShareActions } from '@/components/sessions/session-share-actions'
 import { ActionLink } from '@/components/ui/action'
 import { StatusPill } from '@/components/ui/status'
 import { Surface } from '@/components/ui/surface'
@@ -14,10 +16,8 @@ import { fetchPublicSession } from '@/lib/api/public-library'
 import { canRenderUnconfiguredPreview, hasConfiguredLegacyOrigin } from '@/lib/config'
 import { displaySessionTitle, formatSessionDate } from '@/lib/formatters'
 
-export const metadata: Metadata = {
-  title: 'Sessão',
-  description: 'Resumo público e memória publicada da sessão.',
-}
+const SITE_NAME = 'TDA — Tem Dado Aqui'
+const SOCIAL_DESCRIPTION_MAX_LENGTH = 240
 
 type SessionPageProps = Readonly<{
   params: Promise<{ id: string }>
@@ -28,7 +28,7 @@ type LoadResult =
   | Readonly<{ kind: 'notFound' }>
   | Readonly<{ kind: 'error' }>
 
-async function loadSessionPage(sourceSessionId: string): Promise<LoadResult> {
+const loadSessionPage = cache(async (sourceSessionId: string): Promise<LoadResult> => {
   try {
     const payload = await fetchPublicSession(sourceSessionId)
     return { kind: 'data', session: payload.session }
@@ -36,6 +36,63 @@ async function loadSessionPage(sourceSessionId: string): Promise<LoadResult> {
     if (error instanceof LegacyApiError && error.status === 404) return { kind: 'notFound' }
     console.error('[web-next] Falha ao carregar memória pública da sessão.', error)
     return { kind: 'error' }
+  }
+})
+
+function socialDescription(session: PublicSessionDetail, title: string) {
+  const fallback = `Resumo público de ${title} no ${SITE_NAME}.`
+  const normalized = String(session.summary || fallback).replace(/\s+/g, ' ').trim()
+  if (normalized.length <= SOCIAL_DESCRIPTION_MAX_LENGTH) return normalized
+  return `${normalized.slice(0, SOCIAL_DESCRIPTION_MAX_LENGTH - 1).trimEnd()}…`
+}
+
+export async function generateMetadata({ params }: SessionPageProps): Promise<Metadata> {
+  const { id } = await params
+  const sourceSessionId = String(id || '').trim()
+  const canonicalPath = sourceSessionId ? `/sessoes/${encodeURIComponent(sourceSessionId)}` : '/sessoes'
+
+  if (!sourceSessionId || sourceSessionId.length > 220) {
+    return {
+      title: 'Sessão',
+      description: 'Resumo público e memória publicada da sessão.',
+      alternates: { canonical: canonicalPath },
+    }
+  }
+
+  const result = await loadSessionPage(sourceSessionId)
+  if (result.kind !== 'data') {
+    return {
+      title: 'Sessão',
+      description: 'Resumo público e memória publicada da sessão.',
+      alternates: { canonical: canonicalPath },
+    }
+  }
+
+  const { session } = result
+  const title = displaySessionTitle(session.title, session.sessionDate)
+  const description = socialDescription(session, title)
+  const image = session.heroImageUrl || session.coverImageUrl || '/opengraph-image'
+  const imageAlt = `Arte da sessão ${title}`
+
+  return {
+    title,
+    description,
+    alternates: { canonical: canonicalPath },
+    openGraph: {
+      type: 'article',
+      locale: 'pt_BR',
+      siteName: SITE_NAME,
+      url: canonicalPath,
+      title,
+      description,
+      images: [{ url: image, alt: imageAlt }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [{ url: image, alt: imageAlt }],
+    },
   }
 }
 
@@ -70,6 +127,7 @@ function SessionError() {
 function SessionHero({ session }: Readonly<{ session: PublicSessionDetail }>) {
   const title = displaySessionTitle(session.title, session.sessionDate)
   const art = session.heroImageUrl || session.coverImageUrl
+  const description = socialDescription(session, title)
 
   return (
     <header>
@@ -103,6 +161,7 @@ function SessionHero({ session }: Readonly<{ session: PublicSessionDetail }>) {
           <MetaText>Resumo público</MetaText>
         </div>
         {session.summary ? <BodyCopy className="mt-6 max-w-3xl">{session.summary}</BodyCopy> : null}
+        <SessionShareActions title={title} description={description} />
       </div>
     </header>
   )
