@@ -29,7 +29,13 @@ Comparar o mesmo corpus autorizado antes/depois: qualidade, falantes/timestamps,
 
 ## Dados, custo e encerramento
 
-Dados necessários ao site ficam em cloud e têm recuperação independente do PC. Originais, modelos e trabalho pesado podem permanecer locais, com preservação e backup próprios. A política de áudio bruto cloud depende de necessidade, permissões e volume; esta decisão não exige upload de todo o acervo nem autoriza apagar fontes.
+Dados necessários ao site ficam em cloud e têm recuperação independente do PC. Modelos e trabalho pesado permanecem locais.
+
+Em 2026-09-06, o proprietário dispensou o armazenamento dos áudios de sessão em cloud e autorizou excluir os áudios atuais do R2. O produto preserva as transcrições produzidas localmente e seus derivados; áudio bruto não integra o acervo permanente planejado do site. O processamento local usa áudio como entrada, mas não deve exigir upload/arquivamento remoto. A autorização de limpeza não abrange arquivos locais.
+
+Limpeza executada no bucket `dnd-scribe-audio`: 18 arquivos FLAC/Opus e 3 ZIPs de gravações Craig excluídos, total de 1.449.536.057 bytes. Listagem S3 posterior confirmou 146 objetos restantes e nenhum arquivo de áudio das extensões verificadas. Textos, JSONs, imagens e marcadores foram preservados; o bucket não foi eliminado. Nenhum dado Supabase ou arquivo local foi alterado.
+
+No reboot, remover a exigência de áudio disponível para ler/revisar/publicar transcrições. Referências históricas a gravações excluídas devem mostrar indisponibilidade, sem reupload automático. Não executar os fluxos legados de ingestão cloud como parte dessa limpeza. A limpeza não equivale a modernizar o pipeline legado nem a desativar seus gatilhos externos; essa revisão operacional permanece pendente.
 
 Gratuidade e a exceção [Node 24](node24-gratuito.md) continuam válidas. Não há requisito de contratar transcrição cloud. Build/deploy podem usar CI cloud e apoio WSL temporário; isso é separado do companion permanente de transcrição.
 
