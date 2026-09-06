@@ -9,11 +9,9 @@ test('hash legado de resumo abre a rota semântica da sessão', async ({ page })
   ).toBeVisible()
 })
 
-test('hash legado da sessão abre a transcrição secundária', async ({ page }) => {
+test('hash legado da sessão preserva o destino privado no login', async ({ page }) => {
   await page.goto('/#/sessao/sessao-42')
 
-  await expect(page).toHaveURL(/\/sessoes\/sessao-42\/transcricao$/)
-  await expect(
-    page.getByRole('heading', { name: 'O acesso às transcrições ainda não está configurado neste ambiente.' }),
-  ).toBeVisible()
+  await expect(page).toHaveURL(/\/login\?next=%2Fsessoes%2Fsessao-42%2Ftranscricao$/)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Entre para acessar o material interno.')
 })
