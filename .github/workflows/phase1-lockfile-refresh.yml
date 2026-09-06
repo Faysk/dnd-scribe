@@ -13,15 +13,17 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: modernize/phase1-playwright-1-63
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.25.0
+          run_install: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
-      - run: corepack enable
-      - run: corepack prepare pnpm@11.25.0 --activate
       - run: pnpm install --lockfile-only
       - name: Commit refreshed lockfile
         run: |
