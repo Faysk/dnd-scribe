@@ -13,9 +13,31 @@ describe('campaign access contract', () => {
 
     expect(payload.profile?.displayName).toBe('Dandelion')
     expect(payload.capabilities?.canOpenEdit).toBe(true)
+    expect(payload.capabilities?.canReadTranscript).toBe(false)
     expect(payload.campaignRole).toBe('player')
     expect(hasCampaignRole(payload.campaignRole)).toBe(true)
     expect(hasCampaignRole('master')).toBe(true)
+  })
+
+  it('derives transcript visibility from the explicit RBAC permission', () => {
+    const allowed = parseCampaignAccessPayload({
+      campaignRole: 'player',
+      rbac: {
+        permissions: [
+          { action: 'campaign.read' },
+          { action: 'campaign.transcript.read', role_slug: 'transcript_viewer' },
+        ],
+      },
+      capabilities: { canOpenEdit: false },
+    })
+    const denied = parseCampaignAccessPayload({
+      campaignRole: 'player',
+      rbac: { permissions: [{ action: 'campaign.read' }] },
+      capabilities: { canOpenEdit: true, canReadTranscript: true },
+    })
+
+    expect(allowed.capabilities?.canReadTranscript).toBe(true)
+    expect(denied.capabilities?.canReadTranscript).toBe(false)
   })
 
   it('accepts only membership roles that exist in the campaign contract', () => {
