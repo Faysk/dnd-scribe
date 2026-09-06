@@ -17,7 +17,7 @@ const baseStyles =
 
 const variantStyles: Record<ActionVariant, string> = {
   primary:
-    'border-accent-strong bg-accent-strong text-accent-contrast hover:-translate-y-px hover:border-accent hover:bg-accent',
+    'border-action-primary-border bg-action-primary text-action-primary-foreground shadow-sm hover:-translate-y-px hover:border-action-primary-hover hover:bg-action-primary-hover',
   secondary:
     'border-border bg-surface text-foreground hover:border-accent/60 hover:bg-surface-hover',
   tertiary:
