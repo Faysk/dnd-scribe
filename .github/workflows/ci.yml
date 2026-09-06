@@ -78,29 +78,14 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm --filter @dnd-scribe/web typecheck
-
-      - name: Lint
-        run: pnpm --filter @dnd-scribe/web lint
-
-      - name: Unit tests
-        run: pnpm --filter @dnd-scribe/web test
-
-      - name: Build
-        run: pnpm --filter @dnd-scribe/web build
-
-      - name: Audit client bundle
-        run: pnpm --filter @dnd-scribe/web audit:client-bundle
-
-      - name: Measure client bundle
-        run: pnpm --filter @dnd-scribe/web measure:client-bundle
+      - name: Run canonical web quality gate
+        run: pnpm web:quality
 
       - name: Install Playwright browsers
-        run: pnpm --filter @dnd-scribe/web exec playwright install --with-deps chromium firefox webkit
+        run: pnpm web:playwright:install
 
       - name: E2E parity smoke
-        run: pnpm --filter @dnd-scribe/web test:e2e
+        run: pnpm web:e2e
 
       - name: Upload Playwright failure artifacts
         if: failure()
