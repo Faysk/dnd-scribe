@@ -10,6 +10,7 @@ export type CampaignProfile = JsonRecord & {
 
 export type CampaignCapabilities = JsonRecord & {
   canOpenEdit?: boolean
+  canReadTranscript?: boolean
 }
 
 export type CampaignAccessPayload = Readonly<{
@@ -46,17 +47,31 @@ function parseCampaignRole(value: unknown): CampaignRole | null {
   return role as CampaignRole
 }
 
+function hasRbacPermission(value: JsonRecord, action: string) {
+  const rbac = value.rbac
+  if (!isRecord(rbac) || !Array.isArray(rbac.permissions)) return false
+  return rbac.permissions.some((permission) => {
+    if (!isRecord(permission)) return false
+    return permission.action === action || permission.permission_action === action
+  })
+}
+
 export function parseCampaignAccessPayload(value: unknown): CampaignAccessPayload {
   if (!isRecord(value)) throw new Error('Payload de auth inválido.')
 
   const user = optionalRecord(value.user, 'user')
   const profile = optionalRecord(value.profile, 'profile') as CampaignProfile | null
-  const capabilities = optionalRecord(value.capabilities, 'capabilities') as CampaignCapabilities | null
+  const rawCapabilities = optionalRecord(value.capabilities, 'capabilities') as CampaignCapabilities | null
 
   validateOptionalString(profile?.displayName, 200, 'profile.displayName')
   validateOptionalString(profile?.avatarUrl, 2_048, 'profile.avatarUrl')
-  if (capabilities?.canOpenEdit != null && typeof capabilities.canOpenEdit !== 'boolean') {
+  if (rawCapabilities?.canOpenEdit != null && typeof rawCapabilities.canOpenEdit !== 'boolean') {
     throw new Error('Payload de auth inválido: capabilities.canOpenEdit.')
+  }
+
+  const capabilities: CampaignCapabilities = {
+    ...(rawCapabilities || {}),
+    canReadTranscript: hasRbacPermission(value, 'campaign.transcript.read'),
   }
 
   return {
