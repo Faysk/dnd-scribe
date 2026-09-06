@@ -72,11 +72,11 @@ export function ThemeToggle() {
   return (
     <button
       aria-checked={dark}
-      aria-label={dark ? 'Usar tema claro' : 'Usar tema escuro'}
-      className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border border-border bg-surface p-1 shadow-sm transition-[background-color,border-color,opacity] duration-200 hover:border-accent/60 focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-accent-strong ${ready ? 'opacity-100' : 'opacity-0'}`}
+      aria-label="Tema escuro"
+      className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border border-border bg-surface p-1 shadow-sm transition-[background-color,border-color,opacity] duration-200 hover:border-accent/60 focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-accent-strong ${ready ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
       onClick={toggleTheme}
       role="switch"
-      title={dark ? 'Tema escuro' : 'Tema claro'}
+      title={dark ? 'Tema escuro — clique para usar claro' : 'Tema claro — clique para usar escuro'}
       type="button"
     >
       <span
