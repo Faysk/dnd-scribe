@@ -37,10 +37,10 @@ test('namespace /api/web permanece integralmente local no Next', async ({ reques
   expect(healthPayload).toMatchObject({
     ok: true,
     surface: 'dnd-scribe-web-next',
-    ready: false,
+    ready: true,
     runtime: {
-      supabaseConfigured: false,
-      legacyOriginConfigured: false,
+      supabaseConfigured: true,
+      legacyOriginConfigured: true,
     },
   })
   expect(health.headers()['cache-control']).toContain('no-store')
