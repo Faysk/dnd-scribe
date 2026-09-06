@@ -1,8 +1,15 @@
 (() => {
   const STORAGE_KEY = "dnd-scribe-theme";
   const PUBLIC_HOSTNAME = "dnd.faysk.dev";
+  const TRANSCRIPT_ROLE = "transcript_viewer";
+  const TRANSCRIPT_PERMISSION = "campaign.transcript.read";
   const root = document.documentElement;
   const validThemes = new Set(["light", "dark"]);
+  const nativeFetch = window.fetch.bind(window);
+  let latestRbac = null;
+  let transcriptAllowed = null;
+  let lastAuthorization = "";
+  let permissionPatchTimer = null;
 
   function isEditPath(pathname = window.location.pathname) {
     return pathname === "/edit" || pathname.startsWith("/edit/") || pathname === "/central-local" || pathname.startsWith("/central-local/");
@@ -144,6 +151,185 @@
     });
   }
 
+  function requestUrl(input) {
+    try {
+      const raw = input instanceof Request ? input.url : String(input || "");
+      return new URL(raw, window.location.origin);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function requestHeaders(input, options) {
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    new Headers(options?.headers || {}).forEach((value, key) => headers.set(key, value));
+    return headers;
+  }
+
+  function hasTranscriptPermission(payload) {
+    const permissions = payload?.rbac?.permissions;
+    return Array.isArray(permissions) && permissions.some((permission) => (
+      permission?.action === TRANSCRIPT_PERMISSION || permission?.permission_action === TRANSCRIPT_PERMISSION
+    ));
+  }
+
+  function activeTranscriptAssignment(profileId) {
+    return (latestRbac?.assignments || []).find((assignment) => (
+      assignment.profileId === profileId
+      && assignment.roleSlug === TRANSCRIPT_ROLE
+      && assignment.scopeType === "campaign"
+      && assignment.scopeId === "yuhara-main"
+      && assignment.status === "active"
+      && !assignment.endsAt
+    ));
+  }
+
+  function schedulePermissionPatch() {
+    window.clearTimeout(permissionPatchTimer);
+    permissionPatchTimer = window.setTimeout(patchPermissionUi, 0);
+  }
+
+  function ensurePermissionGridStyle() {
+    if (document.querySelector("#transcriptPermissionStyle")) return;
+    const style = document.createElement("style");
+    style.id = "transcriptPermissionStyle";
+    style.textContent = ".permission-toggles{grid-template-columns:repeat(auto-fit,minmax(155px,1fr))!important}.permission-toggle[hidden]{display:none!important}";
+    document.head.appendChild(style);
+  }
+
+  async function changeTranscriptPermission(input) {
+    const profileId = input.dataset.profileId;
+    const enabled = input.checked;
+    if (!profileId || !lastAuthorization) {
+      input.checked = !enabled;
+      window.alert("Não foi possível validar sua sessão para alterar esta permissão.");
+      return;
+    }
+    input.disabled = true;
+    input.dataset.busy = "1";
+    try {
+      const assignment = activeTranscriptAssignment(profileId);
+      const endpoint = enabled ? "/api/rbac/assign" : "/api/rbac/revoke";
+      const body = enabled
+        ? {
+            campaignSlug: "yuhara-main",
+            profileId,
+            roleSlug: TRANSCRIPT_ROLE,
+            scopeType: "campaign",
+            scopeId: "yuhara-main",
+            reason: "Permissão de transcrição alterada no Edit.",
+          }
+        : {
+            campaignSlug: "yuhara-main",
+            assignmentId: assignment?.id,
+            reason: "Permissão de transcrição alterada no Edit.",
+          };
+      if (!enabled && !assignment?.id) return;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: lastAuthorization,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `Erro HTTP ${response.status}`);
+      latestRbac = payload.rbac || latestRbac;
+    } catch (error) {
+      input.checked = !enabled;
+      window.alert(error.message || String(error));
+    } finally {
+      input.disabled = false;
+      delete input.dataset.busy;
+      schedulePermissionPatch();
+    }
+  }
+
+  function patchPermissionUi() {
+    if (!isEditPath()) return;
+    ensurePermissionGridStyle();
+
+    document.querySelectorAll('.permission-toggle input[data-role-slug="site_editor"]').forEach((input) => {
+      const description = input.closest(".permission-toggle")?.querySelector("small");
+      if (description && description.textContent !== "Altera sessões e resumos publicados.") {
+        description.textContent = "Altera sessões e resumos publicados.";
+      }
+    });
+
+    if (latestRbac) {
+      document.querySelectorAll("#permissionsList .permission-card").forEach((card) => {
+        const firstInput = card.querySelector(".permission-toggle input[data-profile-id]");
+        const profileId = firstInput?.dataset.profileId;
+        const toggles = card.querySelector(".permission-toggles");
+        if (!profileId || !toggles) return;
+
+        let input = toggles.querySelector(`input[data-role-slug="${TRANSCRIPT_ROLE}"]`);
+        if (!input) {
+          const label = document.createElement("label");
+          label.className = "permission-toggle";
+          label.innerHTML = `<input type="checkbox" data-profile-id="${profileId}" data-role-slug="${TRANSCRIPT_ROLE}" /><span>Ver transcrições</span><small>Lê as transcrições completas das sessões.</small>`;
+          toggles.appendChild(label);
+          input = label.querySelector("input");
+          input.addEventListener("change", () => changeTranscriptPermission(input));
+        }
+        if (!input.dataset.busy) input.checked = Boolean(activeTranscriptAssignment(profileId));
+      });
+    }
+
+    document.querySelectorAll('[data-cloud-action="transcript"]').forEach((button) => {
+      const denied = transcriptAllowed === false;
+      button.hidden = denied;
+      button.disabled = denied;
+      if (denied) button.setAttribute("aria-hidden", "true");
+      else button.removeAttribute("aria-hidden");
+    });
+  }
+
+  function jsonResponse(response, payload) {
+    const headers = new Headers(response.headers);
+    headers.set("Content-Type", "application/json; charset=utf-8");
+    return new Response(JSON.stringify(payload), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
+
+  function installPermissionFetchBridge() {
+    if (!isEditPath()) return;
+    window.fetch = async (input, options) => {
+      const url = requestUrl(input);
+      const headers = requestHeaders(input, options);
+      const authorization = headers.get("Authorization");
+      if (authorization) lastAuthorization = authorization;
+
+      const response = await nativeFetch(input, options);
+      if (!url) return response;
+
+      if (url.pathname === "/api/auth/me" && response.ok) {
+        const payload = await response.clone().json().catch(() => null);
+        if (payload) {
+          transcriptAllowed = hasTranscriptPermission(payload);
+          payload.capabilities = {
+            ...(payload.capabilities || {}),
+            canReadTranscript: transcriptAllowed,
+          };
+          schedulePermissionPatch();
+          return jsonResponse(response, payload);
+        }
+      }
+
+      if ((url.pathname === "/api/rbac" || url.pathname.startsWith("/api/rbac/")) && response.ok) {
+        response.clone().json().then((payload) => {
+          latestRbac = payload?.rbac || payload || latestRbac;
+          schedulePermissionPatch();
+        }).catch(() => {});
+      }
+      return response;
+    };
+  }
+
   function storedTheme() {
     try {
       const value = window.localStorage.getItem(STORAGE_KEY);
@@ -194,6 +380,7 @@
   }
 
   if (normalizeEditOrigin()) return;
+  installPermissionFetchBridge();
   prepareEditSsrAuthBridge();
   apply(storedTheme());
   window.addEventListener("DOMContentLoaded", () => {
@@ -201,6 +388,9 @@
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
       button.addEventListener("click", cycle);
     });
+    const observer = new MutationObserver(schedulePermissionPatch);
+    observer.observe(document.body, { childList: true, subtree: true });
+    schedulePermissionPatch();
   });
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
     if (!root.dataset.theme) updateButtons();
