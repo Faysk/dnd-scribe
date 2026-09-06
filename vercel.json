@@ -161,7 +161,7 @@
       "headers": [
         {
           "key": "Permissions-Policy",
-          "value": "local-network=(self), loopback-network=(self)"
+          "value": "camera=(), geolocation=(), microphone=(), payment=(), usb=(), local-network=(self), loopback-network=(self)"
         }
       ]
     },
@@ -170,7 +170,7 @@
       "headers": [
         {
           "key": "Permissions-Policy",
-          "value": "local-network=(self), loopback-network=(self)"
+          "value": "camera=(), geolocation=(), microphone=(), payment=(), usb=(), local-network=(self), loopback-network=(self)"
         }
       ]
     },
@@ -179,7 +179,7 @@
       "headers": [
         {
           "key": "Permissions-Policy",
-          "value": "local-network=(self), loopback-network=(self)"
+          "value": "camera=(), geolocation=(), microphone=(), payment=(), usb=(), local-network=(self), loopback-network=(self)"
         }
       ]
     },
@@ -188,7 +188,7 @@
       "headers": [
         {
           "key": "Permissions-Policy",
-          "value": "local-network=(self), loopback-network=(self)"
+          "value": "camera=(), geolocation=(), microphone=(), payment=(), usb=(), local-network=(self), loopback-network=(self)"
         }
       ]
     },
@@ -197,7 +197,7 @@
       "headers": [
         {
           "key": "Permissions-Policy",
-          "value": "local-network=(self), loopback-network=(self)"
+          "value": "camera=(), geolocation=(), microphone=(), payment=(), usb=(), local-network=(self), loopback-network=(self)"
         }
       ]
     },
@@ -206,7 +206,7 @@
       "headers": [
         {
           "key": "Permissions-Policy",
-          "value": "local-network=(self), loopback-network=(self)"
+          "value": "camera=(), geolocation=(), microphone=(), payment=(), usb=(), local-network=(self), loopback-network=(self)"
         }
       ]
     }
