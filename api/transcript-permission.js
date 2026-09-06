@@ -9,9 +9,11 @@ const {
 const ROLE_SLUG = 'transcript_viewer';
 
 module.exports = async function handler(req, res) {
-  const client = await getPool().connect();
+  if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Método não permitido.' });
+
+  let client = null;
+  let inTransaction = false;
   try {
-    if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Método não permitido.' });
     const body = await readJsonBody(req);
     const campaign = String(body.campaignSlug || 'yuhara-main').trim().slice(0, 120);
     const targetProfileId = String(body.profileId || '').trim().slice(0, 80);
@@ -19,7 +21,9 @@ module.exports = async function handler(req, res) {
     if (!targetProfileId) throw httpError(400, 'profileId obrigatório.');
 
     const actor = await requireFeaturePermissions(req, campaign, ['campaign.permissions.manage']);
+    client = await getPool().connect();
     await client.query('begin');
+    inTransaction = true;
 
     const target = await client.query(
       `
@@ -92,11 +96,12 @@ where profile_id = $1::uuid
     }
 
     await client.query('commit');
+    inTransaction = false;
     return sendJson(res, 200, { ok: true, profileId: targetProfileId, enabled });
   } catch (error) {
-    await client.query('rollback').catch(() => {});
+    if (client && inTransaction) await client.query('rollback').catch(() => {});
     return sendJson(res, error.statusCode || 500, { ok: false, error: error.message || 'Erro interno.' });
   } finally {
-    client.release();
+    client?.release();
   }
 };
