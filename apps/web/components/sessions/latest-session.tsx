@@ -27,9 +27,8 @@ export function LatestSession({ session }: LatestSessionProps) {
         <BodyCopy className="mt-5 max-w-2xl">
           {session.summary || 'O resumo curto desta sessão ainda não foi publicado.'}
         </BodyCopy>
-        <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2">
+        <div className="mt-6">
           <MetaText>{formatSessionDate(session.sessionDate)}</MetaText>
-          <MetaText>{session.hasSummary ? 'Resumo completo disponível' : 'Resumo em preparação'}</MetaText>
         </div>
         <div className="mt-8">
           <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-accent-strong bg-accent-strong px-4 font-ui text-sm font-semibold text-accent-contrast no-underline transition-[background-color,border-color,transform] hover:-translate-y-px hover:border-accent hover:bg-accent" href={`/sessoes/${encodeURIComponent(session.sourceSessionId)}`}>
