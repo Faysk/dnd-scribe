@@ -49,10 +49,6 @@ export function SessionCard({ session }: SessionCardProps) {
         <p className="mt-3 line-clamp-3 font-body text-[15px] leading-6 text-foreground-soft">
           {session.summary || 'Esta memória ainda não possui um resumo curto publicado.'}
         </p>
-
-        <div className="mt-auto pt-6 font-ui text-[11px] text-foreground-muted">
-          <span>{session.hasSummary ? 'Memória completa publicada' : 'Resumo em preparação'}</span>
-        </div>
       </article>
     </Link>
   )
