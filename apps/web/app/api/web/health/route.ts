@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { DEFAULT_LEGACY_ORIGIN, readPublicSupabaseConfig } from '@/lib/config'
+import { CAMPAIGN_SLUG, DEFAULT_LEGACY_ORIGIN, readPublicSupabaseConfig } from '@/lib/config'
 import { parseLegacyGatewayOrigin } from '@/lib/gateway'
 
 export function GET() {
@@ -15,6 +15,10 @@ export function GET() {
       ok: true,
       ready,
       surface: 'tda-web',
+      // Compatibilidade com o antigo GET /api/health durante a Fase 2.
+      // Esses campos podem ser removidos somente depois do cutover estrutural da #48.
+      app: 'dnd-scribe-vercel',
+      campaignSlug: CAMPAIGN_SLUG,
       deployment: {
         commitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
         commitRef: process.env.VERCEL_GIT_COMMIT_REF || null,

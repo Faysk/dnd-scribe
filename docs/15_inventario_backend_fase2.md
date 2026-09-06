@@ -53,6 +53,21 @@ Cada extração deve, no mesmo slice ou numa janela explicitamente registrada na
 - remover a implementação antiga da mesma rota;
 - reexecutar o inventário e confirmar que o monólito não cresceu.
 
+## Primeira janela de migração — health
+
+O primeiro endpoint selecionado é `GET /api/health`, por ser read-only, sem estado, sem banco e sem autorização.
+
+No slice inicial:
+
+- `/api/web/health` permanece a implementação canônica em TypeScript;
+- `/api/health` passa a existir também dentro de `apps/web` como reexport da mesma implementação, sem duplicar regra HTTP;
+- o payload canônico inclui `app: dnd-scribe-vercel` e `campaignSlug: yuhara-main` para preservar os campos expostos pelo endpoint raiz antigo;
+- E2E cobre os dois caminhos no build Next.
+
+A implementação dentro de `api/[...path].js` **permanece temporariamente ativa no projeto raiz**. Ela só pode ser removida depois que o projeto `dnd-scribe-web-next` estiver executando um build da `main` que contenha `/api/health`, e um smoke do replacement confirmar status, cache e contrato. Essa exceção é uma janela de migração explícita exigida pela #48; não autoriza criar novas dependências do endpoint legado.
+
 ## Bloqueio de infraestrutura atual
 
-A #48 continua aberta porque `dnd-scribe-web-next` ainda é um projeto separado sem Git Integration. O projeto raiz `dnd-scribe` mantém `dnd.faysk.dev` e faz rewrites para esse projeto intermediário. Portanto, neste slice da Fase 2 não há mudança de tráfego nem remoção de endpoint operacional: primeiro criamos o mapa e o guardrail; a migração de rotas começa apenas em caminhos cuja troca possa ser provada sem quebrar produção.
+A #48 continua aberta porque `dnd-scribe-web-next` ainda é um projeto separado sem Git Integration. O projeto raiz `dnd-scribe` mantém `dnd.faysk.dev` e faz rewrites para esse projeto intermediário. A inspeção em 2026-09-06 confirmou que o deployment de produção do projeto Web ainda foi criado por bootstrap e clonou um SHA antigo da `main`, portanto não serve como replacement seguro para código novo da Fase 2.
+
+Enquanto esse bloqueio existir, mudanças da Fase 2 podem preparar e testar Route Handlers no workspace, mas uma rota operacional do projeto raiz só será removida quando o replacement correspondente estiver efetivamente publicado e validado.
