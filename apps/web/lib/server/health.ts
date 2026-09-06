@@ -1,5 +1,5 @@
-import { CAMPAIGN_SLUG, DEFAULT_LEGACY_ORIGIN, readPublicSupabaseConfig } from '@/lib/config'
-import { parseLegacyGatewayOrigin } from '@/lib/gateway'
+import { CAMPAIGN_SLUG, DEFAULT_LEGACY_ORIGIN, readPublicSupabaseConfig } from '../config'
+import { parseLegacyGatewayOrigin } from '../gateway'
 
 export type HealthPayload = {
   ok: true
