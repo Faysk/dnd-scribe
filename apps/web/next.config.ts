@@ -21,6 +21,10 @@ const localNetworkHeaders = [
   { key: 'Permissions-Policy', value: localNetworkPermissionsPolicy },
 ]
 
+const unlistedLoreHeaders = [
+  { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive, noimageindex' },
+]
+
 if (process.env.NODE_ENV === 'production') {
   securityHeaders.push({ key: 'Strict-Transport-Security', value: 'max-age=31536000' })
 }
@@ -44,6 +48,14 @@ const nextConfig: NextConfig = {
         headers: securityHeaders,
       },
       {
+        source: '/lore/d',
+        headers: unlistedLoreHeaders,
+      },
+      {
+        source: '/lore/d/:path*',
+        headers: unlistedLoreHeaders,
+      },
+      {
         source: '/edit',
         headers: localNetworkHeaders,
       },
@@ -63,7 +75,12 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return {
-      beforeFiles: [],
+      beforeFiles: [
+        {
+          source: '/lore/d',
+          destination: '/lore/d/index.html',
+        },
+      ],
       afterFiles: [],
       // Fallback roda somente depois das rotas locais do Next. Assim /api/web/*
       // e qualquer outro handler moderno continuam locais; o restante segue para
